@@ -47,8 +47,6 @@ type 'a expr =
   | Let of (string * 'a expr) list * 'a expr * 'a
   | Prim1 of prim1 * 'a expr * 'a
 
-let let_expr (l : (string * pos expr) list) : pos expr option
-
 (* Function to convert from unknown s-expressions to Adder exprs
    Throws a SyntaxError message if there's a problem
  *)
@@ -67,7 +65,12 @@ let rec expr_of_sexp (s : pos sexp) : pos expr =
               Let((bindings bs), (expr_of_sexp expr), lpos)
           | _ -> failwith "Syntax error, paren must be followed by let, add, or sub")
     | _ -> failwith "Unsupported type, better err msg later"
-  and bindings (bs : post sexp list) : (string * pos expr) list =
+  and bindings (bs : pos sexp list) : (string * pos expr) list =
+    match bs with
+      | [] -> []
+      | Nest([Sym(id,ipos); expr], npos) :: tail ->
+          (id, (expr_of_sexp expr)) :: (bindings tail)
+      | _ -> failwith "Syntax error on bindings"
 ;;
   
 
