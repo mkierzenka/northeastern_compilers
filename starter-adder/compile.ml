@@ -47,14 +47,29 @@ type 'a expr =
   | Let of (string * 'a expr) list * 'a expr * 'a
   | Prim1 of prim1 * 'a expr * 'a
 
+let let_expr (l : (string * pos expr) list) : pos expr option
+
 (* Function to convert from unknown s-expressions to Adder exprs
    Throws a SyntaxError message if there's a problem
  *)
 exception SyntaxError of string
 let rec expr_of_sexp (s : pos sexp) : pos expr =
-  (* COMPLETE THIS FUNCTION *)
-  failwith (sprintf "Converting sexp not yet implemented at pos %s"
-                    (pos_to_string (sexp_info s) true))
+  match s with
+    | Int(x, pos) -> Number(x,pos)
+    | Sym(x, pos) -> Id(x, pos)
+    | Nest(l, pos) ->
+        (match l with
+          | [Sym("add1", pos); expr] ->
+              Prim1(Add1, (expr_of_sexp expr), pos)
+          | [Sym("sub1", pos); expr] ->
+              Prim1(Sub1, (expr_of_sexp expr), pos)
+          | [Sym("let", lpos); Nest(bs, bpos); expr] ->
+              Let((bindings bs), (expr_of_sexp expr), lpos)
+          | _ -> failwith "Syntax error, paren must be followed by let, add, or sub")
+    | _ -> failwith "Unsupported type, better err msg later"
+  and bindings (bs : post sexp list) : (string * pos expr) list =
+;;
+  
 
 (* Functions that implement the compiler *)
 
@@ -62,23 +77,23 @@ let rec expr_of_sexp (s : pos sexp) : pos expr =
    one datatype at a time.  Only one function has been fully implemented
    for you. *)
 let reg_to_asm_string (r : reg) : string =
-  (* COMPLETE THIS FUNCTION *)
-  failwith "Not yet implemented"
+  match r with
+    | RAX -> "RAX"
+    | RSP -> "RSP"
 
 let arg_to_asm_string (a : arg) : string =
   match a with
   | Const(n) -> sprintf "%Ld" n
-  (* COMPLETE THIS FUNCTION *)
-  | _ ->
-     failwith "Other args not yet implemented"
+  | Reg reg -> reg_to_asm_string reg
+  | RegOffset(offs, reg) -> sprintf "[%d + %s]" offs (reg_to_asm_string reg)
 
 let instruction_to_asm_string (i : instruction) : string =
   match i with
   | IMov(dest, value) ->
      sprintf "\tmov %s, %s" (arg_to_asm_string dest) (arg_to_asm_string value)
-  (* COMPLETE THIS FUNCTION *)
-  | _ ->
-     failwith "Other instructions not yet implemented" 
+  | IAdd(dest, add) ->
+     sprintf "\tadd %s, %s" (arg_to_asm_string dest) (arg_to_asm_string add)
+  | IRet -> "\tret"
 
 let to_asm_string (is : instruction list) : string =
   List.fold_left (fun s i -> sprintf "%s\n%s" s (instruction_to_asm_string i)) "" is
