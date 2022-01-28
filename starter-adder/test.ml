@@ -18,9 +18,9 @@ let tie (filename : string) (expected_err : string) = filename>::test_err_input 
 
 let suite : OUnit2.test =
 "suite">:::
- [te "forty_one" "41" "not yet implemented";
+ [t "forty_one" "41" "41";
 
-  te "nyi" "(let ((x 10)) x)" "not yet implemented";
+  t "nyi" "(let ((x 10)) x)" "10";
 
   ]
 ;;
