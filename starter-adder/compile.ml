@@ -110,6 +110,12 @@ let rec find (ls : (string * 'a) list) (x : string) : 'a option =
   | (y, v)::rest ->
      if y = x then Some(v) else find rest x
 
+(* Wrapper around find to easily check if a symbol is in an environment *)
+let in_env (ls : (string * 'a) list) (x : string) : bool =
+  match (find ls x) with
+  | None -> false
+  | Some _ -> true
+
 (* The exception to be thrown when some sort of problem is found with names *)
 exception BindingError of string
 (* The actual compilation process.  The `compile` function is the primary function,
@@ -126,8 +132,36 @@ let rec compile_env
      [
        IMov(Reg(RAX), Const(n))
      ]
+  | Prim1(Add1, expr, _) ->
+     (compile_env expr stack_index env) @
+     [
+       IAdd(Reg(RAX), Const(1L))
+     ]
+  | Prim1(Sub1, expr, _) ->
+     (compile_env expr stack_index env) @
+     [
+       IAdd(Reg(RAX), Const(-1L))
+     ]
+  | Let(decls, expr, _) ->
+      let (let_sidx, let_env, let_instr) = add_letenv decls stack_index env []
+      in let_instr @ (compile_env expr let_sidx let_env)
   | _ ->
      failwith "Other exprs not yet implemented"
+ and add_letenv
+        (decls : (string * pos expr) list)
+        (sidx : int)
+        (env : (string * int) list)
+        (instr : instruction list)
+       : (int * ((string * int) list) * (instruction list)) =
+   match decls with
+    | [] -> (sidx, env, instr)
+    | (sym, expr) :: tail ->
+        if (in_env env sym)
+        then failwith (sprintf "Duplicate symbol %s" sym)
+        else let newhead = (sym,sidx)
+             in  add_letenv tail (sidx+1) (newhead :: env)
+                    ((compile_env expr (sidx+1) env) @ (* TODO get rid of +1? *)
+                    [IMov(RegOffset(~-1*word_size*sidx, RSP), Reg(RAX))])
 
 let compile (p : pos expr) : instruction list =
   compile_env p 1 [] (* Start at the first stack slot, with an empty environment *)
