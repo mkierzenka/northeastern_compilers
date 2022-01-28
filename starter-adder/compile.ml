@@ -145,8 +145,11 @@ let rec compile_env
   | Let(decls, expr, _) ->
       let (let_sidx, let_env, let_instr) = add_letenv decls stack_index env []
       in let_instr @ (compile_env expr let_sidx let_env)
-  | _ ->
-     failwith "Other exprs not yet implemented"
+  | Id(sym, _) -> 
+      match (find env sym) with
+	    | None -> failwith (sprintf "Unbound symbol: %s" sym)
+		| Some(offset) -> [IMov(Reg(RAX), RegOffset(~-1*word_size*offset, RSP))]
+
  and add_letenv
         (decls : (string * pos expr) list)
         (sidx : int)
@@ -158,10 +161,11 @@ let rec compile_env
     | (sym, expr) :: tail ->
         if (in_env env sym)
         then failwith (sprintf "Duplicate symbol %s" sym)
-        else let newhead = (sym,sidx)
+        else let newhead = (sym, sidx)
              in  add_letenv tail (sidx+1) (newhead :: env)
-                    ((compile_env expr (sidx+1) env) @ (* TODO get rid of +1? *)
-                    [IMov(RegOffset(~-1*word_size*sidx, RSP), Reg(RAX))])
+                    (instr @
+					 (compile_env expr (sidx+1) env) @ (* TODO get rid of +1? *)
+                     [IMov(RegOffset(~-1*word_size*sidx, RSP), Reg(RAX))])
 
 let compile (p : pos expr) : instruction list =
   compile_env p 1 [] (* Start at the first stack slot, with an empty environment *)
