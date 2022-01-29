@@ -63,7 +63,7 @@ let rec expr_of_sexp (s : pos sexp) : pos expr =
               Prim1(Sub1, (expr_of_sexp expr), pos)
           | [Sym("let", lpos); Nest(bs, bpos); expr] ->
               Let((bindings bs), (expr_of_sexp expr), lpos)
-          | _ -> failwith "Syntax error, paren must be followed by let, add, or sub")
+          | _ -> raise (SyntaxError "Syntax error, paren must be followed by let, add, or sub"))
     | _ -> failwith "Unsupported type, better err msg later"
   and bindings (bs : pos sexp list) : (string * pos expr) list =
     match bs with

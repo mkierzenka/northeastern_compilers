@@ -30,6 +30,11 @@ let suite : OUnit2.test =
   t "nyi" "(let ((x 10)) x)" "10";
 
   te "let_empty" "(let (()) 2)" "Syntax error on bindings";
+  te "unknown_keyword" "(word ((x 1)) x)" "paren must be followed by let, add, or sub";
+  te "nested_unknown_keyword" "(let ((x 1)) (let ((y 1)) (add1 (blah y))))" "paren must be followed by let, add, or sub";
+  te "nested_unknown_keyword2" "(let ((x 1)) (let ((y (bloh 2))) (add1 x)))" "paren must be followed by let, add, or sub";
+  
+  (* todo- use funs ti and tie to test the input files we have, andd add more such files *)
   ]
 ;;
 
