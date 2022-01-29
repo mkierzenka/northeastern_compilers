@@ -68,9 +68,9 @@ let rec expr_of_sexp (s : pos sexp) : pos expr =
   and bindings (bs : pos sexp list) : (string * pos expr) list =
     match bs with
       | [] -> []
-      | Nest([Sym(id,ipos); expr], npos) :: tail ->
+      | Nest([Sym(id, ipos); expr], npos) :: tail ->
           (id, (expr_of_sexp expr)) :: (bindings tail)
-      | _ -> failwith "Syntax error on bindings"
+      | other_sexp :: tail -> raise (SyntaxError (sprintf "Syntax error in let-bindings at pos %s: expected list of bindings" (pos_to_string (sexp_info other_sexp) false)))
 ;;
   
 
@@ -147,7 +147,7 @@ let rec compile_env
       in let_instr @ (compile_env expr let_sidx let_env)
   | Id(sym, _) -> 
       match (find env sym) with
-	    | None -> failwith (sprintf "Unbound symbol: %s" sym)
+	    | None -> raise (BindingError (sprintf "Unbound symbol: %s" sym))
 		| Some(offset) -> [IMov(Reg(RAX), RegOffset(~-1*word_size*offset, RSP))]
 
  and add_letenv
@@ -160,7 +160,7 @@ let rec compile_env
     | [] -> (sidx, env, instr)
     | (sym, expr) :: tail ->
         if (in_env env sym)
-        then failwith (sprintf "Duplicate symbol %s" sym)
+        then raise (BindingError (sprintf "Duplicate symbol %s" sym))
         else let newhead = (sym, sidx)
              in  add_letenv tail (sidx+1) (newhead :: env)
                     (instr @
