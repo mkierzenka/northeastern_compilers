@@ -20,6 +20,7 @@ let suite : OUnit2.test =
 "suite">:::
  [t "forty_one" "41" "41";
   t "neg_forty_one" "-41" "-41";
+  (* todo add test(s) about boolean here *)
   
   (* Add1 / Sub1 *)
   t "add1" "(add1 4)" "5";
@@ -28,6 +29,11 @@ let suite : OUnit2.test =
   t "add_sub" "(sub1 (add1 40))" "40";
   t "add_add" "(add1 (add1 111))" "113";
   t "sub_sub" "(sub1 (sub1 1000))" "998";
+
+  (* Add1 / Sub1 Errors *)
+  te "add1_multi" "(add1 2 4)" "todo"; (* todo should perhaps handle this error case better *)
+  te "sub1_multi" "(sub1 2 4)" "todo"; (* todo should perhaps handle this error case better *)
+
 
   (* Let bindings correct *)
   t "let" "(let ((x 10)) x)" "10";
@@ -73,9 +79,27 @@ let suite : OUnit2.test =
                                         (outer 100))
                                       innerinner)" "Unbound symbol: innerinner";
   te "let_empty" "(let (()) 2)" "expected list of bindings";
+  te "let_bind_num" "(let ((3)) 3)" "Syntax error in let-bindings";
+  te "let_rebind_num" "(let ((3 4)) 3)" "Syntax error in let-bindings";
   te "let_no_binding_list" "(let (x 10) x)" "expected list of bindings";
-  te "let_dup_binds" "(let ((x 1) (y 9) (x 1)) 2)" "Duplicate symbol x";
-  te "let_dup_binds2" "(let ((x 1) (y 9) (z 33) (x 3)) 2)" "Duplicate symbol x";
+  te "let_dup_binds" "(let ((x 1) (x 1)) 2)" "Duplicate symbol x";
+  te "let_dup_binds2" "(let ((x 1) (x 3)) 2)" "Duplicate symbol x";
+  te "let_dup_binds3" "(let ((x 1) (y 9) (x 1)) 2)" "Duplicate symbol x";
+  te "let_dup_binds4" "(let ((x 1) (y 9) (z 33) (x 3)) 2)" "Duplicate symbol x";
+  te "let_malformed_list" "(let ((a 1 b 2 c 3)) 2)" "expected list of bindings";
+
+
+  (* todo should these (next 3 tests) be allowed? seems like no but currently they pass *)
+  t "let_rebind_add1" "(let ((add1 4)) 5)" "5";
+  t "let_rebind_add1_used" "(let ((add1 4)) add1)" "4";
+  t "let_rebind_add1_used2" "(let ((add1 4)) (add1 add1))" "5";
+
+  (* Parentheses are not "free" *)
+  te "invalid_parens_empty" "()" "paren must be followed by let, add, or sub";
+  te "invalid_parens_num" "(1)" "paren must be followed by let, add, or sub";
+  te "invalid_parens_num2" "(let ((a (2))) a)" "paren must be followed by let, add, or sub";
+  te "invalid_parens_num3" "(let ((a 2)) (a))" "paren must be followed by let, add, or sub";
+  te "invalid_parens_num4" "(add1 (2))" "paren must be followed by let, add, or sub";
 
 
   te "unknown_keyword" "(word ((x 1)) x)" "paren must be followed by let, add, or sub";
