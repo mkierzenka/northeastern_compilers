@@ -60,6 +60,12 @@ let create_err (errt : string) (msg : string) pos (range : bool) : string =
   sprintf "%s error %s, %s" errt (pos_to_string pos range) msg
 ;;
 
+(* Check whether an ID is in the list of reserved keywords for the language *)
+let is_reserved_keyword (id : string) : bool =
+  let keywords = ["let"; "add1"; "sub1"]
+  in  List.mem id keywords
+;;
+
 (* Function to convert from unknown s-expressions to Adder exprs
    Throws a SyntaxError message if there's a problem
  *)
@@ -76,13 +82,15 @@ let rec expr_of_sexp (s : pos sexp) : pos expr =
               Prim1(Sub1, (expr_of_sexp expr), pos)
           | [Sym("let", lpos); Nest(bs, bpos); expr] ->
               Let((bindings bs), (expr_of_sexp expr), lpos)
-          | _ -> raise (SyntaxError (create_err "Syntax" "paren must be followed by let, add, or sub" pos false)))
+          | _ -> raise (SyntaxError (create_err "Syntax" "paren must be followed by a valid let, add, or sub expression" pos false)))
     | Bool (_, pos) -> raise (SyntaxError (create_err "Syntax" "boolean values are not supported by adder" pos false))
   and bindings (bs : pos sexp list) : (string * pos expr) list =
     match bs with
       | [] -> []
       | Nest([Sym(id, ipos); expr], npos) :: tail ->
-          (id, (expr_of_sexp expr)) :: (bindings tail)
+          if (is_reserved_keyword id)
+          then raise (SyntaxError (create_err "Syntax" (sprintf "cannot use reserved keyword as variable name: %s" id) ipos false))
+          else (id, (expr_of_sexp expr)) :: (bindings tail)
       | other_sexp :: tail -> raise (SyntaxError (create_err "Syntax" "expected list of let bindings" (sexp_info other_sexp) false))
 ;;
   

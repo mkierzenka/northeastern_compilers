@@ -20,7 +20,9 @@ let suite : OUnit2.test =
 "suite">:::
  [t "forty_one" "41" "41";
   t "neg_forty_one" "-41" "-41";
-  (* todo add test(s) about boolean here *)
+  te "bool_true_fail" "true" "Syntax error line 0, col 0, boolean values are not supported by adder";
+  te "bool_false_fail" " false" "Syntax error line 0, col 1, boolean values are not supported by adder";
+  te "let_bool_false_fail" "(let ((x false)) x)" "Syntax error line 0, col 9, boolean values are not supported by adder";
   
   (* Add1 / Sub1 *)
   t "add1" "(add1 4)" "5";
@@ -31,8 +33,8 @@ let suite : OUnit2.test =
   t "sub_sub" "(sub1 (sub1 1000))" "998";
 
   (* Add1 / Sub1 Errors *)
-  te "add1_multi" "(add1 2 4)" "todo"; (* todo should perhaps handle this error case better *)
-  te "sub1_multi" "(sub1 2 4)" "todo"; (* todo should perhaps handle this error case better *)
+  te "add1_multi" "(add1 2 4)" "Syntax error line 0, col 0, paren must be followed by a valid let, add, or sub expression";
+  te "sub1_multi" "(sub1 2 4)" "Syntax error line 0, col 0, paren must be followed by a valid let, add, or sub expression";
 
 
   (* Let bindings correct *)
@@ -89,22 +91,23 @@ let suite : OUnit2.test =
   te "let_malformed_list" "(let ((a 1 b 2 c 3)) 2)" "Syntax error line 0, col 6, expected list of let bindings";
 
 
-  (* todo should these (next 3 tests) be allowed? seems like no but currently they pass *)
-  t "let_rebind_add1" "(let ((add1 4)) 5)" "5";
-  t "let_rebind_add1_used" "(let ((add1 4)) add1)" "4";
-  t "let_rebind_add1_used2" "(let ((add1 4)) (add1 add1))" "5";
+  te "let_rebind_add1" "(let ((add1 4)) 5)" "Syntax error line 0, col 7, cannot use reserved keyword as variable name: add1";
+  te "let_rebind_add1_used" "(let ((add1 4)) add1)" "Syntax error line 0, col 7, cannot use reserved keyword as variable name: add1";
+  te "let_rebind_add1_used2" "(let ((add1 4)) (add1 add1))" "Syntax error line 0, col 7, cannot use reserved keyword as variable name: add1";
+  te "let_rebind_sub1" "(let  ( (sub1 4)) 5)" "Syntax error line 0, col 9, cannot use reserved keyword as variable name: sub1";
+  te "let_rebind_let" "(let ((let 4)) let)" "Syntax error line 0, col 7, cannot use reserved keyword as variable name: let";
 
   (* Parentheses are not "free" *)
-  te "invalid_parens_empty" "()" "paren must be followed by let, add, or sub";
-  te "invalid_parens_num" "(1)" "paren must be followed by let, add, or sub";
-  te "invalid_parens_num2" "(let ((a (2))) a)" "paren must be followed by let, add, or sub";
-  te "invalid_parens_num3" "(let ((a 2)) (a))" "paren must be followed by let, add, or sub";
-  te "invalid_parens_num4" "(add1 (2))" "paren must be followed by let, add, or sub";
+  te "invalid_parens_empty" "()" "paren must be followed by a valid let, add, or sub expression";
+  te "invalid_parens_num" "(1)" "paren must be followed by a valid let, add, or sub expression";
+  te "invalid_parens_num2" "(let ((a (2))) a)" "paren must be followed by a valid let, add, or sub expression";
+  te "invalid_parens_num3" "(let ((a 2)) (a))" "paren must be followed by a valid let, add, or sub expression";
+  te "invalid_parens_num4" "(add1 (2))" "paren must be followed by a valid let, add, or sub expression";
 
 
-  te "unknown_keyword" "(word ((x 1)) x)" "paren must be followed by let, add, or sub";
-  te "unknown_keyword_nested" "(let ((x 1)) (let ((y 1)) (add1 (blah y))))" "paren must be followed by let, add, or sub";
-  te "unknown_keyword_nested2" "(let ((x 1)) (let ((y (bloh 2))) (add1 x)))" "paren must be followed by let, add, or sub";
+  te "unknown_keyword" "(word ((x 1)) x)" "paren must be followed by a valid let, add, or sub expression";
+  te "unknown_keyword_nested" "(let ((x 1)) (let ((y 1)) (add1 (blah y))))" "paren must be followed by a valid let, add, or sub expression";
+  te "unknown_keyword_nested2" "(let ((x 1)) (let ((y (bloh 2))) (add1 x)))" "paren must be followed by a valid let, add, or sub expression";
 
   (* todo- use funcs ti and tie to test the input files we have, and add more such files *)
   ]
