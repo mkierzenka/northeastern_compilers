@@ -78,15 +78,15 @@ let suite : OUnit2.test =
                                               (add1 inner2)))
                                         (outer 100))
                                       innerinner)" "Unbound symbol: innerinner";
-  te "let_empty" "(let (()) 2)" "expected list of bindings";
-  te "let_bind_num" "(let ((3)) 3)" "Syntax error in let-bindings";
-  te "let_rebind_num" "(let ((3 4)) 3)" "Syntax error in let-bindings";
-  te "let_no_binding_list" "(let (x 10) x)" "expected list of bindings";
+  te "let_empty" "(let (()) 2)" "Syntax error line 0, col 6, expected list of let bindings";
+  te "let_bind_num" "(let ((3)) 3)" "Syntax error line 0, col 6, expected list of let bindings";
+  te "let_rebind_num" "(let ((3 4)) 3)" "Syntax error line 0, col 6, expected list of let bindings";
+  te "let_no_binding_list" "(let (x 10) x)" "Syntax error line 0, col 6, expected list of let bindings";
   te "let_dup_binds" "(let ((x 1) (x 1)) 2)" "Duplicate symbol x";
   te "let_dup_binds2" "(let ((x 1) (x 3)) 2)" "Duplicate symbol x";
   te "let_dup_binds3" "(let ((x 1) (y 9) (x 1)) 2)" "Duplicate symbol x";
   te "let_dup_binds4" "(let ((x 1) (y 9) (z 33) (x 3)) 2)" "Duplicate symbol x";
-  te "let_malformed_list" "(let ((a 1 b 2 c 3)) 2)" "expected list of bindings";
+  te "let_malformed_list" "(let ((a 1 b 2 c 3)) 2)" "Syntax error line 0, col 6, expected list of let bindings";
 
 
   (* todo should these (next 3 tests) be allowed? seems like no but currently they pass *)

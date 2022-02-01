@@ -47,6 +47,19 @@ type 'a expr =
   | Let of (string * 'a expr) list * 'a expr * 'a
   | Prim1 of prim1 * 'a expr * 'a
 
+let expr_info (expr : 'a expr) =
+  match expr with
+    | Number (_, x) -> x
+    | Id (_, x) -> x
+    | Let (_, _, x) -> x
+    | Prim1 (_, _, x) -> x
+;;
+
+(* Helper function for easily creating error messages that include the error position *)
+let create_err (errt : string) (msg : string) pos (range : bool) : string =
+  sprintf "%s error %s, %s" errt (pos_to_string pos range) msg
+;;
+
 (* Function to convert from unknown s-expressions to Adder exprs
    Throws a SyntaxError message if there's a problem
  *)
@@ -63,14 +76,14 @@ let rec expr_of_sexp (s : pos sexp) : pos expr =
               Prim1(Sub1, (expr_of_sexp expr), pos)
           | [Sym("let", lpos); Nest(bs, bpos); expr] ->
               Let((bindings bs), (expr_of_sexp expr), lpos)
-          | _ -> raise (SyntaxError "Syntax error, paren must be followed by let, add, or sub")) (* todo here and elsewhere- error msgs should print pos? see function pos_to_string *)
-    | _ -> failwith "Unsupported type, better err msg later" (* todo this case is hit on booleans, discuss *)
+          | _ -> raise (SyntaxError (create_err "Syntax" "paren must be followed by let, add, or sub" pos false)))
+    | Bool (_, pos) -> raise (SyntaxError (create_err "Syntax" "boolean values are not supported by adder" pos false))
   and bindings (bs : pos sexp list) : (string * pos expr) list =
     match bs with
       | [] -> []
       | Nest([Sym(id, ipos); expr], npos) :: tail ->
           (id, (expr_of_sexp expr)) :: (bindings tail)
-      | other_sexp :: tail -> raise (SyntaxError (sprintf "Syntax error in let-bindings at pos %s: expected list of bindings" (pos_to_string (sexp_info other_sexp) false)))
+      | other_sexp :: tail -> raise (SyntaxError (create_err "Syntax" "expected list of let bindings" (sexp_info other_sexp) false))
 ;;
   
 
@@ -145,9 +158,9 @@ let rec compile_env
   | Let(decls, expr, _) ->
       let (let_sidx, let_env, let_instr) = add_letenv decls stack_index env []
       in let_instr @ (compile_env expr let_sidx let_env)
-  | Id(sym, _) -> 
+  | Id(sym, pos) -> 
       match (find env sym) with
-	    | None -> raise (BindingError (sprintf "Unbound symbol: %s" sym))
+	    | None -> raise (BindingError (create_err "Binding" (sprintf "Unbound symbol: %s" sym) pos false))
 		| Some(offset) -> [IMov(Reg(RAX), RegOffset(~-1*word_size*offset, RSP))]
 
  and add_letenv
@@ -160,7 +173,7 @@ let rec compile_env
     | [] -> (sidx, env, instr)
     | (sym, expr) :: tail ->
         if (in_env env sym)
-        then raise (BindingError (sprintf "Duplicate symbol %s" sym))
+        then raise (BindingError (create_err "Binding" (sprintf "Duplicate symbol %s" sym) (expr_info expr) false))
         else let newhead = (sym, sidx)
              in  add_letenv tail (sidx+1) (newhead :: env)
                     (instr @
