@@ -22,8 +22,10 @@ let suite : OUnit2.test =
   t "neg_forty_one" "-41" "-41";
   te "bool_true_fail" "true" "Syntax error line 0, col 0, boolean values are not supported by adder";
   te "bool_false_fail" " false" "Syntax error line 0, col 1, boolean values are not supported by adder";
+  te "add1_bool_fail" "(add1 true)" "Syntax error line 0, col 6, boolean values are not supported by adder";
+  te "sub1_bool_fail" "(sub1 false)" "Syntax error line 0, col 6, boolean values are not supported by adder";
   te "let_bool_false_fail" "(let ((x false)) x)" "Syntax error line 0, col 9, boolean values are not supported by adder";
-  
+
   (* Add1 / Sub1 *)
   t "add1" "(add1 4)" "5";
   t "sub1" "(sub1 4)" "3";
@@ -67,7 +69,7 @@ let suite : OUnit2.test =
                                               (add1 inner2)))
                                         (outer 100))
                                       x)" "1000";
-  
+
   (* Let bindings errors *)
   te "nested_let_in_binds_err" "(let ((x (let ((inner 8) (inner2 10))
                                          (add1 inner))) (outer 100))
@@ -108,8 +110,6 @@ let suite : OUnit2.test =
   te "unknown_keyword" "(word ((x 1)) x)" "paren must be followed by a valid let, add, or sub expression";
   te "unknown_keyword_nested" "(let ((x 1)) (let ((y 1)) (add1 (blah y))))" "paren must be followed by a valid let, add, or sub expression";
   te "unknown_keyword_nested2" "(let ((x 1)) (let ((y (bloh 2))) (add1 x)))" "paren must be followed by a valid let, add, or sub expression";
-
-  (* todo- use funcs ti and tie to test the input files we have, and add more such files *)
   ]
 ;;
 

@@ -1,3 +1,4 @@
+open List
 open Printf
 open Sexp
 
@@ -5,7 +6,7 @@ open Sexp
 
 let word_size = 8
 ;;
-       
+
 type reg =
   | RAX
   | RSP
@@ -47,7 +48,8 @@ type 'a expr =
   | Let of (string * 'a expr) list * 'a expr * 'a
   | Prim1 of prim1 * 'a expr * 'a
 
-let expr_info (expr : 'a expr) =
+(* Get the info from an 'a expr *)
+let expr_info (expr : 'a expr) : 'a =
   match expr with
     | Number (_, x) -> x
     | Id (_, x) -> x
@@ -170,7 +172,7 @@ let rec compile_env
       match (find env sym) with
 	    | None -> raise (BindingError (create_err "Binding" (sprintf "Unbound symbol: %s" sym) pos false))
 		| Some(offset) -> [IMov(Reg(RAX), RegOffset(~-1*word_size*offset, RSP))]
-
+  (* Compile the let bindings and add them to the environment. *)
  and add_letenv
         (decls : (string * pos expr) list)
         (sidx : int)
@@ -185,7 +187,8 @@ let rec compile_env
         else let newhead = (sym, sidx)
              in  add_letenv tail (sidx+1) (newhead :: env)
                     (instr @
-					 (compile_env expr (sidx+1) env) @ (* TODO get rid of +1? *)
+					 (compile_env expr sidx env) @
+                     (* sidx here       ^^ not sidx+1, will overwrite stack space but that space is no longer used *)
                      [IMov(RegOffset(~-1*word_size*sidx, RSP), Reg(RAX))])
 
 let compile (p : pos expr) : instruction list =
