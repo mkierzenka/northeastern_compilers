@@ -70,6 +70,9 @@ let suite : OUnit2.test =
                                         (outer 100))
                                       x)" "1000";
 
+  (* Shadowing *)
+  t "shadowing_is_allowed" "(let ((x 4)) (let ((x 2)) x))" "2";
+
   (* Let bindings errors *)
   te "nested_let_in_binds_err" "(let ((x (let ((inner 8) (inner2 10))
                                          (add1 inner))) (outer 100))

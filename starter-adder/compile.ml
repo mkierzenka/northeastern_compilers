@@ -133,11 +133,22 @@ let rec find (ls : (string * 'a) list) (x : string) : 'a option =
   | (y, v)::rest ->
      if y = x then Some(v) else find rest x
 
-(* Wrapper around find to easily check if a symbol is in an environment *)
-let in_env (ls : (string * 'a) list) (x : string) : bool =
-  match (find ls x) with
-  | None -> false
-  | Some _ -> true
+(* A helper function for checking if a "dictionary" contains an entry for
+   the given string.  This is definitely
+   not the most efficient data structure for this, but it is nice and simple... *)
+let rec contains (ls : (string * 'a) list) (x : string) : bool =
+  match ls with
+  | [] -> false
+  | (y, v)::rest ->
+     if y = x then true else contains rest x
+
+(* Helper to check if a symbol has multiple bindings within an env.
+   Will return the first multi-bound symbol, else None. *)
+let rec has_duplicate_syms (ls : (string * pos expr) list) : string option =
+  match ls with
+  | [] -> None
+  | (sym, _) :: tail -> if (contains tail sym) then Some(sym) else (has_duplicate_syms tail)
+
 
 (* The exception to be thrown when some sort of problem is found with names *)
 exception BindingError of string
@@ -166,8 +177,10 @@ let rec compile_env
        IAdd(Reg(RAX), Const(-1L))
      ]
   | Let(decls, expr, _) ->
-      let (let_sidx, let_env, let_instr) = add_letenv decls stack_index env []
-      in let_instr @ (compile_env expr let_sidx let_env)
+      (match (has_duplicate_syms decls) with
+         | Some multi_sym -> raise (BindingError (create_err "Binding" (sprintf "Duplicate symbol %s" multi_sym) (expr_info expr) false))
+         | None -> let (let_sidx, let_env, let_instr) = (add_letenv decls stack_index env [])
+                     in let_instr @ (compile_env expr let_sidx let_env))
   | Id(sym, pos) -> 
       match (find env sym) with
 	    | None -> raise (BindingError (create_err "Binding" (sprintf "Unbound symbol: %s" sym) pos false))
@@ -182,14 +195,13 @@ let rec compile_env
    match decls with
     | [] -> (sidx, env, instr)
     | (sym, expr) :: tail ->
-        if (in_env env sym)
-        then raise (BindingError (create_err "Binding" (sprintf "Duplicate symbol %s" sym) (expr_info expr) false))
-        else let newhead = (sym, sidx)
-             in  add_letenv tail (sidx+1) (newhead :: env)
-                    (instr @
-					 (compile_env expr sidx env) @
-                     (* sidx here       ^^ not sidx+1, will overwrite stack space but that space is no longer used *)
-                     [IMov(RegOffset(~-1*word_size*sidx, RSP), Reg(RAX))])
+        (* We've already checked there are no duplicates *)
+        let newhead = (sym, sidx)
+            in add_letenv tail (sidx+1) (newhead :: env)
+                (instr @
+                 (compile_env expr sidx env) @
+                 (* sidx here       ^^ not sidx+1, will overwrite stack space but that space is no longer used *)
+                 [IMov(RegOffset(~-1*word_size*sidx, RSP), Reg(RAX))])
 
 let compile (p : pos expr) : instruction list =
   compile_env p 1 [] (* Start at the first stack slot, with an empty environment *)
