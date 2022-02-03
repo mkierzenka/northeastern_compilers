@@ -5,6 +5,13 @@ open OUnit2
 open Pretty
 open Exprs
 
+(* Runs a function true if throws correct exception *)
+let tbind_except (name : string) (func : (unit -> unit)) (expected_msg : string) = name>::fun _ ->
+  try (func() ; assert false) with
+    | BindingError s -> assert_equal s expected_msg
+	| _ -> assert false
+;;
+
 (* Runs a program, given as a source string, and compares its output to expected *)
 let t (name : string) (program : string) (expected : string) = name>::test_run program name expected;;
 
@@ -31,6 +38,15 @@ let teprog (filename : string) (expected : string) = filename>::test_err_input f
 let forty_one = "41";;
 
 let forty_one_a = (ENumber(41L, ()))
+
+let suite1 =
+"check_scope_suite">:::
+ [
+
+  (*tbind_except "test1" (fun () -> (ignore (check_scope (parse_string "scratch" "(add1 1)")))) "saDSA"*)
+
+  ]
+;;
 
 let suite =
 "suite">:::
@@ -69,5 +85,6 @@ let suite =
 
 
 let () =
-  run_test_tt_main suite
+  run_test_tt_main suite1
+  (* run_test_tt_main suite *)
 ;;
