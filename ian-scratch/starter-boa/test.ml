@@ -4,6 +4,7 @@ open Printf
 open OUnit2
 open Pretty
 open Exprs
+open Str
 
 
 let tag_of_string = string_of_int;;
@@ -12,6 +13,11 @@ let ast_of_tag_expr (e : tag expr) : string =
   format_expr e tag_of_string
 ;;
 
+(* removes whitespace from a string *)
+let remove_ws (s : string) : string =
+  global_replace (regexp "[\n\t ]") "" s
+
+(* testing infrastructure specifically for check_scope *)
 let tcheck_scope_run ?args:(args=[]) ?std_input:(std_input="") program name test_ctxt =
   let prog = parse_string name program in
   check_scope prog;
@@ -21,13 +27,27 @@ let tcheck_scope (name : string) (program : string) : OUnit2.test =
   name>::tcheck_scope_run program name;;
 ;;
 
+(* testing infrastructure specifically for tag *)
 let ttag_run ?args:(args=[]) ?std_input:(std_input="") program name expected test_ctxt =
   let prog = parse_string name program in
   check_scope prog;
-  assert_equal (Ok(expected)) (Ok(ast_of_tag_expr (tag prog))) ~printer:result_printer
+  let tagged : tag expr = tag prog in
+  assert_equal (Ok(remove_ws expected)) (Ok(remove_ws (ast_of_tag_expr tagged))) ~printer:result_printer
 
 let ttag (name : string) (program : string) (expected : string) : OUnit2.test =
   name>::ttag_run program name expected;;
+;;
+
+(* testing infrastructure specifically for rename *)
+let trename_run ?args:(args=[]) ?std_input:(std_input="") program name expected test_ctxt =
+  let prog = parse_string name program in
+  check_scope prog;
+  let tagged : tag expr = tag prog in
+  let renamed : tag expr = rename tagged in
+  assert_equal (Ok(remove_ws expected)) (Ok(remove_ws (ast_of_tag_expr renamed))) ~printer:result_printer
+
+let trename (name : string) (program : string) (expected : string) : OUnit2.test =
+  name>::trename_run program name expected;;
 ;;
 
 (* Runs a function true if throws correct exception *)
@@ -83,10 +103,15 @@ let suite1 =
 
    ttag "tag1" "8" "ENumber<0>(8)";
    ttag "tag2" "add1(8)" "EPrim1<1>(Add1, ENumber<0>(8))";
-   ttag "tag3" "let x=9 in x" "ELet<2>((( \"x\"<1>, ENumber<0>(9))), EId<1>(\"x\"))";
-   ttag "tag4" "let x=9,y=55 in x" "ELet<3>((( \"x\"<2>, ENumber<1>(9)), ( \"y\"<1>, ENumber<0>(55))), EId<2>(\"x\"))";
-   ttag "tag5" "let x=9,y=55 in y" "ELet<3>((( \"x\"<2>, ENumber<1>(9)), ( \"y\"<1>, ENumber<0>(55))), EId<2>(\"y\"))";
+   ttag "tag3" "let x=9 in x" "ELet<3>((( \"x\"<1>, ENumber<0>(9))), EId<2>(\"x\"))";
+   ttag "tag4" "let x=9,y=55 in x" "ELet<5>((( \"x\"<3>, ENumber<2>(9)), ( \"y\"<1>, ENumber<0>(55))), EId<4>(\"x\"))";
+   ttag "tag5" "let x=9,y=55 in y" "ELet<5>((( \"x\"<3>, ENumber<2>(9)), ( \"y\"<1>, ENumber<0>(55))), EId<4>(\"y\"))";
 
+   trename "rename1" "8" "ENumber<0>(8)";
+   trename "rename2" "add1(8)" "EPrim1<1>(Add1, ENumber<0>(8))";
+   trename "rename3" "let x=9 in x" "ELet<3>((( \"x#1\"<1>, ENumber<0>(9))), EId<2>(\"x#1\"))";
+   trename "rename4" "let x=9,y=55 in x" "ELet<5>((( \"x#3\"<3>, ENumber<2>(9)), ( \"y#1\"<1>, ENumber<0>(55))), EId<4>(\"x#3\"))";
+   (*trename "rename5" "let x=9,y=55 in y" "ELet<5>((( \"x#3\"<3>, ENumber<2>(9)), ( \"y#1\"<1>, ENumber<0>(55))), EId<4>(\"y#1\"))";*)
   ]
 ;;
 

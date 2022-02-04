@@ -92,7 +92,7 @@ let tag (e : 'a expr) : tag expr =
         (* tags will be assigned to bindings in rev order--doesn't matter tho *)
         let (ttail, tt) = bind_helper tail t in
         let (texpr, et) = helper expr tt in
-        ((sym, texpr, et) :: ttail, tt+1)
+        ((sym, texpr, et) :: ttail, et+1)
   in let (te, _) = helper e 0
   in te
 ;;
@@ -114,13 +114,40 @@ let rec untag (e : 'a expr) : unit expr =
 ;;
 
 (* PROBLEM 3 *)
+let rec lookup (x : string) (env : (string * string) list) : string =
+  match env with
+  | [] -> failwith (sprintf "Failed to lookup %s" x)
+  | (k, v) :: tail ->
+      if k = x
+      then v
+      else lookup x tail
+;;
+
 let rename (e : tag expr) : tag expr =
   let rec help (env : (string * string) list) (e : tag expr) =
     match e with
-    | EId(x, tag) -> EId(failwith "implement this", tag)
+    | EId(x, tag) ->
+        EId((lookup x env), tag)
     | ELet(binds, body, tag) ->
-       failwith "Extend env by renaming each binding in binds, then rename the expressions and body"
-    | _ -> failwith "finish the other cases recursively"
+        let (newbinds, newenv) = bind_help env binds in
+        let newbody = help newenv body in
+        ELet(newbinds, newbody, tag)
+    | ENumber(n, t) ->
+        ENumber(n, t)
+    | EPrim1(op, e, t) ->
+        EPrim1(op, (help env e), t)
+    | EPrim2(op, e1, e2, t) ->
+        EPrim2(op, (help env e1), (help env e2), t)
+    | EIf(cond, thn, els, t) ->
+        EIf((help env cond), (help env thn), (help env els), t)
+  and bind_help (env : (string * string) list) (binds : tag bind list) : tag bind list * ((string * string) list) =
+    match binds with
+    | [] -> (binds, env)
+    | (sym, expr, t) :: tail ->
+        let (newbinds, newenv) = bind_help env tail in
+        let newexpr = help env expr in
+        let newsym = sprintf "%s#%d" sym t in
+        ((newsym, newexpr, t) :: newbinds, (sym, newsym) :: env)
   in help [] e
 ;;
 
