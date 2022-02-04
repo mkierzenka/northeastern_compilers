@@ -12,6 +12,15 @@ let ast_of_tag_expr (e : tag expr) : string =
   format_expr e tag_of_string
 ;;
 
+let tcheck_scope_run ?args:(args=[]) ?std_input:(std_input="") program name test_ctxt =
+  let prog = parse_string name program in
+  check_scope prog;
+  assert true
+
+let tcheck_scope (name : string) (program : string) : OUnit2.test =
+  name>::tcheck_scope_run program name;;
+;;
+
 let ttag_run ?args:(args=[]) ?std_input:(std_input="") program name expected test_ctxt =
   let prog = parse_string name program in
   check_scope prog;
@@ -61,8 +70,22 @@ let suite1 =
 
   (*tbind_except "test1" (fun () -> (ignore (check_scope (parse_string "scratch" "(add1 1)")))) "saDSA"*)
 
+   tcheck_scope "check_scope1" "8";
+   tcheck_scope "check_scope2" "let x=9 in x";
+   tcheck_scope "check_scope3" "let x=9 in add1(x)";
+   tcheck_scope "check_scope4" "let x=9,y=77 in add1(x)";
+   tcheck_scope "check_scope5" "let y=9,x=77 in add1(x)";
+
    te "check_scope_err1" "x" "unbound symbol x";
-   ttag "tag1" "add1(8)" "EPrim1<1>(Add1, ENumber<0>(8))";
+   te "check_scope_err2" "let x=9 in y" "unbound symbol y";
+   te "check_scope_err3" "let x=9 in add1(y)" "unbound symbol y";
+   te "check_scope_err4" "let x=9,z=33 in add1(y)" "unbound symbol y";
+
+   ttag "tag1" "8" "ENumber<0>(8)";
+   ttag "tag2" "add1(8)" "EPrim1<1>(Add1, ENumber<0>(8))";
+   ttag "tag3" "let x=9 in x" "ELet<2>((( \"x\"<1>, ENumber<0>(9))), EId<1>(\"x\"))";
+   ttag "tag4" "let x=9,y=55 in x" "ELet<3>((( \"x\"<2>, ENumber<1>(9)), ( \"y\"<1>, ENumber<0>(55))), EId<2>(\"x\"))";
+   ttag "tag5" "let x=9,y=55 in y" "ELet<3>((( \"x\"<2>, ENumber<1>(9)), ( \"y\"<1>, ENumber<0>(55))), EId<2>(\"y\"))";
 
   ]
 ;;
