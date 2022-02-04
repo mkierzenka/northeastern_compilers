@@ -21,14 +21,74 @@ and is_imm e =
 (* PROBLEM 1 *)
 (* This function should encapsulate the binding-error checking from Boa *)
 exception BindingError of string
-let rec check_scope (e : (Lexing.position * Lexing.position) expr) : unit =
-  failwith "check_scope: Implement this"
+let check_scope (e : (Lexing.position * Lexing.position) expr) : unit =
+  let rec helper (e : (Lexing.position * Lexing.position) expr) (env : string list) : unit =
+    match e with
+    | ELet (bindings, expr, _) ->
+        let newenv = bindings_helper bindings env
+        in  helper expr newenv
+    | EPrim1 (prim1, expr, _) ->
+        check_scope expr
+    | EPrim2 (prim2, lhs, rhs, _) ->
+        check_scope lhs;
+        check_scope rhs
+    | EIf (cond, tru, fals, _) ->
+        check_scope cond;
+        check_scope tru;
+        check_scope fals
+    | ENumber (n, _) -> ()
+    | EId (sym, _) ->
+        if List.mem sym env
+        then ()
+        else failwith (sprintf "Unbound symbol %s" sym)
+  and bindings_helper
+        (bindings : (Lexing.position * Lexing.position) bind list)
+        (env : string list)
+       : string list
+    match bindings with
+    | [] -> env
+    | (sym, expr, _) :: tail ->
+        if (bind_contains sym tail)
+        then failwith (sprintf "multiple bindings with same symbol %s" sym)
+        else bindings_helper tail (sym :: env)
+  in helper e []
   
 type tag = int
 (* PROBLEM 2 *)
 (* This function assigns a unique tag to every subexpression and let binding *)
 let tag (e : 'a expr) : tag expr =
-  failwith "tag: Implement this"
+  let rec helper (e : 'a expr) (t : tag) : tag expr * tag =
+    match e with
+    | ELet(bindings, expr, _) ->
+        let (tbind, bt) = bind_helper bindings t in
+        let (texpr, et) = helper expr bt in
+        (ELet(tbind, texpr, bt), bt+1)
+    | EPrim1(prim1, expr, _) ->
+        let (texpr, et) = helper expr t in
+        (EPrim1(prim1, texpr, et), et+1)
+    | EPrim2(prim2, lhs, rhs, _) ->
+        let (tlhs, lt) = helper lhs t in
+        let (trhs, rt) = helper rhs lt in
+        (EPrim2(prim2, tlhs, trhs, rt), rt+1)
+    | EIf(cond, tru, fals, _) ->
+        let (tcond, ct) = helper cond t in
+        let (ttru, tt) = helper tru ct in
+        let (tfals, ft) = helper fals tt in
+        (EIf(tcond, ttru, tfals, ft), ft+1)
+    | ENumber(n, _) ->
+        (ENumber(n, t), t+1)
+    | EId(sym, _) ->
+        (EId(sym, t), t+1)
+  and bind_helper (bindings : 'a bind list) (t : tag) : tag bind list * tag =
+    match bindings with
+    | [] -> ([], t)
+    | (sym, expr, _) :: tail ->
+        let (texpr, et) = helper expr t in
+        let tbind = (sym, texpr, et) in
+        let (ttail, bt) = binding_helper tail (et+1) in
+        (tbind :: ttail, bt)
+  in let (te, _) = helper e 0
+  in te
 ;;
 
 (* This function removes all tags, and replaces them with the unit value.
