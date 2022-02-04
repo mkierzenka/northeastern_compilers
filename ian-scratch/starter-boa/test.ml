@@ -45,6 +45,8 @@ let suite1 =
 
   (*tbind_except "test1" (fun () -> (ignore (check_scope (parse_string "scratch" "(add1 1)")))) "saDSA"*)
 
+   te "check_scope_err1" "x" "unbound symbol x";
+
   ]
 ;;
 
