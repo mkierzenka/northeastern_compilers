@@ -104,9 +104,8 @@ let format_expr (e : 'a expr) (print_a : 'a -> string) : string =
   flush_str_formatter ()
 ;;
      
-    
+
 let rec ast_of_pos_expr (e : (Lexing.position * Lexing.position) expr) : string =
   format_expr e string_of_pos
 let rec ast_of_expr (e : 'a expr) : string =
   format_expr e (fun _ -> "")
-

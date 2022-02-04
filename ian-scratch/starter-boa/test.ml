@@ -5,6 +5,22 @@ open OUnit2
 open Pretty
 open Exprs
 
+
+let tag_of_string = string_of_int;;
+
+let ast_of_tag_expr (e : tag expr) : string =
+  format_expr e tag_of_string
+;;
+
+let ttag_run ?args:(args=[]) ?std_input:(std_input="") program name expected test_ctxt =
+  let prog = parse_string name program in
+  check_scope prog;
+  assert_equal (Ok(expected)) (Ok(ast_of_tag_expr (tag prog))) ~printer:result_printer
+
+let ttag (name : string) (program : string) (expected : string) : OUnit2.test =
+  name>::ttag_run program name expected;;
+;;
+
 (* Runs a function true if throws correct exception *)
 let tbind_except (name : string) (func : (unit -> unit)) (expected_msg : string) = name>::fun _ ->
   try (func() ; assert false) with
@@ -46,6 +62,7 @@ let suite1 =
   (*tbind_except "test1" (fun () -> (ignore (check_scope (parse_string "scratch" "(add1 1)")))) "saDSA"*)
 
    te "check_scope_err1" "x" "unbound symbol x";
+   ttag "tag1" "add1(8)" "EPrim1<1>(Add1, ENumber<0>(8))";
 
   ]
 ;;
