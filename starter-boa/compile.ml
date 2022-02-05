@@ -48,20 +48,20 @@ let check_scope (e : (Lexing.position * Lexing.position) expr) : unit =
         helper cond env;
         helper tru env;
         helper fals env
-    | ENumber (n, _) -> ()
-    | EId (sym, _) ->
+    | ENumber (n, _) -> () (* No issue with scope here *)
+    | EId (sym, pos) ->
         if List.mem sym env
-        then ()
-        else raise (BindingError(sprintf "unbound symbol %s" sym))
+        then () (* No issue with scope here *)
+        else raise (BindingError(sprintf "Unbound symbol %s at %s" sym (string_of_pos pos)))
   and bindings_helper
         (bindings : (Lexing.position * Lexing.position) bind list)
         (env : string list)
        : string list =
     match bindings with
     | [] -> env
-    | (sym, expr, _) :: tail ->
+    | (sym, expr, pos) :: tail ->
         if (bindings_contain sym tail)
-        then raise (BindingError(sprintf "multiple bindings with same symbol %s" sym))
+        then raise (BindingError(sprintf "Multiple bindings of %s, first at %s" sym (string_of_pos pos)))
         else bindings_helper tail (sym :: env)
   in helper e []
   

@@ -99,10 +99,10 @@ let check_scope_suite =
    tcheck_scope "check_scope4" "let x=9,y=77 in add1(x)";
    tcheck_scope "check_scope5" "let y=9,x=77 in add1(x)";
 
-   te "check_scope_err1" "x" "unbound symbol x";
-   te "check_scope_err2" "let x=9 in y" "unbound symbol y";
-   te "check_scope_err3" "let x=9 in add1(y)" "unbound symbol y";
-   te "check_scope_err4" "let x=9,z=33 in add1(y)" "unbound symbol y";
+   te "check_scope_err1" "x" "Unbound symbol x";
+   te "check_scope_err2" "let x=9 in y" "Unbound symbol y";
+   te "check_scope_err3" "let x=9 in add1(y)" "Unbound symbol y";
+   te "check_scope_err4" "let x=9,z=33 in add1(y)" "Unbound symbol y";
 
 
   ]
