@@ -155,8 +155,46 @@ let rename (e : tag expr) : tag expr =
 
 (* PROBLEM 4 & 5 *)
 (* This function converts a tagged expression into an untagged expression in A-normal form *)
+
+type context = (string * unit expr) list
+
+(* Combines the intermediate result of anf into a single final expr (ie. consumes context into it) *)
+let finish_anf (ans : unit expr) (ctx : context) : unit expr =
+  List.fold_right (fun (sym, expr) acc -> ELet([(sym, expr, ())], acc, ())) ctx ans
+
+
 let anf (e : tag expr) : unit expr =
-  failwith "anf: Implement this"
+  let rec help (e : tag expr) : (unit expr * context) =
+    match e with
+    | EId(x, tag) -> (EId(x, ()), [])
+    | ELet(binds, body, tag) ->
+        let bctx = (bind_helper binds []) in
+        let (newbody, newctx) = (help body) in
+        (newbody, bctx @ newctx)
+    | ENumber(n, tag) -> (ENumber(n, ()), [])
+    | EPrim1(op, e, t) ->
+        let (newe, newctx) = (help e) in
+            (EPrim1(op, newe, ()), newctx)
+    | EPrim2(op, e1, e2, t) ->
+        let (newe1, newctx1) = (help e1) in
+        let (newe2, newctx2) = (help e2) in
+        let tmpname = sprintf "$prim2_%d" t in
+        (EId(tmpname, ()), newctx1 @ newctx2 @ [(tmpname, EPrim2(op, newe1, newe2, ()))])
+    | EIf(cond, thn, els, t) ->
+        let (anfcond, condctx) = (help cond) in
+        let (anfthn, thnctx) = (help thn) in
+        let (anfels, elsctx) = (help els) in
+        let tmpname = sprintf "$if_%d" t in (* todo should this be t or cond's tag? *)
+        (EIf(EId(tmpname, ()), anfthn, anfels, ()), condctx @ thnctx @ elsctx @ [(tmpname, anfcond)])
+  and bind_helper (binds : tag bind list) (ctx : context) : context =
+    match binds with
+    | [] -> ctx
+    | (sym, expr, t) :: tail ->
+        let (newexpr, exprctx) = (help expr) in
+        let newctx = (bind_helper tail exprctx) in
+        (sym, newexpr) :: newctx
+  in
+    let (a, c) = (help e) in (finish_anf a c)
 ;;
 
 

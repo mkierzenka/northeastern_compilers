@@ -189,15 +189,19 @@ let rename_suite =
    trename "rename7" "let x=9,y=55,z=88 in z" "ELet<7>(((\"x#1\"<1>, ENumber<0>(9)), (\"y#3\"<3>, ENumber<2>(55)), (\"z#5\"<5>, ENumber<4>(88))), EId<6>(\"z#5\"))";
  ]
 
-
-let suite =
-"suite">:::
+let anf_suite =
+"anf_suite">:::
  [
 
   tanf "forty_one_anf"
        (ENumber(41L, ()))
        forty_one_a;
 
+  tanf "prim2"
+       (EPrim2(Times, ENumber(41L, ()), ENumber(3L, ()), ()))
+       (ELet(["$prim2_2", EPrim2(Times, ENumber(41L, ()), ENumber(3L, ()), ()), ()], EId("$prim2_2", ()), ()));
+
+(*
   (* For CS4410 students, with unnecessary let-bindings *)
   tanf "prim1_anf_4410"
        (EPrim1(Sub1, ENumber(55L, ()), ()))
@@ -209,7 +213,13 @@ let suite =
   tanf "prim1_anf_6410"
        (EPrim1(Sub1, ENumber(55L, ()), ()))
        (EPrim1(Sub1, ENumber(55L, ()), ()));
+*)
+ ]
 
+
+let suite =
+"suite">:::
+ [
   ta "forty_one_run_anf" (tag forty_one_a) "41";
  
   t "forty_one" forty_one "41";
@@ -230,5 +240,6 @@ let () =
   run_test_tt_main check_scope_suite;
   run_test_tt_main tag_suite;
   run_test_tt_main rename_suite;
+  run_test_tt_main anf_suite;
   (* run_test_tt_main suite *)
 ;;
