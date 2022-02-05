@@ -4,6 +4,53 @@ open Printf
 open OUnit2
 open Pretty
 open Exprs
+open Str
+
+
+let tag_of_string = string_of_int;;
+
+let ast_of_tag_expr (e : tag expr) : string =
+  format_expr e tag_of_string
+;;
+
+(* removes whitespace from a string *)
+let remove_ws (s : string) : string =
+  global_replace (regexp "[\n\t ]") "" s
+
+(* testing infrastructure specifically for check_scope *)
+let tcheck_scope_run ?args:(args=[]) ?std_input:(std_input="") program name test_ctxt =
+  let prog = parse_string name program in
+  check_scope prog;
+  assert true
+
+let tcheck_scope (name : string) (program : string) : OUnit2.test =
+  name>::tcheck_scope_run program name;;
+;;
+
+(* testing infrastructure specifically for tag *)
+let ttag_run ?args:(args=[]) ?std_input:(std_input="") program name expected test_ctxt =
+  let prog = parse_string name program in
+  check_scope prog;
+  let tagged : tag expr = tag prog in
+  assert_equal (Ok(remove_ws expected)) (Ok(remove_ws (ast_of_tag_expr tagged))) ~printer:result_printer
+
+let ttag (name : string) (program : string) (expected : string) : OUnit2.test =
+  name>::ttag_run program name expected;;
+;;
+
+(* testing infrastructure specifically for rename *)
+let trename_run ?args:(args=[]) ?std_input:(std_input="") program name expected test_ctxt =
+  let prog = parse_string name program in
+  check_scope prog;
+  let tagged : tag expr = tag prog in
+  let renamed : tag expr = rename tagged in
+  assert_equal (Ok(remove_ws expected)) (Ok(remove_ws (ast_of_tag_expr renamed))) ~printer:result_printer
+
+let trename (name : string) (program : string) (expected : string) : OUnit2.test =
+  name>::trename_run program name expected;;
+;;
+
+
 
 (* Runs a function true if throws correct exception *)
 let tbind_except (name : string) (func : (unit -> unit)) (expected_msg : string) = name>::fun _ ->
@@ -39,11 +86,24 @@ let forty_one = "41";;
 
 let forty_one_a = (ENumber(41L, ()))
 
-let suite1 =
+let check_scope_suite =
 "check_scope_suite">:::
  [
 
   (*tbind_except "test1" (fun () -> (ignore (check_scope (parse_string "scratch" "(add1 1)")))) "saDSA"*)
+
+
+   tcheck_scope "check_scope1" "8";
+   tcheck_scope "check_scope2" "let x=9 in x";
+   tcheck_scope "check_scope3" "let x=9 in add1(x)";
+   tcheck_scope "check_scope4" "let x=9,y=77 in add1(x)";
+   tcheck_scope "check_scope5" "let y=9,x=77 in add1(x)";
+
+   te "check_scope_err1" "x" "unbound symbol x";
+   te "check_scope_err2" "let x=9 in y" "unbound symbol y";
+   te "check_scope_err3" "let x=9 in add1(y)" "unbound symbol y";
+   te "check_scope_err4" "let x=9,z=33 in add1(y)" "unbound symbol y";
+
 
   ]
 ;;
@@ -85,6 +145,6 @@ let suite =
 
 
 let () =
-  run_test_tt_main suite1
+  run_test_tt_main check_scope_suite
   (* run_test_tt_main suite *)
 ;;
