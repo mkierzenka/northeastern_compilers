@@ -81,20 +81,74 @@ let forty_one_a = (ENumber(41L, ()))
 let check_scope_suite =
 "check_scope_suite">:::
  [
-
    tcheck_scope "check_scope1" "8";
-   tcheck_scope "check_scope2" "let x=9 in x";
-   tcheck_scope "check_scope3" "let x=9 in add1(x)";
-   tcheck_scope "check_scope4" "let x=9,y=77 in add1(x)";
-   tcheck_scope "check_scope5" "let y=9,x=77 in add1(x)";
+   tcheck_scope "check_scope2" "(8)";
 
+   tcheck_scope "check_scope3" "add1(8)";
+   tcheck_scope "check_scope4" "8 * 2";
+   tcheck_scope "check_scope5" "8 * 2 + 2";
+   tcheck_scope "check_scope6" "sub1((1 * 2) + 3) + 4";
+
+   (* if *)
+   tcheck_scope "check_scope7" "if 0: 1 else: 2";
+   tcheck_scope "check_scope8" "if 1: 1 else: 2";
+   tcheck_scope "check_scope9" "if (let x=1 in x): 1 else: 2";
+   tcheck_scope "check_scope10" "if 0: (let x=1 in x) else: 2";
+   tcheck_scope "check_scope11" "if 0: 1 else: (let x=1 in x)";
+   tcheck_scope "check_scope12" "if 1: (let x=1 in x) else: 2";
+   tcheck_scope "check_scope13" "if 1: 1 else: (let x=1 in x)";
+
+   (* let *)
+   tcheck_scope "check_scope14" "let x=9 in x";
+   tcheck_scope "check_scope15" "let x=9 in add1(x)";
+   tcheck_scope "check_scope16" "let x=9,y=77 in add1(x)";
+   tcheck_scope "check_scope17" "let y=9,x=77 in add1(x)";
+   tcheck_scope "check_scope18" "let y=9,x=y in x";
+        (* nested *)
+   tcheck_scope "check_scope19" "let y=9,x=77 in (let a=1,b=2,c=3 in x)";
+   tcheck_scope "check_scope20" "let y=9,x=77 in (let a=1,b=2,c=3 in y)";
+   tcheck_scope "check_scope21" "let y=9,x=77 in (let a=1,b=2,c=3 in c)";
+   tcheck_scope "check_scope22" "let y=9,x=(let a=1,b=2,c=3 in y) in x";
+   tcheck_scope "check_scope23" "let y=9,x=(let a=1,b=2,c=3 in b) in x";
+   tcheck_scope "check_scope24" "let y=9,x=(let a=1,b=2,c=3 in y) in x";
+        (* nested if *)
+   tcheck_scope "check_scope25" "let x=4 in if 0: 1 else: 2";
+   tcheck_scope "check_scope26" "let x=4 in if 1: 1 else: 2";
+   tcheck_scope "check_scope27" "let x=4 in if x: 1 else: 2";
+   tcheck_scope "check_scope28" "let x=4 in if 0: x else: 2";
+   tcheck_scope "check_scope29" "let x=4 in if 0: 1 else: x";
+   tcheck_scope "check_scope30" "let x=4 in if 1: x else: 2";
+   tcheck_scope "check_scope31" "let x=4 in if 1: 1 else: x";
+(* todo add more tests here? *)
+
+   (* ERRORS *)
    te "check_scope_err1" "x" "Unbound symbol x";
-   te "check_scope_err2" "let x=9 in y" "Unbound symbol y";
-   te "check_scope_err3" "let x=9 in add1(y)" "Unbound symbol y";
-   te "check_scope_err4" "let x=9,z=33 in add1(y)" "Unbound symbol y";
+   te "check_scope_err2" "add1(x)" "Unbound symbol x";
+   te "check_scope_err3" "x * 2" "Unbound symbol x";
+   te "check_scope_err4" "8 * x" "Unbound symbol x";
 
+   (* if *)
+   te "check_scope_err5" "if x: 1 else: 2" "Unbound symbol x";
+   te "check_scope_err6" "if 0: x else: 2" "Unbound symbol x";
+   te "check_scope_err7" "if 0: 1 else: x" "Unbound symbol x";
+   te "check_scope_err8" "if 1: x else: 2" "Unbound symbol x";
+   te "check_scope_err9" "if 1: 1 else: x" "Unbound symbol x";
+        (* nested let*)
+   te "check_scope_err10" "if (let x=1 in 0): 1 else: x" "Unbound symbol x";
+   te "check_scope_err11" "if (let x=1 in 0): x else: 1" "Unbound symbol x";
+   te "check_scope_err12" "if (let x=1 in 1): x else: 1" "Unbound symbol x";
+   te "check_scope_err13" "if (let x=1 in 1): 1 else: x" "Unbound symbol x";
+   te "check_scope_err14" "if (let x=1 in 0): 1 else: x" "Unbound symbol x";
+   te "check_scope_err15" "if (let x=1 in 0): 1 else: x" "Unbound symbol x";
+   te "check_scope_err16" "if (let x=1 in 0): 1 else: x" "Unbound symbol x";
 
-  ]
+   (* let *)
+   te "check_scope_err17" "let x=9 in y" "Unbound symbol y";
+   te "check_scope_err18" "let x=9 in add1(y)" "Unbound symbol y";
+   te "check_scope_err19" "let x=9,z=33 in add1(y)" "Unbound symbol y";
+
+(* todo add more tests here? *)
+ ]
 ;;
 
 let suite =
