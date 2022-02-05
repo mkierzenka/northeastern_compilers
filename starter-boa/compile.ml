@@ -74,7 +74,7 @@ let tag (e : 'a expr) : tag expr =
     | ELet(bindings, expr, _) ->
         let (tbind, bt) = bind_helper bindings t in
         let (texpr, et) = helper expr bt in
-        (ELet(tbind, texpr, bt), bt+1)
+        (ELet(tbind, texpr, et), et+1)
     | EPrim1(prim1, expr, _) ->
         let (texpr, et) = helper expr t in
         (EPrim1(prim1, texpr, et), et+1)
