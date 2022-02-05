@@ -52,7 +52,7 @@ let check_scope (e : (Lexing.position * Lexing.position) expr) : unit =
     | EId (sym, _) ->
         if List.mem sym env
         then ()
-        else failwith (sprintf "Unbound symbol %s" sym)
+        else raise (BindingError(sprintf "unbound symbol %s" sym))
   and bindings_helper
         (bindings : (Lexing.position * Lexing.position) bind list)
         (env : string list)
@@ -61,7 +61,7 @@ let check_scope (e : (Lexing.position * Lexing.position) expr) : unit =
     | [] -> env
     | (sym, expr, _) :: tail ->
         if (bindings_contain sym tail)
-        then failwith (sprintf "multiple bindings with same symbol %s" sym)
+        then raise (BindingError(sprintf "multiple bindings with same symbol %s" sym))
         else bindings_helper tail (sym :: env)
   in helper e []
   
