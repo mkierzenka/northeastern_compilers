@@ -182,8 +182,8 @@ let rename_suite =
  [
    trename "rename1" "8" "ENumber<0>(8)";
    trename "rename2" "add1(8)" "EPrim1<1>(Add1, ENumber<0>(8))";
-   trename "rename3" "let x=9 in x" "ELet<3>((( \"x#1\"<1>, ENumber<0>(9))), EId<2>(\"x#1\"))";
-   trename "rename4" "let x=9,y=55 in x" "ELet<5>((( \"x#1\"<1>, ENumber<0>(9)), ( \"y#3\"<3>, ENumber<2>(55))), EId<4>(\"x#1\"))";
+   trename "rename3" "let x=9 in x" "ELet<3>(((\"x#1\"<1>, ENumber<0>(9))), EId<2>(\"x#1\"))";
+   trename "rename4" "let x=9,y=55 in x" "ELet<5>(((\"x#1\"<1>, ENumber<0>(9)), (\"y#3\"<3>, ENumber<2>(55))), EId<4>(\"x#1\"))";
  ]
 
 
