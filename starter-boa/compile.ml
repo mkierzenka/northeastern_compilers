@@ -120,15 +120,38 @@ let rec untag (e : 'a expr) : unit expr =
 ;;
 
 (* PROBLEM 3 *)
+let rec lookup_rename (x : string) (env : (string * string) list) : string =
+  match env with
+  | [] -> failwith (sprintf "Failed to lookup %s" x) (* should never happen, make sure to check_scope and tag first *)
+  | (k, v) :: tail ->
+      if k = x
+      then v
+      else lookup_rename x tail
+;;
+
 let rename (e : tag expr) : tag expr =
-  let rec help (env : (string * string) list) (e : tag expr) =
+  let rec help (env : (string * string) list) (e : tag expr) : tag expr =
     match e with
-    | EId(x, tag) -> EId(failwith "implement this", tag)
+    | EId(x, tag) -> EId((lookup_rename x env), tag)
     | ELet(binds, body, tag) ->
-       failwith "Extend env by renaming each binding in binds, then rename the expressions and body"
-    | _ -> failwith "finish the other cases recursively"
+        let (newbinds, newenv) = bind_help env binds in
+        let newbody = help newenv body in
+        ELet(newbinds, newbody, tag)
+    | ENumber(n, tag) -> ENumber(n, tag)
+    | EPrim1(op, e, t) -> EPrim1(op, (help env e), t)
+    | EPrim2(op, e1, e2, t) -> EPrim2(op, (help env e1), (help env e2), t)
+    | EIf(cond, thn, els, t) -> EIf((help env cond), (help env thn), (help env els), t)
+  and bind_help (env : (string * string) list) (binds : tag bind list) : tag bind list * ((string * string) list) =
+    match binds with
+    | [] -> (binds, env)
+    | (sym, expr, t) :: tail ->
+        let (newbinds, newenv) = bind_help env tail in
+        let newexpr = help env expr in
+        let newsym = sprintf "%s#%d" sym t in
+        ((newsym, newexpr, t) :: newbinds, (sym, newsym) :: env)
   in help [] e
 ;;
+
 
 (* PROBLEM 4 & 5 *)
 (* This function converts a tagged expression into an untagged expression in A-normal form *)
