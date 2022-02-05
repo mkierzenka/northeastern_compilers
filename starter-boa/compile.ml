@@ -1,6 +1,7 @@
 open Printf
 open Exprs
 open Pretty
+open List
 
 let rec is_anf (e : 'a expr) : bool =
   match e with
@@ -18,6 +19,17 @@ and is_imm e =
   | _ -> false
 ;;
 
+(* Does a binding for this symbol exist in bindings? *)
+let rec bindings_contain (msym : string) (bindings : 'a bind list) : bool =
+  match bindings with
+  | [] -> false
+  | (sym, _, _) :: tail ->
+      if sym = msym
+      then true
+      else bindings_contain msym tail
+;;
+
+
 (* PROBLEM 1 *)
 (* This function should encapsulate the binding-error checking from Boa *)
 exception BindingError of string
@@ -28,14 +40,14 @@ let check_scope (e : (Lexing.position * Lexing.position) expr) : unit =
         let newenv = bindings_helper bindings env
         in  helper expr newenv
     | EPrim1 (prim1, expr, _) ->
-        check_scope expr
+        helper expr env
     | EPrim2 (prim2, lhs, rhs, _) ->
-        check_scope lhs;
-        check_scope rhs
+        helper lhs env;
+        helper rhs env
     | EIf (cond, tru, fals, _) ->
-        check_scope cond;
-        check_scope tru;
-        check_scope fals
+        helper cond env;
+        helper tru env;
+        helper fals env
     | ENumber (n, _) -> ()
     | EId (sym, _) ->
         if List.mem sym env
@@ -44,11 +56,11 @@ let check_scope (e : (Lexing.position * Lexing.position) expr) : unit =
   and bindings_helper
         (bindings : (Lexing.position * Lexing.position) bind list)
         (env : string list)
-       : string list
+       : string list =
     match bindings with
     | [] -> env
     | (sym, expr, _) :: tail ->
-        if (bind_contains sym tail)
+        if (bindings_contain sym tail)
         then failwith (sprintf "multiple bindings with same symbol %s" sym)
         else bindings_helper tail (sym :: env)
   in helper e []
@@ -85,7 +97,7 @@ let tag (e : 'a expr) : tag expr =
     | (sym, expr, _) :: tail ->
         let (texpr, et) = helper expr t in
         let tbind = (sym, texpr, et) in
-        let (ttail, bt) = binding_helper tail (et+1) in
+        let (ttail, bt) = bind_helper tail (et+1) in
         (tbind :: ttail, bt)
   in let (te, _) = helper e 0
   in te
