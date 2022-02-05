@@ -156,11 +156,24 @@ let tag_suite =
 "tag_suite">:::
  [
    ttag "tag1" "8" "ENumber<0>(8)";
+   ttag "tag1" "(8)" "ENumber<0>(8)";
    ttag "tag2" "add1(8)" "EPrim1<1>(Add1, ENumber<0>(8))";
+   ttag "tag2" "sub1(8)" "EPrim1<1>(Sub1, ENumber<0>(8))";
+   ttag "tag2" "4 + 5" "EPrim2<2>(Plus, ENumber<0>(4), ENumber<1>(5))";
+   ttag "tag2" "4 - 5" "EPrim2<2>(Minus, ENumber<0>(4), ENumber<1>(5))";
+   ttag "tag2" "4 * 5" "EPrim2<2>(Times, ENumber<0>(4), ENumber<1>(5))";
+   ttag "tag2" "4 + (5 * 7)" "EPrim2<4>(Plus, ENumber<0>(4), EPrim2<3>(Times, ENumber<1>(5), ENumber<2>(7)))";
+
+   (* if *)
+   ttag "tag2" "if 6: 7 else: 8" "EIf<3>(ENumber<0>(6), ENumber<1>(7), ENumber<2>(8))";
+   ttag "tag2" "if 6: 4 + 5 else: 8 + 9" "EIf<7>(ENumber<0>(6), EPrim2<3>(Plus, ENumber<1>(4), ENumber<2>(5)), EPrim2<6>(Plus, ENumber<4>(8), ENumber<5>(9)))";
+
+   (* let *)
    ttag "tag3" "let x=9 in x" "ELet<3>((( \"x\"<1>, ENumber<0>(9))), EId<2>(\"x\"))";
    ttag "tag4" "let x=9,y=55 in x" "ELet<5>((( \"x\"<1>, ENumber<0>(9)), ( \"y\"<3>, ENumber<2>(55))), EId<4>(\"x\"))";
    ttag "tag5" "let x=9,y=55 in y" "ELet<5>((( \"x\"<1>, ENumber<0>(9)), ( \"y\"<3>, ENumber<2>(55))), EId<4>(\"y\"))";
-
+        (* let shadowing *)
+   ttag "tag4" "let x=9,y=55 in (let x=2 in x)" "ELet<8>(((\"x\"<1>, ENumber<0>(9)), ( \"y\"<3>, ENumber<2>(55))), ELet<7>(((\"x\"<5>, ENumber<4>(2))), EId<6>(\"x\")))";
  ]
 ;;
 
