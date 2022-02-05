@@ -151,6 +151,20 @@ let check_scope_suite =
  ]
 ;;
 
+
+let tag_suite =
+"tag_suite">:::
+ [
+   ttag "tag1" "8" "ENumber<0>(8)";
+   ttag "tag2" "add1(8)" "EPrim1<1>(Add1, ENumber<0>(8))";
+   ttag "tag3" "let x=9 in x" "ELet<3>((( \"x\"<1>, ENumber<0>(9))), EId<2>(\"x\"))";
+   ttag "tag4" "let x=9,y=55 in x" "ELet<5>((( \"x\"<3>, ENumber<2>(9)), ( \"y\"<1>, ENumber<0>(55))), EId<4>(\"x\"))";
+   ttag "tag5" "let x=9,y=55 in y" "ELet<5>((( \"x\"<3>, ENumber<2>(9)), ( \"y\"<1>, ENumber<0>(55))), EId<4>(\"y\"))";
+
+ ]
+;;
+
+
 let suite =
 "suite">:::
  [
@@ -188,6 +202,7 @@ let suite =
 
 
 let () =
-  run_test_tt_main check_scope_suite
+  run_test_tt_main check_scope_suite;
+  run_test_tt_main tag_suite;
   (* run_test_tt_main suite *)
 ;;
