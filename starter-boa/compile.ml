@@ -145,10 +145,10 @@ let rename (e : tag expr) : tag expr =
     match binds with
     | [] -> (binds, env)
     | (sym, expr, t) :: tail ->
-        let (newbinds, newenv) = bind_help env tail in
         let newexpr = help env expr in
         let newsym = sprintf "%s#%d" sym t in
-        ((newsym, newexpr, t) :: newbinds, (sym, newsym) :: env)
+        let (newbinds, newenv) = bind_help ((sym, newsym) :: env) tail in
+        ((newsym, newexpr, t) :: newbinds, newenv)
   in help [] e
 ;;
 

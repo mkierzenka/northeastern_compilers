@@ -185,6 +185,8 @@ let rename_suite =
    trename "rename3" "let x=9 in x" "ELet<3>(((\"x#1\"<1>, ENumber<0>(9))), EId<2>(\"x#1\"))";
    trename "rename4" "let x=9,y=55 in x" "ELet<5>(((\"x#1\"<1>, ENumber<0>(9)), (\"y#3\"<3>, ENumber<2>(55))), EId<4>(\"x#1\"))";
    trename "rename5" "let x=9,y=55 in y" "ELet<5>(((\"x#1\"<1>, ENumber<0>(9)), (\"y#3\"<3>, ENumber<2>(55))), EId<4>(\"y#3\"))";
+   trename "rename6" "let x=9,y=55,z=88 in y" "ELet<7>(((\"x#1\"<1>, ENumber<0>(9)), (\"y#3\"<3>, ENumber<2>(55)), (\"z#5\"<5>, ENumber<4>(88))), EId<6>(\"y#3\"))";
+   trename "rename7" "let x=9,y=55,z=88 in z" "ELet<7>(((\"x#1\"<1>, ENumber<0>(9)), (\"y#3\"<3>, ENumber<2>(55)), (\"z#5\"<5>, ENumber<4>(88))), EId<6>(\"z#5\"))";
  ]
 
 
