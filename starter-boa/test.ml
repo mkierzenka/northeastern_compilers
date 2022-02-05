@@ -51,14 +51,6 @@ let trename (name : string) (program : string) (expected : string) : OUnit2.test
 ;;
 
 
-
-(* Runs a function true if throws correct exception *)
-let tbind_except (name : string) (func : (unit -> unit)) (expected_msg : string) = name>::fun _ ->
-  try (func() ; assert false) with
-    | BindingError s -> assert_equal s expected_msg
-	| _ -> assert false
-;;
-
 (* Runs a program, given as a source string, and compares its output to expected *)
 let t (name : string) (program : string) (expected : string) = name>::test_run program name expected;;
 
@@ -89,9 +81,6 @@ let forty_one_a = (ENumber(41L, ()))
 let check_scope_suite =
 "check_scope_suite">:::
  [
-
-  (*tbind_except "test1" (fun () -> (ignore (check_scope (parse_string "scratch" "(add1 1)")))) "saDSA"*)
-
 
    tcheck_scope "check_scope1" "8";
    tcheck_scope "check_scope2" "let x=9 in x";
