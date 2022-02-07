@@ -156,13 +156,16 @@ let rename (e : tag expr) : tag expr =
 (* PROBLEM 4 & 5 *)
 (* This function converts a tagged expression into an untagged expression in A-normal form *)
 
+(* Convenience type for our context to use when ANF-ing: maps symbols to expressions *)
 type context = (string * unit expr) list
+
 
 (* Combines the intermediate result of anf into a single final expr (ie. consumes context into it) *)
 let finish_anf (ans : unit expr) (ctx : context) : unit expr =
   List.fold_right (fun (sym, expr) acc -> ELet([(sym, expr, ())], acc, ())) ctx ans
 
 
+(* todo remove anf_4410 function *)
 let anf_4410 (e : tag expr) : unit expr =
   let rec help (e : tag expr) : (unit expr * context) =
     match e with
@@ -200,6 +203,7 @@ let anf_4410 (e : tag expr) : unit expr =
 
 
 let anf (e : tag expr) : unit expr =
+          (* Converts an expr to ANF, while tracking context (see is_anf at top). *)
   let rec helpC (e : tag expr) : (unit expr * context) =
     match e with
     | EId(x, tag) -> (EId(x, ()), [])
@@ -220,6 +224,8 @@ let anf (e : tag expr) : unit expr =
         let (anfthn, thnctx) = (helpC thn) in
         let (anfels, elsctx) = (helpC els) in
         (EIf(anfcond, anfthn, anfels, ()), condctx @ thnctx @ elsctx)
+
+      (* Converts an expr to an Immediate, while tracking context (see is_imm at top). *)
   and helpI (e : tag expr) : (unit expr * context) =
     match e with
     | EId(x, tag) -> (EId(x, ()), [])
@@ -239,8 +245,10 @@ let anf (e : tag expr) : unit expr =
         (EId(tmpname, ()), newctx1 @ newctx2 @ [(tmpname, EPrim2(op, newe1, newe2, ()))])
     | EIf(cond, thn, els, t) ->
         let (anfif, ifctx) = (helpC e) in
-        let tmpname = sprintf "$if_%d" t in
+        let tmpname = sprintf "$if_%d" t in (* todo should this be t or cond's tag? *)
         (EId(tmpname, ()), ifctx @ [(tmpname, anfif)])
+
+      (* Helper for ANF-ing a bindings list and updating the context along the way. *)
   and bind_helper (binds : tag bind list) (ctx : context) : context =
     match binds with
     | [] -> ctx
