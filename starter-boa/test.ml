@@ -346,6 +346,14 @@ let anf_suite =
        (ELet([("x", EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ())],
              (ELet([("z", EId("x", ()), ())], EId("z",()), ())),
              ()));
+
+  tanf "let z=(add1 (3 - 9)) in z"
+       (ELet([("z", EPrim1(Add1, EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ()), ())], EId("z", ()), ()))
+       (ELet([("$prim2_2", EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()),())],
+             ELet([("z", EPrim1(Add1, EId("$prim2_2", ()), ()), ())],
+                  EId("z", ()),
+                  ()),
+             ()));
  ]
 
 
