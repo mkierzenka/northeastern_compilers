@@ -199,16 +199,31 @@ let anf_suite =
 
   tanf "prim2"
        (EPrim2(Times, ENumber(41L, ()), ENumber(3L, ()), ()))
-       (ELet(["$prim2_2", EPrim2(Times, ENumber(41L, ()), ENumber(3L, ()), ()), ()], EId("$prim2_2", ()), ()));
+       (ELet([("$prim2_2", EPrim2(Times, ENumber(41L, ()), ENumber(3L, ()), ()), ())], EId("$prim2_2", ()), ()));
 
-(*
   (* For CS4410 students, with unnecessary let-bindings *)
-  tanf "prim1_anf_4410"
+  tanf "sub1(55)  *prim1_anf_4410*"
        (EPrim1(Sub1, ENumber(55L, ()), ()))
-       (ELet(["unary_1", EPrim1(Sub1, ENumber(55L, ()), ()), ()],
-             EId("unary_1", ()),
+       (ELet(["$prim1_1", EPrim1(Sub1, ENumber(55L, ()), ()), ()],
+             EId("$prim1_1", ()),
              ()));
 
+  tanf "2 * sub1(55)"
+       (EPrim2(Times, ENumber(2L,()), (EPrim1(Sub1, ENumber(55L, ()), ())), ()))
+       (ELet([("$prim1_2", EPrim1(Sub1, ENumber(55L, ()), ()), ())],
+         ELet([("$prim2_3", EPrim2(Times, ENumber(2L, ()), EId("$prim1_2", ()), ()), ())],
+              EId("$prim2_3", ()),
+              ()),
+         ()));
+
+  tanf "sub1(3 - 9)"
+       (EPrim1(Sub1, EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ()))
+       (ELet([("$prim2_2", EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ())],
+             ELet([("$prim1_3", EPrim1(Sub1, EId("$prim2_2",()), ()), ())],
+                  EId("$prim1_3", ()),
+                  ()),
+             ()));
+(*
   (* For CS6410 students, with optimized let-bindings *)
   tanf "prim1_anf_6410"
        (EPrim1(Sub1, ENumber(55L, ()), ()))

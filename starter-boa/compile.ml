@@ -174,7 +174,8 @@ let anf (e : tag expr) : unit expr =
     | ENumber(n, tag) -> (ENumber(n, ()), [])
     | EPrim1(op, e, t) ->
         let (newe, newctx) = (help e) in
-            (EPrim1(op, newe, ()), newctx)
+        let tmpname = sprintf "$prim1_%d" t in
+        (EId(tmpname, ()), newctx @ [(tmpname, EPrim1(op, newe, ()))])
     | EPrim2(op, e1, e2, t) ->
         let (newe1, newctx1) = (help e1) in
         let (newe2, newctx2) = (help e2) in
