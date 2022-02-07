@@ -64,6 +64,9 @@ let te (name : string) (program : string) (expected_err : string) = name>::test_
 let tanf (name : string) (program : 'a expr) (expected : unit expr) = name>::fun _ ->
   assert_equal expected (anf (tag program)) ~printer:string_of_expr;;
 
+let tanf_4410 (name : string) (program : 'a expr) (expected : unit expr) = name>::fun _ ->
+  assert_equal expected (anf_4410 (tag program)) ~printer:string_of_expr;;
+
 (* Checks if two strings are equal *)
 let teq (name : string) (actual : string) (expected : string) = name>::fun _ ->
   assert_equal expected actual ~printer:(fun s -> s);;
@@ -193,22 +196,22 @@ let anf_suite =
 "anf_suite">:::
  [
 
-  tanf "forty_one_anf"
+  tanf_4410 "forty_one_anf"
        (ENumber(41L, ()))
        forty_one_a;
 
-  tanf "prim2"
+  tanf_4410 "prim2"
        (EPrim2(Times, ENumber(41L, ()), ENumber(3L, ()), ()))
        (ELet([("$prim2_2", EPrim2(Times, ENumber(41L, ()), ENumber(3L, ()), ()), ())], EId("$prim2_2", ()), ()));
 
   (* For CS4410 students, with unnecessary let-bindings *)
-  tanf "sub1(55)  *prim1_anf_4410*"
+  tanf_4410 "sub1(55)  *prim1_anf_4410*"
        (EPrim1(Sub1, ENumber(55L, ()), ()))
        (ELet(["$prim1_1", EPrim1(Sub1, ENumber(55L, ()), ()), ()],
              EId("$prim1_1", ()),
              ()));
 
-  tanf "2 * sub1(55)"
+  tanf_4410 "2 * sub1(55)"
        (EPrim2(Times, ENumber(2L,()), (EPrim1(Sub1, ENumber(55L, ()), ())), ()))
        (ELet([("$prim1_2", EPrim1(Sub1, ENumber(55L, ()), ()), ())],
          ELet([("$prim2_3", EPrim2(Times, ENumber(2L, ()), EId("$prim1_2", ()), ()), ())],
@@ -216,19 +219,48 @@ let anf_suite =
               ()),
          ()));
 
-  tanf "sub1(3 - 9)"
+  tanf_4410 "sub1(3 - 9)"
        (EPrim1(Sub1, EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ()))
        (ELet([("$prim2_2", EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ())],
              ELet([("$prim1_3", EPrim1(Sub1, EId("$prim2_2",()), ()), ())],
                   EId("$prim1_3", ()),
                   ()),
              ()));
-(*
+
   (* For CS6410 students, with optimized let-bindings *)
-  tanf "prim1_anf_6410"
+  tanf "sub1(55)  *prim1_anf_6410*"
        (EPrim1(Sub1, ENumber(55L, ()), ()))
        (EPrim1(Sub1, ENumber(55L, ()), ()));
-*)
+
+  tanf "2 * sub1(55)"
+       (EPrim2(Times, ENumber(2L,()), (EPrim1(Sub1, ENumber(55L, ()), ())), ()))
+       (ELet([("$prim1_2", EPrim1(Sub1, ENumber(55L, ()), ()), ())],
+         EPrim2(Times, ENumber(2L,()), EId("$prim1_2",()), ()),
+         ()));
+
+  tanf "sub1(3 - 9)"
+       (EPrim1(Sub1, EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ()))
+       (ELet([("$prim2_2", EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ())],
+             EPrim1(Sub1, EId("$prim2_2",()), ()),
+             ()));
+
+  tanf "if 3: 1 else: 0"
+       (EIf(ENumber(3L,()), ENumber(1L,()), ENumber(0L,()), ()))
+       (EIf(ENumber(3L,()), ENumber(1L,()), ENumber(0L,()), ()));
+
+  tanf "if (add1 4): 1 else: 0"
+       (EIf(EPrim1(Add1, ENumber(4L,()), ()), ENumber(1L,()), ENumber(0L,()), ()))
+       (ELet([("$prim1_1", EPrim1(Add1, ENumber(4L,()), ()), ())],
+             (EIf(EId("$prim1_1",()), ENumber(1L,()), ENumber(0L,()), ())),
+             ()));
+
+  tanf "let x=0 in 2"
+       (ELet([("x",ENumber(0L,()),())], ENumber(2L,()), ()))
+       (ELet([("x",ENumber(0L,()),())], ENumber(2L,()), ()));
+
+  tanf "let x=0 in x"
+       (ELet([("x",ENumber(0L,()),())], EId("x",()), ()))
+       (ELet([("x",ENumber(0L,()),())], EId("x",()), ()));
  ]
 
 

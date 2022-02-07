@@ -163,7 +163,7 @@ let finish_anf (ans : unit expr) (ctx : context) : unit expr =
   List.fold_right (fun (sym, expr) acc -> ELet([(sym, expr, ())], acc, ())) ctx ans
 
 
-let anf (e : tag expr) : unit expr =
+let anf_4410 (e : tag expr) : unit expr =
   let rec help (e : tag expr) : (unit expr * context) =
     match e with
     | EId(x, tag) -> (EId(x, ()), [])
@@ -197,6 +197,58 @@ let anf (e : tag expr) : unit expr =
   in
     let (a, c) = (help e) in (finish_anf a c)
 ;;
+
+let anf (e : tag expr) : unit expr =
+  let rec helpC (e : tag expr) : (unit expr * context) =
+    match e with
+    | EId(x, tag) -> (EId(x, ()), [])
+    | ELet(binds, body, tag) ->
+        let bctx = (bind_helper binds []) in
+        let (newbody, newctx) = (helpC body) in
+        (newbody, bctx @ newctx)
+    | ENumber(n, tag) -> (ENumber(n, ()), [])
+    | EPrim1(op, e, t) ->
+        let (newe, newctx) = (helpI e) in
+        (EPrim1(op, newe, ()), newctx)
+    | EPrim2(op, e1, e2, t) ->
+        let (newe1, newctx1) = (helpI e1) in
+        let (newe2, newctx2) = (helpI e2) in
+        (EPrim2(op, newe1, newe2, ()), newctx1 @ newctx2)
+    | EIf(cond, thn, els, t) ->
+        let (anfcond, condctx) = (helpI cond) in
+        let (anfthn, thnctx) = (helpC thn) in
+        let (anfels, elsctx) = (helpC els) in
+        (EIf(anfcond, anfthn, anfels, ()), condctx @ thnctx @ elsctx)
+  and helpI (e : tag expr) : (unit expr * context) =
+    match e with
+    | EId(x, tag) -> (EId(x, ()), [])
+    | ELet(binds, body, tag) ->
+        let bctx = (bind_helper binds []) in
+        let (newbody, newctx) = (helpI body) in
+        (newbody, bctx @ newctx)
+    | ENumber(n, tag) -> (ENumber(n, ()), [])
+    | EPrim1(op, e, t) ->
+        let (newe, newctx) = (helpI e) in
+        let tmpname = sprintf "$prim1_%d" t in
+        (EId(tmpname, ()), newctx @ [(tmpname, EPrim1(op, newe, ()))])
+    | EPrim2(op, e1, e2, t) ->
+        let (newe1, newctx1) = (helpI e1) in
+        let (newe2, newctx2) = (helpI e2) in
+        let tmpname = sprintf "$prim2_%d" t in
+        (EId(tmpname, ()), newctx1 @ newctx2 @ [(tmpname, EPrim2(op, newe1, newe2, ()))])
+    | EIf(cond, thn, els, t) ->
+        let (anfif, ifctx) = (helpC e) in
+        let tmpname = sprintf "$if_%d" t in
+        (EId(tmpname, ()), ifctx @ [(tmpname, anfif)])
+  and bind_helper (binds : tag bind list) (ctx : context) : context =
+    match binds with
+    | [] -> ctx
+    | (sym, expr, t) :: tail ->
+        let (newexpr, exprctx) = (helpI expr) in
+        let newctx = (bind_helper tail exprctx) in
+        (sym, newexpr) :: newctx
+  in
+    let (a, c) = (helpC e) in (finish_anf a c)
 
 
 (* Helper functions *)
