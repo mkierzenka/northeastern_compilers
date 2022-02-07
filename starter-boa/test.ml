@@ -266,6 +266,15 @@ let anf_suite =
        (ELet([("x",ENumber(0L,()),())], EId("x",()), ()))
        (ELet([("x",ENumber(0L,()),())], EId("x",()), ()));
 
+  (* todo should ANF break apart multi let-bindings
+  tanf "let x=0,y=1 in x"
+       (ELet([("x",ENumber(0L,()),()); ("y",ENumber(1L,()),())], EId("x",()), ()))
+       (ELet([("x",ENumber(0L,()),()); ("y",ENumber(1L,()),())], EId("x",()), ()));
+
+  tanf "let x=0,y=1 in y"
+       (ELet([("x",ENumber(0L,()),()); ("y",ENumber(1L,()),())], EId("y",()), ()))
+       (ELet([("x",ENumber(0L,()),()); ("y",ENumber(1L,()),())], EId("y",()), ()));*)
+
   tanf "(let x=3-9 in x) + (let y=9-3 in y)"
        (EPrim2(Minus, (ELet([("x",EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ())], EId("x",()), ())),
                       (ELet([("y",EPrim2(Minus, ENumber(9L,()), ENumber(3L,()), ()), ())], EId("y",()), ())), ()))
@@ -279,13 +288,64 @@ let anf_suite =
        (ELet([("x",EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ())], EId("x",()), ()))
        (ELet([("x",EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ())], EId("x",()), ()));
 
+  tanf "let z=1 in (let x=3-9 in x)"
+       (ELet([("z", ENumber(1L, ()), ())],
+             (ELet([("x",EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ())],
+                   EId("x",()),
+                   ())),
+             ()))
+       (ELet([("z", ENumber(1L, ()), ())],
+             (ELet([("x",EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ())],
+                   EId("x",()),
+                   ())),
+             ()));
+
+  tanf "let z=1 in (let x=3-9 in z)"
+       (ELet([("z", ENumber(1L, ()), ())],
+             (ELet([("x",EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ())],
+                   EId("z",()),
+                   ())),
+             ()))
+       (ELet([("z", ENumber(1L, ()), ())],
+             (ELet([("x",EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ())],
+                   EId("z",()),
+                   ())),
+             ()));
+
+  tanf "let z=1,x=2 in z"
+       (ELet([("z", ENumber(1L, ()), ()); ("x", ENumber(2L, ()), ())], EId("z",()), ()))
+       (ELet([("z", ENumber(1L, ()), ())],
+             (ELet([("x", ENumber(2L, ()), ())],
+                   EId("z", ()),
+                   ())),
+            ()));
+
+  tanf "let z=1,x=2 in x"
+       (ELet([("z", ENumber(1L, ()), ()); ("x", ENumber(2L, ()), ())], EId("x",()), ()))
+       (ELet([("z", ENumber(1L, ()), ())],
+             (ELet([("x", ENumber(2L, ()), ())],
+                   EId("x", ()),
+                   ())),
+            ()));
+
+  tanf "let z=1,x=z in x"
+       (ELet([("z", ENumber(1L, ()), ()); ("x", EId("z", ()), ())], EId("x",()), ()))
+       (ELet([("z", ENumber(1L, ()), ())],
+             (ELet([("x", EId("z", ()), ())],
+                   EId("x", ()),
+                   ())),
+            ()));
+
   tanf "let z=(let x=3-9 in x) in z"
        (ELet([("z", (ELet([("x",EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ())],
-                          EId("x",()), ())), ())],
-            EId("z",()), ()))
-       (ELet([("z", (ELet([("x",EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ())],
-                          EId("x",()), ())), ())],
-            EId("z",()), ()));
+                          EId("x",()),
+                          ())),
+              ())],
+             EId("z",()),
+             ()))
+       (ELet([("x", EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ())],
+             (ELet([("z", EId("x", ()), ())], EId("z",()), ())),
+             ()));
  ]
 
 
