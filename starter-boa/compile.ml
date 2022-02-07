@@ -246,8 +246,8 @@ let anf (e : tag expr) : unit expr =
     | [] -> ctx
     | (sym, expr, t) :: tail ->
         let (newexpr, exprctx) = (helpC expr) in
-        let newctx = (bind_helper tail exprctx) in
-        (sym, newexpr) :: newctx
+        let tailctx = (bind_helper tail ctx) in
+        exprctx @ [(sym, newexpr)] @ tailctx
   in
     let (a, c) = (helpC e) in (finish_anf a c)
 
