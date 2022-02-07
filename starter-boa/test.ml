@@ -176,7 +176,11 @@ let tag_suite =
    ttag "tag4" "let x=9,y=55 in x" "ELet<5>(((\"x\"<1>, ENumber<0>(9)), ( \"y\"<3>, ENumber<2>(55))), EId<4>(\"x\"))";
    ttag "tag5" "let x=9,y=55 in y" "ELet<5>(((\"x\"<1>, ENumber<0>(9)), ( \"y\"<3>, ENumber<2>(55))), EId<4>(\"y\"))";
         (* shadowing *)
-   ttag "tag4" "let x=9,y=55 in (let x=2 in x)" "ELet<8>(((\"x\"<1>, ENumber<0>(9)), ( \"y\"<3>, ENumber<2>(55))), ELet<7>(((\"x\"<5>, ENumber<4>(2))), EId<6>(\"x\")))";
+   ttag "tag6" "let x=9,y=55 in (let x=2 in x)" "ELet<8>(((\"x\"<1>, ENumber<0>(9)), ( \"y\"<3>, ENumber<2>(55))), ELet<7>(((\"x\"<5>, ENumber<4>(2))), EId<6>(\"x\")))";
+
+   ttag "tag7"
+        "let z=(let x=(3 - 9) in x) in z"
+        "ELet<8>(((\"z\"<6>, ELet<5>(((\"x\"<3>, EPrim2<2>(Minus, ENumber<0>(3), ENumber<1>(9)))), EId<4>(\"x\")))), EId<7>(\"z\"))";
  ]
 ;;
 
@@ -261,6 +265,27 @@ let anf_suite =
   tanf "let x=0 in x"
        (ELet([("x",ENumber(0L,()),())], EId("x",()), ()))
        (ELet([("x",ENumber(0L,()),())], EId("x",()), ()));
+
+  tanf "(let x=3-9 in x) + (let y=9-3 in y)"
+       (EPrim2(Minus, (ELet([("x",EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ())], EId("x",()), ())),
+                      (ELet([("y",EPrim2(Minus, ENumber(9L,()), ENumber(3L,()), ()), ())], EId("y",()), ())), ()))
+       (ELet([("x",EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()),())],
+            (ELet([("y",EPrim2(Minus, ENumber(9L,()), ENumber(3L,()), ()),())],
+                (EPrim2(Minus, EId("x",()), EId("y",()), ()))
+                ,()))
+            ,()));
+
+  tanf "let x=3-9 in x"
+       (ELet([("x",EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ())], EId("x",()), ()))
+       (ELet([("x",EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ())], EId("x",()), ()));
+
+  tanf "let z=(let x=3-9 in x) in z"
+       (ELet([("z", (ELet([("x",EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ())],
+                          EId("x",()), ())), ())],
+            EId("z",()), ()))
+       (ELet([("z", (ELet([("x",EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ())],
+                          EId("x",()), ())), ())],
+            EId("z",()), ()));
  ]
 
 

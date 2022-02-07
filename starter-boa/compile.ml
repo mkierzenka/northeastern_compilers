@@ -198,6 +198,7 @@ let anf_4410 (e : tag expr) : unit expr =
     let (a, c) = (help e) in (finish_anf a c)
 ;;
 
+
 let anf (e : tag expr) : unit expr =
   let rec helpC (e : tag expr) : (unit expr * context) =
     match e with
@@ -244,7 +245,7 @@ let anf (e : tag expr) : unit expr =
     match binds with
     | [] -> ctx
     | (sym, expr, t) :: tail ->
-        let (newexpr, exprctx) = (helpI expr) in
+        let (newexpr, exprctx) = (helpC expr) in
         let newctx = (bind_helper tail exprctx) in
         (sym, newexpr) :: newctx
   in
