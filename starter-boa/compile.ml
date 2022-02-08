@@ -284,7 +284,20 @@ let i_to_asm (i : instruction) : string =
      sprintf "  add %s, %s" (arg_to_asm dest) (arg_to_asm to_add)
   | IRet ->
      "  ret"
-  | _ -> failwith "i_to_asm: Implement this"
+  | ISub(dest, sub) ->
+     sprintf "  sub %s, %s" (arg_to_asm dest) (arg_to_asm sub)
+  | IMul(dest, mul) ->
+     sprintf "  imul %s, %s" (arg_to_asm dest) (arg_to_asm mul)
+  | ILabel(lbl) ->
+     sprintf "%s:" lbl
+  | ICmp(lhs, rhs) ->
+     sprintf "  cmp %s, %s" (arg_to_asm lhs) (arg_to_asm rhs)
+  | IJne(lbl) ->
+     sprintf "  jne %s" lbl
+  | IJe(lbl) ->
+     sprintf "  je %s" lbl
+  | IJmp(lbl) ->
+     sprintf "  jmp %s" lbl
 
 let to_asm (is : instruction list) : string =
   List.fold_left (fun s i -> sprintf "%s\n%s" s (i_to_asm i)) "" is

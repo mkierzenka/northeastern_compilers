@@ -354,6 +354,8 @@ let anf_suite =
                   EId("z", ()),
                   ()),
              ()));
+
+  (* TODO tanf where we operate on the vars in the body of a let expr *)
  ]
 
 
