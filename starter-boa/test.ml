@@ -266,17 +266,6 @@ let anf_suite =
        (ELet([("x",ENumber(0L,()),())], EId("x",()), ()))
        (ELet([("x",ENumber(0L,()),())], EId("x",()), ()));
 
-  (* todo should ANF break apart multi let-bindings
-   * note to us--yes, we should have nested lets (instead of a single let with
-   * multiple bindings)
-  tanf "let x=0,y=1 in x"
-       (ELet([("x",ENumber(0L,()),()); ("y",ENumber(1L,()),())], EId("x",()), ()))
-       (ELet([("x",ENumber(0L,()),()); ("y",ENumber(1L,()),())], EId("x",()), ()));
-
-  tanf "let x=0,y=1 in y"
-       (ELet([("x",ENumber(0L,()),()); ("y",ENumber(1L,()),())], EId("y",()), ()))
-       (ELet([("x",ENumber(0L,()),()); ("y",ENumber(1L,()),())], EId("y",()), ()));*)
-
   tanf "(let x=3-9 in x) + (let y=9-3 in y)"
        (EPrim2(Minus, (ELet([("x",EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ())], EId("x",()), ())),
                       (ELet([("y",EPrim2(Minus, ENumber(9L,()), ENumber(3L,()), ()), ())], EId("y",()), ())), ()))
