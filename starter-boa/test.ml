@@ -267,6 +267,8 @@ let anf_suite =
        (ELet([("x",ENumber(0L,()),())], EId("x",()), ()));
 
   (* todo should ANF break apart multi let-bindings
+   * note to us--yes, we should have nested lets (instead of a single let with
+   * multiple bindings)
   tanf "let x=0,y=1 in x"
        (ELet([("x",ENumber(0L,()),()); ("y",ENumber(1L,()),())], EId("x",()), ()))
        (ELet([("x",ENumber(0L,()),()); ("y",ENumber(1L,()),())], EId("x",()), ()));
@@ -383,5 +385,5 @@ let () =
   run_test_tt_main tag_suite;
   run_test_tt_main rename_suite;
   run_test_tt_main anf_suite;
-  (* run_test_tt_main suite *)
+  run_test_tt_main suite
 ;;

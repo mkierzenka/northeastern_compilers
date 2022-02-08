@@ -329,13 +329,50 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
        ]
      end
   | EPrim2(op, left, right, _) ->
-     failwith "compile_expr:eprim2: Implement this"
+      let lhs_reg = compile_imm left env in
+      let rhs_reg = compile_imm right env in
+      begin match op with
+      | Plus -> [
+          IMov(Reg(RAX), lhs_reg);
+          IAdd(Reg(RAX), rhs_reg);
+        ]
+      | Minus -> [
+          IMov(Reg(RAX), lhs_reg);
+          ISub(Reg(RAX), rhs_reg);
+        ]
+      | Times -> [
+          IMov(Reg(RAX), lhs_reg);
+          IMul(Reg(RAX), rhs_reg);
+        ]
+      end
   | EIf(cond, thn, els, tag) ->
-     failwith "compile_expr:eif: Implement this"
+      let cond_reg = compile_imm cond env in
+      let compiled_thn = compile_expr thn si env in
+      let compiled_els = compile_expr els si env in
+      let thn_lbl = sprintf "if_then_%d" tag in
+      let els_lbl = sprintf "if_else_%d" tag in
+      let done_lbl = sprintf "if_done_%d" tag in
+        [
+          IMov(Reg(RAX), cond_reg);
+          ICmp(Reg(RAX), Const(0L));
+          IJe(els_lbl);
+          ILabel(thn_lbl);
+        ]
+      @ compiled_thn
+      @ [
+          IJmp(done_lbl);
+          ILabel(els_lbl);
+        ]
+      @ compiled_els
+      @ [ILabel(done_lbl)]
   | ELet([id, e, _], body, _) ->
-     failwith "compile_expr:elet: Implement this"
+      let compiled_e = compile_expr e si env in
+      let newenv = (id, si) :: env in
+      compiled_e
+      @ [IMov(RegOffset(~-1*si, RSP), Reg(RAX))]
+      @ compile_expr body (si+1) newenv
   | _ -> failwith "Impossible: Not in ANF"
-and compile_imm e env =
+and compile_imm e env : arg =
   match e with
   | ENumber(n, _) -> Const(n)
   | EId(x, _) -> RegOffset(~-(find env x), RSP)
