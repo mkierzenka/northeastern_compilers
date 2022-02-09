@@ -64,9 +64,6 @@ let te (name : string) (program : string) (expected_err : string) = name>::test_
 let tanf (name : string) (program : 'a expr) (expected : unit expr) = name>::fun _ ->
   assert_equal expected (anf (tag program)) ~printer:string_of_expr;;
 
-let tanf_4410 (name : string) (program : 'a expr) (expected : unit expr) = name>::fun _ ->
-  assert_equal expected (anf_4410 (tag program)) ~printer:string_of_expr;;
-
 (* Checks if two strings are equal *)
 let teq (name : string) (actual : string) (expected : string) = name>::fun _ ->
   assert_equal expected actual ~printer:(fun s -> s);;
@@ -200,38 +197,14 @@ let anf_suite =
 "anf_suite">:::
  [
 
-  tanf_4410 "forty_one_anf"
+  tanf "forty_one_anf"
        (ENumber(41L, ()))
        forty_one_a;
 
-  tanf_4410 "prim2"
+  tanf "prim2"
        (EPrim2(Times, ENumber(41L, ()), ENumber(3L, ()), ()))
-       (ELet([("$prim2_2", EPrim2(Times, ENumber(41L, ()), ENumber(3L, ()), ()), ())], EId("$prim2_2", ()), ()));
+       (EPrim2(Times, ENumber(41L, ()), ENumber(3L, ()), ()));
 
-  (* For CS4410 students, with unnecessary let-bindings *)
-  tanf_4410 "sub1(55)  *prim1_anf_4410*"
-       (EPrim1(Sub1, ENumber(55L, ()), ()))
-       (ELet(["$prim1_1", EPrim1(Sub1, ENumber(55L, ()), ()), ()],
-             EId("$prim1_1", ()),
-             ()));
-
-  tanf_4410 "2 * sub1(55)"
-       (EPrim2(Times, ENumber(2L,()), (EPrim1(Sub1, ENumber(55L, ()), ())), ()))
-       (ELet([("$prim1_2", EPrim1(Sub1, ENumber(55L, ()), ()), ())],
-         ELet([("$prim2_3", EPrim2(Times, ENumber(2L, ()), EId("$prim1_2", ()), ()), ())],
-              EId("$prim2_3", ()),
-              ()),
-         ()));
-
-  tanf_4410 "sub1(3 - 9)"
-       (EPrim1(Sub1, EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ()))
-       (ELet([("$prim2_2", EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ())],
-             ELet([("$prim1_3", EPrim1(Sub1, EId("$prim2_2",()), ()), ())],
-                  EId("$prim1_3", ()),
-                  ()),
-             ()));
-
-  (* For CS6410 students, with optimized let-bindings *)
   tanf "sub1(55)  *prim1_anf_6410*"
        (EPrim1(Sub1, ENumber(55L, ()), ()))
        (EPrim1(Sub1, ENumber(55L, ()), ()));
