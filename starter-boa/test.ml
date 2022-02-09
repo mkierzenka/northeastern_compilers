@@ -196,50 +196,34 @@ let rename_suite =
 let anf_suite =
 "anf_suite">:::
  [
-
   tanf "forty_one_anf"
        (ENumber(41L, ()))
        forty_one_a;
+
+  tanf "prim1*"
+       (EPrim1(Sub1, ENumber(55L, ()), ()))
+       (EPrim1(Sub1, ENumber(55L, ()), ()));
 
   tanf "prim2"
        (EPrim2(Times, ENumber(41L, ()), ENumber(3L, ()), ()))
        (EPrim2(Times, ENumber(41L, ()), ENumber(3L, ()), ()));
 
-  tanf "sub1(55)  *prim1_anf_6410*"
-       (EPrim1(Sub1, ENumber(55L, ()), ()))
-       (EPrim1(Sub1, ENumber(55L, ()), ()));
-
-  tanf "2 * sub1(55)"
+  (* 2 * sub1(55) *)
+  tanf "prim1_in_prim2"
        (EPrim2(Times, ENumber(2L,()), (EPrim1(Sub1, ENumber(55L, ()), ())), ()))
        (ELet([("$prim1_2", EPrim1(Sub1, ENumber(55L, ()), ()), ())],
          EPrim2(Times, ENumber(2L,()), EId("$prim1_2",()), ()),
          ()));
 
-  tanf "sub1(3 - 9)"
+  (* sub1(3 - 9) *)
+  tanf "prim2_in_prim1"
        (EPrim1(Sub1, EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ()))
        (ELet([("$prim2_2", EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ())],
              EPrim1(Sub1, EId("$prim2_2",()), ()),
              ()));
 
-  tanf "if 3: 1 else: 0"
-       (EIf(ENumber(3L,()), ENumber(1L,()), ENumber(0L,()), ()))
-       (EIf(ENumber(3L,()), ENumber(1L,()), ENumber(0L,()), ()));
-
-  tanf "if (add1 4): 1 else: 0"
-       (EIf(EPrim1(Add1, ENumber(4L,()), ()), ENumber(1L,()), ENumber(0L,()), ()))
-       (ELet([("$prim1_1", EPrim1(Add1, ENumber(4L,()), ()), ())],
-             (EIf(EId("$prim1_1",()), ENumber(1L,()), ENumber(0L,()), ())),
-             ()));
-
-  tanf "let x=0 in 2"
-       (ELet([("x",ENumber(0L,()),())], ENumber(2L,()), ()))
-       (ELet([("x",ENumber(0L,()),())], ENumber(2L,()), ()));
-
-  tanf "let x=0 in x"
-       (ELet([("x",ENumber(0L,()),())], EId("x",()), ()))
-       (ELet([("x",ENumber(0L,()),())], EId("x",()), ()));
-
-  tanf "(let x=3-9 in x) + (let y=9-3 in y)"
+  (* (let x=3-9 in x) + (let y=9-3 in y) *)
+  tanf "prim2_with_lets"
        (EPrim2(Minus, (ELet([("x",EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ())], EId("x",()), ())),
                       (ELet([("y",EPrim2(Minus, ENumber(9L,()), ENumber(3L,()), ()), ())], EId("y",()), ())), ()))
        (ELet([("x",EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()),())],
@@ -248,11 +232,85 @@ let anf_suite =
                 ,()))
             ,()));
 
-  tanf "let x=3-9 in x"
+  (* if 3: 1 else: 0 *)
+  tanf "if_simple"
+       (EIf(ENumber(3L,()), ENumber(1L,()), ENumber(0L,()), ()))
+       (EIf(ENumber(3L,()), ENumber(1L,()), ENumber(0L,()), ()));
+
+  (* if (add1 4): 1 else: 0 *)
+  tanf "if_cond"
+       (EIf(EPrim1(Add1, ENumber(4L,()), ()), ENumber(1L,()), ENumber(0L,()), ()))
+       (ELet([("$prim1_1", EPrim1(Add1, ENumber(4L,()), ()), ())],
+             (EIf(EId("$prim1_1",()), ENumber(1L,()), ENumber(0L,()), ())),
+             ()));
+
+  (* if (add1 4): (3 - 9) else: (sub1 88) *)
+  tanf "if_with_sub_exprs"
+       (EIf(EPrim1(Add1, ENumber(4L,()), ()),
+            EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()),
+            EPrim1(Sub1, ENumber(88L,()), ()),
+        ()))
+       (ELet([("$prim1_1", EPrim1(Add1, ENumber(4L,()), ()), ())],
+            EIf(EId("$prim1_1", ()),
+                EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()),
+                EPrim1(Sub1, ENumber(88L,()), ()),
+                ()),
+        ()));
+
+  (* if (if 0: add1(4) else: 4): 1 else: 0 *)
+  tanf "if_nested_if_cond"
+       (EIf(EIf(ENumber(0L,()),
+                 EPrim1(Add1, ENumber(4L,()), ()),
+                 ENumber(4L,()),
+                 ()),
+            ENumber(1L,()),
+            ENumber(0L,()),
+            ()))
+        (ELet([("$if_4",
+                EIf(ENumber(0L,()),
+                    EPrim1(Add1, ENumber(4L,()), ()),
+                    ENumber(4L,()),
+                    ()), ())],
+              EIf(EId("$if_4", ()), ENumber(1L,()), ENumber(0L,()), ()),
+              ()));
+
+  (* if (if (3 - 9): sub1(2) else: sub1(3)): 1 else: 0 *)
+  tanf "if_nested_if_cond2"
+       (EIf(EIf(EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()),
+                 EPrim1(Sub1, ENumber(2L,()), ()),
+                 EPrim1(Sub1, ENumber(3L,()), ()),
+                 ()),
+            ENumber(1L,()),
+            ENumber(0L,()),
+            ()))
+       (ELet([("$prim2_2", EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ())],
+             ELet([("$if_7",
+                   EIf(EId("$prim2_2", ()),
+                       EPrim1(Sub1, ENumber(2L,()), ()),
+                       EPrim1(Sub1, ENumber(3L,()), ()),
+                       ()),
+                   ())],
+                   EIf(EId("$if_7", ()), ENumber(1L,()), ENumber(0L,()), ()),
+                   ()),
+             ()));
+
+  (* let x=0 in 2 *)
+  tanf "let_simple_unused"
+       (ELet([("x",ENumber(0L,()),())], ENumber(2L,()), ()))
+       (ELet([("x",ENumber(0L,()),())], ENumber(2L,()), ()));
+
+  (* let x=0 in x *)
+  tanf "let_simple"
+       (ELet([("x",ENumber(0L,()),())], EId("x",()), ()))
+       (ELet([("x",ENumber(0L,()),())], EId("x",()), ()));
+
+  (* let x=3-9 in x *)
+  tanf "let_prim2_binding"
        (ELet([("x",EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ())], EId("x",()), ()))
        (ELet([("x",EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ())], EId("x",()), ()));
 
-  tanf "let z=1 in (let x=3-9 in x)"
+  (* let z=1 in (let x=3-9 in x) *)
+  tanf "let_nested_let_body"
        (ELet([("z", ENumber(1L, ()), ())],
              (ELet([("x",EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ())],
                    EId("x",()),
@@ -264,7 +322,8 @@ let anf_suite =
                    ())),
              ()));
 
-  tanf "let z=1 in (let x=3-9 in z)"
+  (* let z=1 in (let x=3-9 in z) *)
+  tanf "let_nested_let_body2"
        (ELet([("z", ENumber(1L, ()), ())],
              (ELet([("x",EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ())],
                    EId("z",()),
@@ -276,31 +335,17 @@ let anf_suite =
                    ())),
              ()));
 
-  tanf "let z=1,x=2 in z"
-       (ELet([("z", ENumber(1L, ()), ()); ("x", ENumber(2L, ()), ())], EId("z",()), ()))
-       (ELet([("z", ENumber(1L, ()), ())],
-             (ELet([("x", ENumber(2L, ()), ())],
-                   EId("z", ()),
-                   ())),
-            ()));
+  (* let z=(add1 (3 - 9)) in z *)
+  tanf "let_nested_let_bindings"
+       (ELet([("z", EPrim1(Add1, EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ()), ())], EId("z", ()), ()))
+       (ELet([("$prim2_2", EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()),())],
+             ELet([("z", EPrim1(Add1, EId("$prim2_2", ()), ()), ())],
+                  EId("z", ()),
+                  ()),
+             ()));
 
-  tanf "let z=1,x=2 in x"
-       (ELet([("z", ENumber(1L, ()), ()); ("x", ENumber(2L, ()), ())], EId("x",()), ()))
-       (ELet([("z", ENumber(1L, ()), ())],
-             (ELet([("x", ENumber(2L, ()), ())],
-                   EId("x", ()),
-                   ())),
-            ()));
-
-  tanf "let z=1,x=z in x"
-       (ELet([("z", ENumber(1L, ()), ()); ("x", EId("z", ()), ())], EId("x",()), ()))
-       (ELet([("z", ENumber(1L, ()), ())],
-             (ELet([("x", EId("z", ()), ())],
-                   EId("x", ()),
-                   ())),
-            ()));
-
-  tanf "let z=(let x=3-9 in x) in z"
+  (* let z=(let x=3-9 in x) in z *)
+  tanf "let_nested_let_bindings2"
        (ELet([("z", (ELet([("x",EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ())],
                           EId("x",()),
                           ())),
@@ -311,13 +356,47 @@ let anf_suite =
              (ELet([("z", EId("x", ()), ())], EId("z",()), ())),
              ()));
 
-  tanf "let z=(add1 (3 - 9)) in z"
-       (ELet([("z", EPrim1(Add1, EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()), ()), ())], EId("z", ()), ()))
-       (ELet([("$prim2_2", EPrim2(Minus, ENumber(3L,()), ENumber(9L,()), ()),())],
-             ELet([("z", EPrim1(Add1, EId("$prim2_2", ()), ()), ())],
-                  EId("z", ()),
-                  ()),
-             ()));
+  (* let x=1,y=2,z=4 in x *)
+  tanf "let_multi_bindings"
+       (ELet([("x", ENumber(1L, ()), ()); ("y", ENumber(2L, ()), ()); ("z", ENumber(4L, ()), ())], EId("x",()), ()))
+       (ELet([("x", ENumber(1L, ()), ())],
+             (ELet([("y", ENumber(2L, ()), ())],
+                   ELet([("z", ENumber(4L, ()), ())],
+                        EId("x", ()),
+                        ()),
+                   ())),
+            ()));
+
+  (* let x=1,y=2,z=4 in y *)
+  tanf "let_multi_bindings1"
+       (ELet([("x", ENumber(1L, ()), ()); ("y", ENumber(2L, ()), ()); ("z", ENumber(4L, ()), ())], EId("y",()), ()))
+       (ELet([("x", ENumber(1L, ()), ())],
+             (ELet([("y", ENumber(2L, ()), ())],
+                   ELet([("z", ENumber(4L, ()), ())],
+                        EId("y", ()),
+                        ()),
+                   ())),
+            ()));
+
+  (* let x=1,y=2,z=4 in z *)
+  tanf "let_multi_bindings2"
+       (ELet([("x", ENumber(1L, ()), ()); ("y", ENumber(2L, ()), ()); ("z", ENumber(4L, ()), ())], EId("z",()), ()))
+       (ELet([("x", ENumber(1L, ()), ())],
+             (ELet([("y", ENumber(2L, ()), ())],
+                   ELet([("z", ENumber(4L, ()), ())],
+                        EId("z", ()),
+                        ()),
+                   ())),
+            ()));
+
+  (* let z=1,x=z in x *)
+  tanf "let_dependent_bindings"
+       (ELet([("z", ENumber(1L, ()), ()); ("x", EId("z", ()), ())], EId("x",()), ()))
+       (ELet([("z", ENumber(1L, ()), ())],
+             (ELet([("x", EId("z", ()), ())],
+                   EId("x", ()),
+                   ())),
+            ()));
 
   (* TODO tanf where we operate on the vars in the body of a let expr *)
  ]
