@@ -398,7 +398,6 @@ let anf_suite =
                    ())),
             ()));
 
-  (* TODO tanf where we operate on the vars in the body of a let expr *)
   (* let z=1,x=z in let z=6 in z *)
   tanf "shadowing_mul_lets"
        (ELet([("z", ENumber(1L, ()), ()); ("x", EId("z", ()), ())],
@@ -429,12 +428,27 @@ let suite =
 
   teprog "binding_err1.boa" "Unbound symbol y at binding_err1.boa, 1:11-1:12";
   teprog "binding_err2.boa" "Unbound symbol z at binding_err2.boa, 1:6-1:7";
+  te "binding_err1" "let x=8 in y" "Unbound symbol y at binding_err1, 1:11-1:12";
+  te "binding_err2" "let x=z in let x=66 in x" "Unbound symbol z at binding_err2, 1:6-1:7";
+  te "binding_err3" "let x=(let y=8 in p) in let x=66 in x" "Unbound symbol p at binding_err3, 1:18-1:19";
+  te "binding_err4" "let x=(let y=r in p) in let x=66 in x" "Unbound symbol r at binding_err4, 1:13-1:14";
+  te "binding_err5" "let x=(let y=  r in p) in let x=66 in x" "Unbound symbol r at binding_err5, 1:15-1:16";
+  te "binding_err6" "let x=(if x: 0 else: 1) in x" "Unbound symbol x at binding_err6, 1:10-1:11";
       
-    (* Some useful if tests to start you off *)
+  t "binop_12" "8 + (2*2)" "12";
+  t "binop_20" "(8 + 2)*2" "20";
+  t "binop_20_bad_pemdas" "8 + 2*2" "20";
 
   t "if1" "if 5: 4 else: 2" "4";
   t "if2" "if 0: 4 else: 2" "2";
 
+  t "let_if_t" "let y=1 in if y: add1(6) else: 8+3" "7";
+  t "let_if_f" "let y=0 in if y: add1(6) else: 8+3" "11";
+  t "let_if_add" "let y=0 in if add1(y): sub1(6) else: 8+3" "5";
+
+  t "let_val_if" "let x=(if sub1(1): 0 else: 44) in x" "44";
+  t "let_val_binop_0" "let x=(2 + (9*3))*0 in x" "0";
+  t "let_val_binop_58" "let x=(2 + (9*3))*2 in x" "58";
   ]
 ;;
 
