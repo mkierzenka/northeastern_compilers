@@ -399,6 +399,19 @@ let anf_suite =
             ()));
 
   (* TODO tanf where we operate on the vars in the body of a let expr *)
+  (* let z=1,x=z in let z=6 in z *)
+  tanf "shadowing_mul_lets"
+       (ELet([("z", ENumber(1L, ()), ()); ("x", EId("z", ()), ())],
+             ELet(["z", ENumber(6L,()), ()], EId("z",()), ()),
+             ()))
+       (ELet([("z", ENumber(1L, ()), ())],
+             ELet([("x", EId("z", ()), ())],
+                 ELet([("z", ENumber(6L, ()), ())],
+                     EId("z", ()),
+                     ()),
+                 ()),
+             ()));
+
  ]
 
 
@@ -411,6 +424,11 @@ let suite =
 
 
   tprog "test1.boa" "3";
+  tprog "shadowing.boa" "66";
+  tprog "shadowing_mul_lets.boa" "6";
+
+  teprog "binding_err1.boa" "Unbound symbol y at binding_err1.boa, 1:11-1:12";
+  teprog "binding_err2.boa" "Unbound symbol z at binding_err2.boa, 1:6-1:7";
       
     (* Some useful if tests to start you off *)
 

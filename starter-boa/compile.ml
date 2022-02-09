@@ -62,7 +62,9 @@ let check_scope (e : (Lexing.position * Lexing.position) expr) : unit =
     | (sym, expr, pos) :: tail ->
         if (bindings_contain sym tail)
         then raise (BindingError(sprintf "Multiple bindings of %s, first at %s" sym (string_of_pos pos)))
-        else bindings_helper tail (sym :: env)
+        else
+          helper expr env;
+          bindings_helper tail (sym :: env)
   in helper e []
   
 type tag = int
