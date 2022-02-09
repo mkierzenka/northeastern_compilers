@@ -418,14 +418,56 @@ let suite =
 "suite">:::
  [
   ta "forty_one_run_anf" (tag forty_one_a) "41";
- 
   t "forty_one" forty_one "41";
 
+  (* Add1 / Sub1 *)
+  t "add1" "add1(4)" "5";
+  t "sub1" "sub1(4)" "3";
+  t "sub_add" "add1(sub1(44))" "44";
+  t "add_sub" "sub1(add1(40))" "40";
+  t "add_add" "add1(add1(111))" "113";
+  t "sub_sub" "sub1(sub1(1000))" "998";
 
-  tprog "test1.boa" "3";
+  (* Add1 / Sub1 Errors *)
+  te "add1_multi" "add1(2 4)" "Parse error";
+  te "sub1_multi" "sub1(2 4)" "Parse error";
+
+  (* Binary Operator *)
+  t "binop_12" "8 + (2*2)" "12";
+  t "binop_20" "(8 + 2)*2" "20";
+  t "binop_20_bad_pemdas" "8 + 2*2" "20";
+  t "binop" "add1(2) + sub1(3)" "5";
+  t "binop_lets" "(let x = 1 in x) + (let x = 2 in x)" "3";
+
+  (* Let bindings correct *)
+  t "let" "let x=10 in x" "10";
+  t "let_const" "let a=7 in 71" "71";
+  t "let_var" "let a=7 in add1(a)" "8";
+  t "let_multi_bindings_m" "let m=11,n=22,o=33,p=44,q=55,r=66,s=77 in m" "11";
+  t "let_multi_bindings_q" "let m=11,n=22,o=33,p=44,q=55,r=66,s=77 in q" "55";
+  t "let_multi_bindings_s" "let m=11,n=22,o=33,p=44,q=55,r=66,s=77 in s" "77";
+  t "let_complex_bind" "let a=4, b=add1(sub1(add1(2))) in b" "3";
+  t "let_nested_bind_multi" "let g=-99,h=g,i=h,final=add1(i) in final" "-98";
+  t "let_chain_body" "let a=1,b=2 in (let c=3 in (let d=4,e=5 in c))" "3";
+  t "let_val_if" "let x=(if sub1(1): 0 else: 44) in x" "44";
+  t "let_val_binop_0" "let x=(2 + (9*3))*0 in x" "0";
+  t "let_val_binop_58" "let x=(2 + (9*3))*2 in x" "58";
+  t "let_if_t" "let y=1 in if y: add1(6) else: 8+3" "7";
+  t "let_if_f" "let y=0 in if y: add1(6) else: 8+3" "11";
+  t "let_if_add" "let y=0 in if add1(y): sub1(6) else: 8+3" "5";
   tprog "shadowing.boa" "66";
   tprog "shadowing_mul_lets.boa" "6";
+  tprog "test1.boa" "3";
+  tprog "let_chain.boa" "2";
+  tprog "let_chain2.boa" "1000";
+  tprog "let_from_prof.boa" "48";
 
+  (* Let bindings errors *)
+  te "let_dup_binds" "let x=1,x=1 in 2" "Multiple bindings of x";
+  te "let_dup_binds2" "let x=1,x=3 in 2" "Multiple bindings of x";
+  te "let_dup_binds3" "let x=1,y=9,x=1 in 2" "Multiple bindings of x";
+  te "let_dup_binds4" "let x=1,y=9,z=33,x=3 in 2" "Multiple bindings of x";
+  te "binding_err0" "let in y" "Parse error at line 1, col 6: token `in`";
   teprog "binding_err1.boa" "Unbound symbol y at binding_err1.boa, 1:11-1:12";
   teprog "binding_err2.boa" "Unbound symbol z at binding_err2.boa, 1:6-1:7";
   te "binding_err1" "let x=8 in y" "Unbound symbol y at binding_err1, 1:11-1:12";
@@ -434,21 +476,29 @@ let suite =
   te "binding_err4" "let x=(let y=r in p) in let x=66 in x" "Unbound symbol r at binding_err4, 1:13-1:14";
   te "binding_err5" "let x=(let y=  r in p) in let x=66 in x" "Unbound symbol r at binding_err5, 1:15-1:16";
   te "binding_err6" "let x=(if x: 0 else: 1) in x" "Unbound symbol x at binding_err6, 1:10-1:11";
-      
-  t "binop_12" "8 + (2*2)" "12";
-  t "binop_20" "(8 + 2)*2" "20";
-  t "binop_20_bad_pemdas" "8 + 2*2" "20";
+  teprog "let_chain2_err.boa" "Unbound symbol innerinner";
 
+  te "let_rebind_add1" "let add1=4 in 5" "Parse error at line 1, col 8: token `add1`";
+  te "let_rebind_add1_used" "let add1=4 in add1" "Parse error at line 1, col 8: token `add1`";
+  te "let_rebind_add1_used2" "let add1=4 in add1(add1)" "Parse error at line 1, col 8: token `add1`";
+  te "let_rebind_sub1" "let  sub1=4 in 5" "Parse error at line 1, col 9: token `sub1`";
+  te "let_rebind_let" "let let=4 in let" "Parse error at line 1, col 7: token `let`";
+
+  (* If *)
   t "if1" "if 5: 4 else: 2" "4";
   t "if2" "if 0: 4 else: 2" "2";
+  t "if3" "if sub1(1): 4 else: 2" "2";
+  t "if4" "if 0: 2 else: add1(add1(1 + 2))" "5";
+  t "if5" "if 1: 2 else: add1(add1(1 + 2))" "2";
+  t "if6" "if (if 0: 0 else: 1): 2 else: 9" "2";
+  t "if7" "if (if 0: 0 else: 1): 2 else: 9" "2";
+  t "if8" "if (let x=1 in x): (let x = 2 in x) else: (let x = 3 in x)" "2";
+  t "if9" "if (let x=0 in x): (let x = 2 in x) else: (let x = 3 in x)" "3";
 
-  t "let_if_t" "let y=1 in if y: add1(6) else: 8+3" "7";
-  t "let_if_f" "let y=0 in if y: add1(6) else: 8+3" "11";
-  t "let_if_add" "let y=0 in if add1(y): sub1(6) else: 8+3" "5";
-
-  t "let_val_if" "let x=(if sub1(1): 0 else: 44) in x" "44";
-  t "let_val_binop_0" "let x=(2 + (9*3))*0 in x" "0";
-  t "let_val_binop_58" "let x=(2 + (9*3))*2 in x" "58";
+  (* If errors *)
+  te "if_err1" "if (let x=1 in x): x else: 9" "Unbound symbol x";
+  te "if_err1" "if (let x=0 in x): x else: 9" "Unbound symbol x";
+  te "if_err1" "if (let x=0 in x): 9 else: x" "Unbound symbol x";
   ]
 ;;
 

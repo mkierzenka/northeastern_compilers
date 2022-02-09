@@ -1,0 +1,5 @@
+let x=(let inner=8,
+           inner2=(let innerinner=1000 in sub1(innerinner))
+        in add1(inner2)),
+    outer=100
+  in innerinner
