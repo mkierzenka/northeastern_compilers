@@ -156,28 +156,27 @@ let tag_suite =
 "tag_suite">:::
  [
    ttag "tag1" "8" "ENumber<0>(8)";
-   ttag "tag1" "(8)" "ENumber<0>(8)";
-   ttag "tag2" "add1(8)" "EPrim1<1>(Add1, ENumber<0>(8))";
-   ttag "tag2" "sub1(8)" "EPrim1<1>(Sub1, ENumber<0>(8))";
-   ttag "tag2" "4 + 5" "EPrim2<2>(Plus, ENumber<0>(4), ENumber<1>(5))";
-   ttag "tag2" "4 - 5" "EPrim2<2>(Minus, ENumber<0>(4), ENumber<1>(5))";
-   ttag "tag2" "4 * 5" "EPrim2<2>(Times, ENumber<0>(4), ENumber<1>(5))";
-   ttag "tag2" "4 + (5 * 7)" "EPrim2<4>(Plus, ENumber<0>(4), EPrim2<3>(Times, ENumber<1>(5), ENumber<2>(7)))";
+   ttag "tag2" "(8)" "ENumber<0>(8)";
+   ttag "tag3" "add1(8)" "EPrim1<1>(Add1, ENumber<0>(8))";
+   ttag "tag4" "sub1(8)" "EPrim1<1>(Sub1, ENumber<0>(8))";
+   ttag "tag5" "4 + 5" "EPrim2<2>(Plus, ENumber<0>(4), ENumber<1>(5))";
+   ttag "tag6" "4 - 5" "EPrim2<2>(Minus, ENumber<0>(4), ENumber<1>(5))";
+   ttag "tag7" "4 * 5" "EPrim2<2>(Times, ENumber<0>(4), ENumber<1>(5))";
+   ttag "tag8" "4 + (5 * 7)" "EPrim2<4>(Plus, ENumber<0>(4), EPrim2<3>(Times, ENumber<1>(5), ENumber<2>(7)))";
 
    (* if *)
-   ttag "tag2" "if 6: 7 else: 8" "EIf<3>(ENumber<0>(6), ENumber<1>(7), ENumber<2>(8))";
-   ttag "tag2" "if 6: 4 + 5 else: 8 + 9" "EIf<7>(ENumber<0>(6), EPrim2<3>(Plus, ENumber<1>(4), ENumber<2>(5)), EPrim2<6>(Plus, ENumber<4>(8), ENumber<5>(9)))";
+   ttag "tag_if1" "if 6: 7 else: 8" "EIf<3>(ENumber<0>(6), ENumber<1>(7), ENumber<2>(8))";
+   ttag "tag_if2" "if 6: 4 + 5 else: 8 + 9" "EIf<7>(ENumber<0>(6), EPrim2<3>(Plus, ENumber<1>(4), ENumber<2>(5)), EPrim2<6>(Plus, ENumber<4>(8), ENumber<5>(9)))";
 
    (* let *)
-   ttag "tag3" "let x=9 in x" "ELet<3>(((\"x\"<1>, ENumber<0>(9))), EId<2>(\"x\"))";
-   ttag "tag4" "let x=9,y=55 in x" "ELet<5>(((\"x\"<1>, ENumber<0>(9)), ( \"y\"<3>, ENumber<2>(55))), EId<4>(\"x\"))";
-   ttag "tag5" "let x=9,y=55 in y" "ELet<5>(((\"x\"<1>, ENumber<0>(9)), ( \"y\"<3>, ENumber<2>(55))), EId<4>(\"y\"))";
-        (* shadowing *)
-   ttag "tag6" "let x=9,y=55 in (let x=2 in x)" "ELet<8>(((\"x\"<1>, ENumber<0>(9)), ( \"y\"<3>, ENumber<2>(55))), ELet<7>(((\"x\"<5>, ENumber<4>(2))), EId<6>(\"x\")))";
-
-   ttag "tag7"
+   ttag "tag_let1" "let x=9 in x" "ELet<3>(((\"x\"<1>, ENumber<0>(9))), EId<2>(\"x\"))";
+   ttag "tag_let2" "let x=9,y=55 in x" "ELet<5>(((\"x\"<1>, ENumber<0>(9)), ( \"y\"<3>, ENumber<2>(55))), EId<4>(\"x\"))";
+   ttag "tag_let3" "let x=9,y=55 in y" "ELet<5>(((\"x\"<1>, ENumber<0>(9)), ( \"y\"<3>, ENumber<2>(55))), EId<4>(\"y\"))";
+   ttag "tag_let4"
         "let z=(let x=(3 - 9) in x) in z"
         "ELet<8>(((\"z\"<6>, ELet<5>(((\"x\"<3>, EPrim2<2>(Minus, ENumber<0>(3), ENumber<1>(9)))), EId<4>(\"x\")))), EId<7>(\"z\"))";
+        (* shadowing *)
+   ttag "tag_let5" "let x=9,y=55 in (let x=2 in x)" "ELet<8>(((\"x\"<1>, ENumber<0>(9)), ( \"y\"<3>, ENumber<2>(55))), ELet<7>(((\"x\"<5>, ENumber<4>(2))), EId<6>(\"x\")))";
  ]
 ;;
 
@@ -410,7 +409,6 @@ let anf_suite =
                      ()),
                  ()),
              ()));
-
  ]
 
 
@@ -419,6 +417,7 @@ let suite =
  [
   ta "forty_one_run_anf" (tag forty_one_a) "41";
   t "forty_one" forty_one "41";
+  t "neg_forty_one" "-41" "-41";
 
   (* Add1 / Sub1 *)
   t "add1" "add1(4)" "5";
@@ -433,11 +432,19 @@ let suite =
   te "sub1_multi" "sub1(2 4)" "Parse error";
 
   (* Binary Operator *)
+  t "binop_1" "4 - 3" "1";
+  t "binop_7" "4 - -3" "7";
+  t "binop_minus1" "4 - 3 - 2" "-1";
   t "binop_12" "8 + (2*2)" "12";
   t "binop_20" "(8 + 2)*2" "20";
-  t "binop_20_bad_pemdas" "8 + 2*2" "20";
   t "binop" "add1(2) + sub1(3)" "5";
   t "binop_lets" "(let x = 1 in x) + (let x = 2 in x)" "3";
+    (* These "bad pemdas" cases are on purpose, as specified in Assignment 3 Section 1.3 *)
+  t "binop_20_bad_pemdas" "8 + 2*2" "20";
+  t "binop_bad_pemdas2" "2 * 3 + 1 * 7" "49";
+  t "binop_bad_pemdas3" "2 * (3 + 1) * 7" "56";
+  t "binop_bad_pemdas4" "2 * add1(3) * 7" "56";
+  te "binop_minus_neg" "1-2" "Parse error at line 1, col 3: token `-2`";
 
   (* Let bindings correct *)
   t "let" "let x=10 in x" "10";
@@ -455,6 +462,8 @@ let suite =
   t "let_if_t" "let y=1 in if y: add1(6) else: 8+3" "7";
   t "let_if_f" "let y=0 in if y: add1(6) else: 8+3" "11";
   t "let_if_add" "let y=0 in if add1(y): sub1(6) else: 8+3" "5";
+  t "let_if_add2" "let y=10 in let y=0 in if 1: sub1(y) else: 8+3" "-1";
+  t "let_if_add3" "let y=10 in let y=0 in if 0: sub1(y) else: add1(y)" "1";
   tprog "shadowing.boa" "66";
   tprog "shadowing_mul_lets.boa" "6";
   tprog "test1.boa" "3";
@@ -491,14 +500,18 @@ let suite =
   t "if4" "if 0: 2 else: add1(add1(1 + 2))" "5";
   t "if5" "if 1: 2 else: add1(add1(1 + 2))" "2";
   t "if6" "if (if 0: 0 else: 1): 2 else: 9" "2";
-  t "if7" "if (if 0: 0 else: 1): 2 else: 9" "2";
+  t "if7" "if (if 1: 0 else: 1): 2 else: 9" "9";
   t "if8" "if (let x=1 in x): (let x = 2 in x) else: (let x = 3 in x)" "2";
   t "if9" "if (let x=0 in x): (let x = 2 in x) else: (let x = 3 in x)" "3";
 
   (* If errors *)
   te "if_err1" "if (let x=1 in x): x else: 9" "Unbound symbol x";
-  te "if_err1" "if (let x=0 in x): x else: 9" "Unbound symbol x";
-  te "if_err1" "if (let x=0 in x): 9 else: x" "Unbound symbol x";
+  te "if_err2" "if (let x=0 in x): x else: 9" "Unbound symbol x";
+  te "if_err3" "if (let x=0 in x): 9 else: x" "Unbound symbol x";
+  te "if_err4" "if 1: (let x=0 in x) else: x" "Unbound symbol x";
+  te "if_err5" "if 1: x else: (let x=0 in x)" "Unbound symbol x";
+  te "if_err6" "if 0: (let x=0 in x) else: x" "Unbound symbol x";
+  te "if_err7" "if x: (let x=1 in x) else: (let x=0 in x)" "Unbound symbol x";
   ]
 ;;
 
