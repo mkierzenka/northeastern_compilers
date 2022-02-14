@@ -339,12 +339,17 @@ let compile_prog (anfed : tag expr) : string =
 extern error
 extern print
 global our_code_starts_here" in
+  let num_vars = (count_vars anfed) in
   let stack_setup = [
-      (* FILL: insert instructions for setting up stack here *)
+      IPush(Reg(RBP));
+      IMov(Reg(RBP), Reg(RSP));
+      ISub(Reg(RSP), Const(word_size * num_vars))  (* allocates stack space for all local vars *)
     ] in
   let postlude = [
+      IAdd(Reg(RSP), Const(word_size * num_vars));  (* Undoes the allocation *)
+      IPop(Reg(RBP));
       IRet
-      (* FILL: insert instructions for cleaning up stack, and maybe
+      (* todo FILL: insert instructions for cleaning up stack, and maybe
        some labels for jumping to errors, here *) ] in
   let body = (compile_expr anfed 1 []) in
   let as_assembly_string = (to_asm (stack_setup @ body @ postlude)) in
