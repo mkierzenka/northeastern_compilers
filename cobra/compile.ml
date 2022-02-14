@@ -66,8 +66,37 @@ let check_scope (e : sourcespan expr) : sourcespan expr =
        help body env2
   in help e []; e
 
+let rec lookup_rename (x : string) (env : (string * string) list) : string =
+  match env with
+  | [] -> failwith (sprintf "Failed to lookup %s" x) (* should never happen, make sure to check_scope and tag first *)
+  | (k, v) :: tail ->
+      if k = x
+      then v
+      else lookup_rename x tail
+;;
+
 let rename (e : tag expr) : tag expr =
-  raise (NotYetImplemented "Copy this from your Boa implementation")
+  let rec help (env : (string * string) list) (e : tag expr) : tag expr =
+    match e with
+    | EId(x, tag) -> EId((lookup_rename x env), tag)
+    | ELet(binds, body, tag) ->
+        let (newbinds, newenv) = bind_help env binds in
+        let newbody = help newenv body in
+        ELet(newbinds, newbody, tag)
+    | ENumber(n, tag) -> ENumber(n, tag)
+    | EBool(b, tag) -> EBool(b, tag)
+    | EPrim1(op, e, t) -> EPrim1(op, (help env e), t)
+    | EPrim2(op, e1, e2, t) -> EPrim2(op, (help env e1), (help env e2), t)
+    | EIf(cond, thn, els, t) -> EIf((help env cond), (help env thn), (help env els), t)
+  and bind_help (env : (string * string) list) (binds : tag bind list) : tag bind list * ((string * string) list) =
+    match binds with
+    | [] -> (binds, env)
+    | (sym, expr, t) :: tail ->
+        let newexpr = help env expr in
+        let newsym = sprintf "%s#%d" sym t in
+        let (newbinds, newenv) = bind_help ((sym, newsym) :: env) tail in
+        ((newsym, newexpr, t) :: newbinds, newenv)
+  in help [] e
 ;;
 
 let tag (e : 'a expr) : tag expr =
