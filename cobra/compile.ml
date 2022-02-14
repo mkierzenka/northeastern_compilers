@@ -312,7 +312,23 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
      prelude
      @ [ IMov(RegOffset(~-si, RBP), Reg(RAX)) ]
      @ body
-  | EPrim1 _ -> raise (NotYetImplemented "Fill in here")
+  | EPrim1(op, e, _) ->
+     let e_reg = compile_imm e env in
+     begin match op with
+       | Add1 -> [
+           IMov(Reg(RAX), e_reg);
+           IAdd(Reg(RAX), Const(1L))
+         ]
+       | Sub1 -> [
+           IMov(Reg(RAX), e_reg);
+           IAdd(Reg(RAX), Const(Int64.minus_one))
+         ]
+        | Print -> failwith ("todo- print not yet compilable")
+        | IsBool ->
+        | IsNum ->
+        | Not
+        | PrintStack
+     end
   | EPrim2 _ -> raise (NotYetImplemented "Fill in here")
   | EIf _ -> raise (NotYetImplemented "Fill in here")
   | ENumber(n, _) -> [ IMov(Reg(RAX), compile_imm e env) ]
