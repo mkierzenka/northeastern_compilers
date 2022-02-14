@@ -12,11 +12,11 @@ const uint64_t BOOL_TAG_MASK = 0x0000000000000007L;
 const uint64_t BOOL_TAG = 0x0000000000000007L;
 const uint64_t NUM_TAG_MASK = 0x0000000000000001L;
 const uint64_t NUM_TAG = 0x0000000000000000L;
+const uint64_t FIRST_BIT_MASK = 0x8000000000000000L;
 
 
 void printAsBoolean(SNAKEVAL val) {
-  const uint64_t BOOL_MASK = 0x8000000000000000L;
-  if (val & BOOL_MASK) {
+  if (val & FIRST_BIT_MASK) {
     printf("Boolean value: true\n");
   } else {
     printf("Boolean value: false\n");
@@ -24,7 +24,13 @@ void printAsBoolean(SNAKEVAL val) {
 }
 
 void printAsNumber(SNAKEVAL val) {
-  printf("Numerical value: %ul\n", (val >> 1);
+  int64_t signed_num = 0;
+  if (val & FIRST_BIT_MASK) {
+    signed_num = (val >> 1) | FIRST_BIT_MASK;
+  } else {
+    signed_num = (val >> 1);
+  }
+  printf("Numerical value: %ld\n", signed_num);
   //todo, does this print negative SNAKEVAL numbers correctly?
 }
 
