@@ -304,6 +304,25 @@ let rec replicate (x : 'a) (i : int) : 'a list =
   if i = 0 then []
   else x :: (replicate x (i - 1))
 
+let check_rax_for_num =
+  let err_lbl = "TODO" in
+  [
+   (* this "test" trick depends on num_tag being 0 *)
+   ITest(Reg(RAX), HexConst(num_tag_mask));
+   IJnz(err_lbl);
+  ]
+
+(* TODO should we save RAX on the stack?? *)
+let check_rax_for_bool =
+  let err_lbl = "TODO" in
+  [
+   IPush(Reg(RAX));
+   IAnd(Reg(RAX), HexConst(bool_tag_mask));
+   ICmp(Reg(RAX), HexConst(bool_tag));
+   IPop(Reg(RAX));
+   IJnz(err_lbl);
+  ]
+
 let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : instruction list =
   match e with
   | ELet([id, e, _], body, _) ->
@@ -312,22 +331,65 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
      prelude
      @ [ IMov(RegOffset(~-si, RBP), Reg(RAX)) ]
      @ body
-  | EPrim1(op, e, _) ->
+  | EPrim1(op, e, tag) ->
      let e_reg = compile_imm e env in
      begin match op with
-       | Add1 -> [
-           IMov(Reg(RAX), e_reg);
-           IAdd(Reg(RAX), Const(1L))
-         ]
-       | Sub1 -> [
-           IMov(Reg(RAX), e_reg);
-           IAdd(Reg(RAX), Const(Int64.minus_one))
-         ]
+       | Add1 ->
+           [IMov(Reg(RAX), e_reg)]
+           @ check_rax_for_num
+           @ [IAdd(Reg(RAX), Const(1L))]
+       | Sub1 ->
+           [IMov(Reg(RAX), e_reg)]
+           @ check_rax_for_num
+           @ [IAdd(Reg(RAX), Const(Int64.minus_one))]
         | Print -> failwith ("todo- print not yet compilable")
         | IsBool ->
+          let true_lbl = sprintf "is_bool_true_%d" tag in
+          let false_lbl = sprintf "is_bool_false_%d" tag in
+          let done_lbl = sprintf "is_bool_done_%d" tag in
+          [
+           IMov(Reg(RAX), e_reg);
+           (* we don't need to save RAX on the stack because we overwrite the
+            * value with true/false later *)
+           IAnd(Reg(RAX), HexConst(bool_tag_mask));
+           ICmp(Reg(RAX), HexConst(bool_tag));
+           IJz(true_lbl);
+           (* case not bool *)
+           ILabel(false_lbl);
+           IMov(Reg(RAX), const_false);
+           IJmp(done_lbl);
+           (* case is a bool *)
+           ILabel(true_lbl);
+           IMov(Reg(RAX), const_true);
+           (* done *)
+           ILabel(done_lbl);
+          ]
         | IsNum ->
-        | Not
-        | PrintStack
+          let true_lbl = sprintf "is_num_true_%d" tag in
+          let false_lbl = sprintf "is_num_false_%d" tag in
+          let done_lbl = sprintf "is_num_done_%d" tag in
+          [
+           IMov(Reg(RAX), e_reg);
+           (* this "test" trick depends on num_tag being 0 *)
+           ITest(Reg(RAX), HexConst(num_tag_mask));
+           IJz(true_lbl);
+           (* case not num *)
+           ILabel(false_lbl);
+           IMov(Reg(RAX), const_false);
+           IJmp(done_lbl);
+           (* case is a num *)
+           ILabel(true_lbl);
+           IMov(Reg(RAX), const_true);
+           (* done *)
+           ILabel(done_lbl);
+          ]
+        | Not ->
+           [IMov(Reg(RAX), e_reg)]
+           @ check_rax_for_bool
+           @ [IXor(Reg(RAX), bool_mask)]
+        | PrintStack ->
+            (* TODO *)
+            raise (NotYetImplemented "PrintStack not yet implemented")
      end
   | EPrim2 _ -> raise (NotYetImplemented "Fill in here")
   | EIf _ -> raise (NotYetImplemented "Fill in here")
@@ -359,10 +421,10 @@ global our_code_starts_here" in
   let stack_setup = [
       IPush(Reg(RBP));
       IMov(Reg(RBP), Reg(RSP));
-      ISub(Reg(RSP), Const(word_size * num_vars))  (* allocates stack space for all local vars *)
+      ISub(Reg(RSP), Const(Int64.of_int (word_size * num_vars)))  (* allocates stack space for all local vars *)
     ] in
   let postlude = [
-      IAdd(Reg(RSP), Const(word_size * num_vars));  (* Undoes the allocation *)
+      IAdd(Reg(RSP), Const(Int64.of_int (word_size * num_vars)));  (* Undoes the allocation *)
       IPop(Reg(RBP));
       IRet
       (* todo FILL: insert instructions for cleaning up stack, and maybe
