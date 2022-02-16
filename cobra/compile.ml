@@ -404,9 +404,9 @@ and compile_imm (e : tag expr) (env : (string * int) list) : arg =
        (* TODO: raise a better error of your choosing here *)
        failwith ("Integer overflow: " ^ (Int64.to_string n))
      else
-       raise (NotYetImplemented "Fill in here")
-  | EBool(true, _) -> raise (NotYetImplemented "Fill in here")
-  | EBool(false, _) -> raise (NotYetImplemented "Fill in here")
+       Const(Int64.mul n 2L)
+  | EBool(true, _) -> const_true
+  | EBool(false, _) -> const_false
   | EId(x, _) -> RegOffset(~-(find env x), RBP)
   | _ -> raise (InternalCompilerError "Impossible: not an immediate")
 ;;
@@ -419,6 +419,7 @@ extern print
 global our_code_starts_here" in
   let num_vars = (count_vars anfed) in
   let stack_setup = [
+      ILabel("our_code_starts_here");
       IPush(Reg(RBP));
       IMov(Reg(RBP), Reg(RSP));
       ISub(Reg(RSP), Const(Int64.of_int (word_size * num_vars)))  (* allocates stack space for all local vars *)
