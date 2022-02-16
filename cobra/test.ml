@@ -41,12 +41,14 @@ let suite =
   t "neg_fory" neg_forty "-40";
   t "fals" fals "false";
   t "tru" tru "true";
- 
+  teprog "do_err/add1Bool.cobra" "arithmetic expected a number";
+
  ]
 ;;
 
 
 (* input_file_test_suite () will run all the tests in the subdirectories of input/ *)
 let () =
-  run_test_tt_main ("all_tests">:::[suite; input_file_test_suite ()])
+  (* run_test_tt_main ("all_tests">:::[suite; input_file_test_suite ()])  TODO add back the input file test suite*)
+  run_test_tt_main ("all_tests">:::[suite])
 ;;
