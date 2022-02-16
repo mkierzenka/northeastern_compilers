@@ -338,11 +338,11 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
        | Add1 ->
            [IMov(Reg(RAX), e_reg)]
            @ (check_rax_for_num "err_ARITH_NOT_NUM")
-           @ [IAdd(Reg(RAX), Const(1L))]
+           @ [IAdd(Reg(RAX), Const(2L))]
        | Sub1 ->
            [IMov(Reg(RAX), e_reg)]
            @ (check_rax_for_num "err_ARITH_NOT_NUM")
-           @ [IAdd(Reg(RAX), Const(Int64.minus_one))]
+           @ [IAdd(Reg(RAX), Const(-2L))]
         | Print -> failwith ("todo- print not yet compilable")
         | IsBool ->
           let true_lbl = sprintf "is_bool_true_%d" tag in
