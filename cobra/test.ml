@@ -30,6 +30,7 @@ let tprog (filename : string) (expected : string) = filename>::test_run_input fi
 let teprog (filename : string) (expected : string) = filename>::test_err_input filename expected;;
 
 let forty = "let x = 40 in x"
+let neg_forty = "let x = -40 in x"
 let fals = "let x = false in x"
 let tru = "let x = true in x"
 
@@ -37,9 +38,9 @@ let suite =
 "unit_tests">:::
  [
   t "forty" forty "40";
+  t "neg_fory" neg_forty "-40";
   t "fals" fals "false";
   t "tru" tru "true";
- 
  
  ]
 ;;
