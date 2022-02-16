@@ -42,7 +42,7 @@ let suite =
   t "fals" fals "false";
   t "tru" tru "true";
   teprog "do_err/add1Bool.cobra" "arithmetic expected a number";
-
+  teprog "do_err/notNum.cobra" "logic expected a boolean";
  ]
 ;;
 

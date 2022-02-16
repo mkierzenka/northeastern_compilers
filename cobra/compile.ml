@@ -425,31 +425,37 @@ global our_code_starts_here" in
       ISub(Reg(RSP), Const(Int64.of_int (word_size * num_vars)))  (* allocates stack space for all local vars *)
     ] in
   let postlude = [
-      IJmp("program_done");
-      (* Error Labels *)
-      ILabel("err_COMP_NOT_NUM");
-
-      IJmp("program_done");
-      ILabel("err_ARITH_NOT_NUM");
-      IMov(Reg(RDI), Const(err_ARITH_NOT_NUM));
-      ICall("error");
-      IJmp("program_done");
-      ILabel("err_LOGIC_NOT_BOOL");
-
-      IJmp("program_done");
-
-      ILabel("err_IF_NOT_BOOL");
-      IJmp("program_done");
-
-      ILabel("err_OVERFLOW");
-
       ILabel("program_done");
       IAdd(Reg(RSP), Const(Int64.of_int (word_size * num_vars)));  (* Undoes the allocation *)
       IPop(Reg(RBP));
       IRet;
 
-      (* todo FILL: insert instructions for cleaning up stack, and maybe
-       some labels for jumping to errors, here *) ] in
+      (* Error Labels *)
+      ILabel("err_COMP_NOT_NUM");
+      IMov(Reg(RDI), Const(err_COMP_NOT_NUM));
+      ICall("error");
+      IJmp("program_done");
+
+      ILabel("err_ARITH_NOT_NUM");
+      IMov(Reg(RDI), Const(err_ARITH_NOT_NUM));
+      ICall("error");
+      IJmp("program_done");
+
+      ILabel("err_LOGIC_NOT_BOOL");
+      IMov(Reg(RDI), Const(err_LOGIC_NOT_BOOL));
+      ICall("error");
+      IJmp("program_done");
+
+      ILabel("err_IF_NOT_BOOL");
+      IMov(Reg(RDI), Const(err_IF_NOT_BOOL));
+      ICall("error");
+      IJmp("program_done");
+
+      ILabel("err_OVERFLOW");
+      IMov(Reg(RDI), Const(err_OVERFLOW));
+      ICall("error");
+      IJmp("program_done");
+    ] in
   let body = (compile_expr anfed 1 []) in
   let as_assembly_string = (to_asm (stack_setup @ body @ postlude)) in
   sprintf "%s%s\n" prelude as_assembly_string
