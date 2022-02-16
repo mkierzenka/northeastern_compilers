@@ -323,6 +323,8 @@ let check_rax_for_bool (err_lbl : string) : instruction list =
    IJnz(err_lbl);
   ]
 
+let check_for_overflow = [IJo("err_OVERFLOW")]
+
 
 let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : instruction list =
   match e with
@@ -339,10 +341,12 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
            [IMov(Reg(RAX), e_reg)]
            @ (check_rax_for_num "err_ARITH_NOT_NUM")
            @ [IAdd(Reg(RAX), Const(2L))]
+           @ check_for_overflow
        | Sub1 ->
            [IMov(Reg(RAX), e_reg)]
            @ (check_rax_for_num "err_ARITH_NOT_NUM")
            @ [IAdd(Reg(RAX), Const(-2L))]
+           @ check_for_overflow
         | Print -> failwith ("todo- print not yet compilable")
         | IsBool ->
           let true_lbl = sprintf "is_bool_true_%d" tag in
