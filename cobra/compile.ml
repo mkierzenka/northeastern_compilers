@@ -304,8 +304,9 @@ let rec replicate (x : 'a) (i : int) : 'a list =
   if i = 0 then []
   else x :: (replicate x (i - 1))
 
-let check_rax_for_num =
-  let err_lbl = "err_ARITH_NOT_NUM" in
+
+(* Compiled Type Checking *)
+let check_rax_for_num (err_lbl : string) : instruction list =
   [
    (* this "test" trick depends on num_tag being 0 *)
    ITest(Reg(RAX), HexConst(num_tag_mask));
@@ -313,8 +314,7 @@ let check_rax_for_num =
   ]
 
 (* TODO should we save RAX on the stack?? *)
-let check_rax_for_bool =
-  let err_lbl = "err_LOGIC_NOT_BOOL" in
+let check_rax_for_bool (err_lbl : string) : instruction list =
   [
    IPush(Reg(RAX));
    IAnd(Reg(RAX), HexConst(bool_tag_mask));
@@ -322,6 +322,7 @@ let check_rax_for_bool =
    IPop(Reg(RAX));
    IJnz(err_lbl);
   ]
+
 
 let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : instruction list =
   match e with
@@ -336,11 +337,11 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
      begin match op with
        | Add1 ->
            [IMov(Reg(RAX), e_reg)]
-           @ check_rax_for_num
+           @ (check_rax_for_num "err_ARITH_NOT_NUM")
            @ [IAdd(Reg(RAX), Const(1L))]
        | Sub1 ->
            [IMov(Reg(RAX), e_reg)]
-           @ check_rax_for_num
+           @ (check_rax_for_num "err_ARITH_NOT_NUM")
            @ [IAdd(Reg(RAX), Const(Int64.minus_one))]
         | Print -> failwith ("todo- print not yet compilable")
         | IsBool ->
@@ -385,7 +386,7 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
           ]
         | Not ->
            [IMov(Reg(RAX), e_reg)]
-           @ check_rax_for_bool
+           @ (check_rax_for_bool "err_LOGIC_NOT_BOOL")
            @ [IXor(Reg(RAX), bool_mask)]
         | PrintStack ->
             (* TODO *)
