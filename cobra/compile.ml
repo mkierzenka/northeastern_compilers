@@ -606,6 +606,7 @@ let compile_prog (anfed : tag expr) : string =
     "section .text
 extern error
 extern print
+extern error
 global our_code_starts_here" in
   let num_vars = (count_vars anfed) in
   let stack_setup = [

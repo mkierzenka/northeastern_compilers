@@ -130,6 +130,17 @@ let suite =
   t "less_eq_4" "33 <= 32" "false";
   t "less_eq_5" "88 <= 88" "true";
 
+  t "and_short_circuit_1" "false && 8" "false";
+  te "and_short_circuit_2" "true && 8" "logic expected a boolean";
+  t "or_short_circuit_1" "true || 8" "true";
+  te "or_short_circuit_2" "false || 8" "logic expected a boolean";
+
+  t "side_effect_1" "false && print(9)" "false";
+  t "side_effect_2" "false && print(true)" "false";
+  t "side_effect_3" "true && print(true)" "true\ntrue";
+  t "side_effect_4" "true || print(true)" "true";
+  t "side_effect_5" "print(false) || print(true) && print(false)" "false\ntrue\nfalse\nfalse";
+
     (* TODO use printf to test 'if' against eager eval *)
  ]
 ;;
