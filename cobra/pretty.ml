@@ -76,6 +76,12 @@ let rec string_of_expr_with (print_a : 'a -> string) (e : 'a expr) : string =
              (string_of_expr thn)
              (string_of_expr els)
              (print_a a)
+  | EScIf(cond, thn, els, a) ->
+     sprintf "(scif %s: %s else: %s)%s"
+             (string_of_expr cond)
+             (string_of_expr thn)
+             (string_of_expr els)
+             (print_a a)
 let string_of_expr (e : 'a expr) : string =
   string_of_expr_with (fun _ -> "") e
 
@@ -140,6 +146,10 @@ let format_expr (e : 'a expr) (print_a : 'a -> string) : string =
        close_paren fmt
     | EIf(cond, thn, els, a) ->
        open_label fmt "EIf" a;
+       help cond fmt; print_comma_sep fmt; help thn fmt; print_comma_sep fmt; help els fmt;
+       close_paren fmt
+    | EScIf(cond, thn, els, a) ->
+       open_label fmt "EScIf" a;
        help cond fmt; print_comma_sep fmt; help thn fmt; print_comma_sep fmt; help els fmt;
        close_paren fmt
     | ELet(binds, body, a) ->
