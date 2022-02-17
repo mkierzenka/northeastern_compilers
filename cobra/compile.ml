@@ -346,7 +346,7 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
        | Sub1 ->
            [IMov(Reg(RAX), e_reg)]
            @ (check_rax_for_num "err_ARITH_NOT_NUM")
-           @ [IAdd(Reg(RAX), Const(-2L))]
+           @ [ISub(Reg(RAX), Const(2L))]
            @ check_for_overflow
         | Print -> [
             IMov(Reg(RDI), e_reg);
@@ -400,7 +400,67 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
             (* TODO *)
             raise (NotYetImplemented "PrintStack not yet implemented")
      end
-  | EPrim2 _ -> raise (NotYetImplemented "Fill in here")
+  | EPrim2(op, lhs, rhs, tag) ->
+     let lhs_reg = compile_imm lhs env in
+     let rhs_reg = compile_imm rhs env in
+     begin match op with
+      | Plus ->
+         (* check rhs for numerical val *)
+         [IMov(Reg(RAX), rhs_reg)]
+         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         (* check lhs for numerical val *)
+         @ [IMov(Reg(RAX), lhs_reg)]
+         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         @ [IAdd(Reg(RAX), rhs_reg)]
+         @ check_for_overflow
+      | Minus ->
+         (* check rhs for numerical val *)
+         [IMov(Reg(RAX), rhs_reg)]
+         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         (* check lhs for numerical val *)
+         @ [IMov(Reg(RAX), lhs_reg)]
+         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         @ [ISub(Reg(RAX), rhs_reg)]
+         @ check_for_overflow
+      | Times ->
+         (* check rhs for numerical val *)
+         [IMov(Reg(RAX), rhs_reg)]
+         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         (* check lhs for numerical val *)
+         @ [IMov(Reg(RAX), lhs_reg)]
+         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         @ [IMul(Reg(RAX), rhs_reg)]
+         @ check_for_overflow
+      | And ->
+         let lbl_lhs = sprintf "and_lhs_%d" tag in
+         let lbl_rhs = sprintf "and_rhs_%d" tag in
+         let lbl_done = sprintf "and_done_%d" tag in
+
+         (* LHS *)
+         [ILabel(lbl_lhs)]
+         @ [IMov(Reg(RAX), lhs_reg)]
+         @ (check_rax_for_bool "err_LOGIC_NOT_BOOL")
+         (* test for short circuit: if RAX is false then we're done *)
+         (* need to use temp register R8 because Test cannot accept a 64 bit immediate *)
+         @ [IMov(Reg(R8), bool_mask)]
+         @ [ITest(Reg(RAX), Reg(R8))]
+         @ [IJz(lbl_done)]
+
+         (* RHS *)
+         (* don't need to perform the AND because we know LHS is true *)
+         @ [ILabel(lbl_rhs)]
+         @ [IMov(Reg(RAX), rhs_reg)]
+         @ (check_rax_for_bool "err_LOGIC_NOT_BOOL")
+
+         (* done *)
+         @ [ILabel(lbl_done)]
+      | Or -> raise (NotYetImplemented "Fill in here")
+      | Greater -> raise (NotYetImplemented "Fill in here")
+      | GreaterEq -> raise (NotYetImplemented "Fill in here")
+      | Less -> raise (NotYetImplemented "Fill in here")
+      | LessEq -> raise (NotYetImplemented "Fill in here")
+      | Eq -> raise (NotYetImplemented "Fill in here")
+     end
   | EIf _ -> raise (NotYetImplemented "Fill in here")
   | ENumber(n, _) -> [ IMov(Reg(RAX), compile_imm e env) ]
   | EBool(n, _) -> [ IMov(Reg(RAX), compile_imm e env) ]
