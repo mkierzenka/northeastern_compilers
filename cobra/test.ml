@@ -74,6 +74,17 @@ let suite =
     (sprintf "let x=add1(%s) in 8" str_max_snake_num)
     "overflow";
 
+  t "print_5" "print(5)" "5\n5";
+  t "print_-5" "print(-5)" "-5\n-5";
+  t "print_true" "print(true)" "true\ntrue";
+  t "print_false" "print(false)" "false\nfalse";
+  (*
+  t "print_let_val" "let x=(print(6)) in 9" "6\n9";
+  t "nested_print_let_val"
+      "let x = 1 in (let y = print(x + 1) in print(y + 2))"
+      "2\n4\n4";
+      *)
+
     (* TODO use printf to test 'if' against eager eval *)
  ]
 ;;

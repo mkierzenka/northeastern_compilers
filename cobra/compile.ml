@@ -348,7 +348,10 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
            @ (check_rax_for_num "err_ARITH_NOT_NUM")
            @ [IAdd(Reg(RAX), Const(-2L))]
            @ check_for_overflow
-        | Print -> failwith ("todo- print not yet compilable")
+        | Print -> [
+            IMov(Reg(RDI), e_reg);
+            ICall("print");
+          ]
         | IsBool ->
           let true_lbl = sprintf "is_bool_true_%d" tag in
           let false_lbl = sprintf "is_bool_false_%d" tag in
