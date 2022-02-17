@@ -89,6 +89,47 @@ let suite =
   t "and_tf" "true && false" "false";
   t "and_tt" "true && true" "true";
 
+  (* or tests *)
+  t "or_ff" "false || false" "false";
+  t "or_ft" "false || true" "true";
+  t "or_tf" "true || false" "true";
+  t "or_tt" "true || true" "true";
+
+  (* eq tests *)
+  t "eq_1" "2 == 2" "true";
+  t "eq_2" "2 == 3" "false";
+  t "eq_3" "3 == 2" "false";
+  t "eq_4" "33 == 32" "false";
+  t "eq_5" "88 == 88" "true";
+
+  (* greater tests *)
+  t "greater_1" "2 > 2" "false";
+  t "greater_2" "2 > 3" "false";
+  t "greater_3" "3 > 2" "true";
+  t "greater_4" "33 > 32" "true";
+  t "greater_5" "88 > 88" "false";
+
+  (* greater eq tests *)
+  t "greater_eq_1" "2 >= 2" "true";
+  t "greater_eq_2" "2 >= 3" "false";
+  t "greater_eq_3" "3 >= 2" "true";
+  t "greater_eq_4" "33 >= 32" "true";
+  t "greater_eq_5" "88 >= 88" "true";
+
+  (* less tests *)
+  t "less_1" "2 < 2" "false";
+  t "less_2" "2 < 3" "true";
+  t "less_3" "3 < 2" "false";
+  t "less_4" "33 < 32" "false";
+  t "less_5" "88 < 88" "false";
+
+  (* less eq tests *)
+  t "less_eq_1" "2 <= 2" "true";
+  t "less_eq_2" "2 <= 3" "true";
+  t "less_eq_3" "3 <= 2" "false";
+  t "less_eq_4" "33 <= 32" "false";
+  t "less_eq_5" "88 <= 88" "true";
+
     (* TODO use printf to test 'if' against eager eval *)
  ]
 ;;

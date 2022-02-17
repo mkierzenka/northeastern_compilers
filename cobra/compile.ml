@@ -454,12 +454,134 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
 
          (* done *)
          @ [ILabel(lbl_done)]
-      | Or -> raise (NotYetImplemented "Fill in here")
-      | Greater -> raise (NotYetImplemented "Fill in here")
-      | GreaterEq -> raise (NotYetImplemented "Fill in here")
-      | Less -> raise (NotYetImplemented "Fill in here")
-      | LessEq -> raise (NotYetImplemented "Fill in here")
-      | Eq -> raise (NotYetImplemented "Fill in here")
+      | Or ->
+         let lbl_lhs = sprintf "or_lhs_%d" tag in
+         let lbl_rhs = sprintf "or_rhs_%d" tag in
+         let lbl_done = sprintf "or_done_%d" tag in
+
+         (* LHS *)
+         [ILabel(lbl_lhs)]
+         @ [IMov(Reg(RAX), lhs_reg)]
+         @ (check_rax_for_bool "err_LOGIC_NOT_BOOL")
+         (* test for short circuit: if RAX is true then we're done *)
+         (* need to use temp register R8 because Test cannot accept a 64 bit immediate *)
+         @ [IMov(Reg(R8), bool_mask)]
+         @ [ITest(Reg(RAX), Reg(R8))]
+         @ [IJnz(lbl_done)]
+
+         (* RHS *)
+         (* don't need to perform the OR because we know LHS is false *)
+         @ [ILabel(lbl_rhs)]
+         @ [IMov(Reg(RAX), rhs_reg)]
+         @ (check_rax_for_bool "err_LOGIC_NOT_BOOL")
+
+         (* done *)
+         @ [ILabel(lbl_done)]
+      | Greater ->
+         let lbl_false = sprintf "greater_false_%d" tag in
+         let lbl_done = sprintf "greater_done_%d" tag in
+
+         (* check rhs for numerical val *)
+         [IMov(Reg(RAX), rhs_reg)]
+         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         (* check lhs for numerical val *)
+         @ [IMov(Reg(RAX), lhs_reg)]
+         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+
+         (* need to use temp register R8 because Test cannot accept a 64 bit immediate *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [ICmp(Reg(RAX), Reg(R8))]
+         @ [IMov(Reg(RAX), const_true)]
+         @ [IJg(lbl_done)]
+
+         @ [ILabel(lbl_false)]
+         @ [IMov(Reg(RAX), const_false)]
+
+         @ [ILabel(lbl_done)]
+      | GreaterEq ->
+         let lbl_false = sprintf "greater_eq_false_%d" tag in
+         let lbl_done = sprintf "greater_eq_done_%d" tag in
+
+         (* check rhs for numerical val *)
+         [IMov(Reg(RAX), rhs_reg)]
+         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         (* check lhs for numerical val *)
+         @ [IMov(Reg(RAX), lhs_reg)]
+         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+
+         (* need to use temp register R8 because Test cannot accept a 64 bit immediate *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [ICmp(Reg(RAX), Reg(R8))]
+         @ [IMov(Reg(RAX), const_true)]
+         @ [IJge(lbl_done)]
+
+         @ [ILabel(lbl_false)]
+         @ [IMov(Reg(RAX), const_false)]
+
+         @ [ILabel(lbl_done)]
+      | Less ->
+         let lbl_false = sprintf "less_false_%d" tag in
+         let lbl_done = sprintf "less_done_%d" tag in
+
+         (* check rhs for numerical val *)
+         [IMov(Reg(RAX), rhs_reg)]
+         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         (* check lhs for numerical val *)
+         @ [IMov(Reg(RAX), lhs_reg)]
+         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+
+         (* need to use temp register R8 because Test cannot accept a 64 bit immediate *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [ICmp(Reg(RAX), Reg(R8))]
+         @ [IMov(Reg(RAX), const_true)]
+         @ [IJl(lbl_done)]
+
+         @ [ILabel(lbl_false)]
+         @ [IMov(Reg(RAX), const_false)]
+
+         @ [ILabel(lbl_done)]
+      | LessEq ->
+         let lbl_false = sprintf "less_eq_false_%d" tag in
+         let lbl_done = sprintf "less_eq_done_%d" tag in
+
+         (* check rhs for numerical val *)
+         [IMov(Reg(RAX), rhs_reg)]
+         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         (* check lhs for numerical val *)
+         @ [IMov(Reg(RAX), lhs_reg)]
+         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+
+         (* need to use temp register R8 because Test cannot accept a 64 bit immediate *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [ICmp(Reg(RAX), Reg(R8))]
+         @ [IMov(Reg(RAX), const_true)]
+         @ [IJle(lbl_done)]
+
+         @ [ILabel(lbl_false)]
+         @ [IMov(Reg(RAX), const_false)]
+
+         @ [ILabel(lbl_done)]
+      | Eq ->
+         let lbl_false = sprintf "eq_false_%d" tag in
+         let lbl_done = sprintf "eq_done_%d" tag in
+
+         (* check rhs for numerical val *)
+         [IMov(Reg(RAX), rhs_reg)]
+         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         (* check lhs for numerical val *)
+         @ [IMov(Reg(RAX), lhs_reg)]
+         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+
+         (* need to use temp register R8 because Test cannot accept a 64 bit immediate *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [ICmp(Reg(RAX), Reg(R8))]
+         @ [IMov(Reg(RAX), const_true)]
+         @ [IJe(lbl_done)]
+
+         @ [ILabel(lbl_false)]
+         @ [IMov(Reg(RAX), const_false)]
+
+         @ [ILabel(lbl_done)]
      end
   | EIf _ -> raise (NotYetImplemented "Fill in here")
   | ENumber(n, _) -> [ IMov(Reg(RAX), compile_imm e env) ]
