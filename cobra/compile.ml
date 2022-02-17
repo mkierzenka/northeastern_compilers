@@ -395,7 +395,9 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
         | Not ->
            [IMov(Reg(RAX), e_reg)]
            @ (check_rax_for_bool "err_LOGIC_NOT_BOOL")
-           @ [IXor(Reg(RAX), bool_mask)]
+           (* need to use temp register R8 because Test cannot accept a 64 bit immediate *)
+           @ [IMov(Reg(R8), bool_mask)]
+           @ [IXor(Reg(RAX), Reg(R8))]
         | PrintStack ->
             (* TODO *)
             raise (NotYetImplemented "PrintStack not yet implemented")

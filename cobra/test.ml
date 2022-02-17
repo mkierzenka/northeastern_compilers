@@ -130,6 +130,12 @@ let suite =
   t "less_eq_4" "33 <= 32" "false";
   t "less_eq_5" "88 <= 88" "true";
 
+  (* not tests *)
+  t "not_t" "!(true)" "false";
+  t "not_f" "!(false)" "true";
+  t "not1" "!(2 == 3)" "true";
+  t "not2" "!(3 == 3)" "false";
+
   t "and_short_circuit_1" "false && 8" "false";
   te "and_short_circuit_2" "true && 8" "logic expected a boolean";
   t "or_short_circuit_1" "true || 8" "true";
