@@ -313,13 +313,14 @@ let check_rax_for_num (err_lbl : string) : instruction list =
    IJnz(err_lbl);
   ]
 
-(* TODO should we save RAX on the stack?? *)
 let check_rax_for_bool (err_lbl : string) : instruction list =
   [
-   IPush(Reg(RAX));
-   IAnd(Reg(RAX), HexConst(bool_tag_mask));
-   ICmp(Reg(RAX), HexConst(bool_tag));
-   IPop(Reg(RAX));
+   (* Operate on temp register R8 instead of RAX. This is because we call AND
+    * on the register, which will alter the value. We want to preserve the value
+    * in RAX, hence we operate on R8 instead *)
+   IMov(Reg(R8), Reg(RAX));
+   IAnd(Reg(R8), HexConst(bool_tag_mask));
+   ICmp(Reg(R8), HexConst(bool_tag));
    IJnz(err_lbl);
   ]
 
