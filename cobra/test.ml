@@ -141,11 +141,11 @@ let suite =
   t "or_short_circuit_1" "true || 8" "true";
   te "or_short_circuit_2" "false || 8" "logic expected a boolean";
 
-  (*t "side_effect_1" "false && print(9)" "false";
+  t "side_effect_1" "false && print(9)" "false";
   t "side_effect_2" "false && print(true)" "false";
   t "side_effect_3" "true && print(true)" "true\ntrue";
   t "side_effect_4" "true || print(true)" "true";
-  t "side_effect_5" "print(false) || print(true) && print(false)" "false\ntrue\nfalse\nfalse";*)
+  t "side_effect_5" "print(false) || print(true) && print(false)" "false\ntrue\nfalse\nfalse";
 
   (* if tests *)
   t "if_consts1" "if true: 5 else: 7" "5";

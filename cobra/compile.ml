@@ -11,7 +11,7 @@ let rec is_anf (e : 'a expr) : bool =
   | ELet(binds, body, _) ->
      List.for_all (fun (_, e, _) -> is_anf e) binds
      && is_anf body
-  | EIf(cond, thn, els, _) -> is_imm cond && is_anf thn && is_anf els
+  | EIf(cond, thn, els, _) | EScIf(cond, thn, els, _) -> is_imm cond && is_anf thn && is_anf els
   | _ -> is_imm e
 and is_imm e =
   match e with
@@ -51,6 +51,7 @@ let check_scope (e : sourcespan expr) : sourcespan expr =
     | EPrim1(_, e, _) -> help e env
     | EPrim2(_, l, r, _) -> help l env; help r env
     | EIf(c, t, f, _) -> help c env; help t env; help f env
+    | EScIf(c, t, f, _) -> raise (InternalCompilerError "Impossible: EScIf not allowed here")
     | ELet(binds, body, _) ->
        let (env2, _) =
          (List.fold_left
@@ -65,6 +66,44 @@ let check_scope (e : sourcespan expr) : sourcespan expr =
            (env, []) binds) in
        help body env2
   in help e []; e
+
+let rec untag (e : 'a expr) : unit expr =
+  match e with
+  | EId(x, _) -> EId(x, ())
+  | ENumber(n, _) -> ENumber(n, ())
+  | EBool(b, _) -> EBool(b, ())
+  | EPrim1(op, e, _) ->
+     EPrim1(op, untag e, ())
+  | EPrim2(op, e1, e2, _) ->
+     EPrim2(op, untag e1, untag e2, ())
+  | ELet(binds, body, _) ->
+     ELet(List.map(fun (x, b, _) -> (x, untag b, ())) binds, untag body, ())
+  | EIf(cond, thn, els, _) ->
+     EIf(untag cond, untag thn, untag els, ())
+  | EScIf(cond, thn, els, _) ->
+     EScIf(untag cond, untag thn, untag els, ())
+
+
+let rec and_or_rewrite (e : 'a expr) : unit expr =
+match e with
+  | EPrim2(op, lhs, rhs, _) ->
+     let lhs_untagged = and_or_rewrite lhs in
+     let rhs_untagged = and_or_rewrite rhs in
+     begin match op with
+      (* (e1 && e2) -> (if !e1: false else: e2) *)
+      | And -> EScIf(EPrim1(Not, lhs_untagged, ()), EBool(false, ()), rhs_untagged, ())
+      (* (e1 || e2) -> (if e1: true else: e2) *)
+      | Or -> EScIf(lhs_untagged, EBool(true, ()), rhs_untagged, ())
+      | _ -> untag e
+     end
+  | ELet _ -> untag e
+  | EPrim1 _ -> untag e
+  | EIf _ -> untag e
+  | EScIf _ -> untag e
+  | ENumber _ -> untag e
+  | EBool _ -> untag e
+  | EId _ -> untag e
+;;
 
 let rec lookup_rename (x : string) (env : (string * string) list) : string =
   match env with
@@ -88,6 +127,7 @@ let rename (e : tag expr) : tag expr =
     | EPrim1(op, e, t) -> EPrim1(op, (help env e), t)
     | EPrim2(op, e1, e2, t) -> EPrim2(op, (help env e1), (help env e2), t)
     | EIf(cond, thn, els, t) -> EIf((help env cond), (help env thn), (help env els), t)
+    | EScIf(cond, thn, els, t) -> EScIf((help env cond), (help env thn), (help env els), t)
   and bind_help (env : (string * string) list) (binds : tag bind list) : tag bind list * ((string * string) list) =
     match binds with
     | [] -> (binds, env)
@@ -126,22 +166,13 @@ let tag (e : 'a expr) : tag expr =
        let (tag_thn, num_thn) = help thn (num_cond) in
        let (tag_els, num_els) = help els (num_thn) in
        (EIf(tag_cond, tag_thn, tag_els, num), num_els)
+    | EScIf(cond, thn, els, _) ->
+       let (tag_cond, num_cond) = help cond (num + 1) in
+       let (tag_thn, num_thn) = help thn (num_cond) in
+       let (tag_els, num_els) = help els (num_thn) in
+       (EScIf(tag_cond, tag_thn, tag_els, num), num_els)
   in let (ans, _) = help e 1
      in ans
-
-let rec untag (e : 'a expr) : unit expr =
-  match e with
-  | EId(x, _) -> EId(x, ())
-  | ENumber(n, _) -> ENumber(n, ())
-  | EBool(b, _) -> EBool(b, ())
-  | EPrim1(op, e, _) ->
-     EPrim1(op, untag e, ())
-  | EPrim2(op, e1, e2, _) ->
-     EPrim2(op, untag e1, untag e2, ())
-  | ELet(binds, body, _) ->
-     ELet(List.map(fun (x, b, _) -> (x, untag b, ())) binds, untag body, ())
-  | EIf(cond, thn, els, _) ->
-     EIf(untag cond, untag thn, untag els, ())
 
 let anf (e : tag expr) : unit expr =
   let rec helpC (e : tag expr) : (unit expr * (string * unit expr) list) = 
@@ -156,6 +187,9 @@ let anf (e : tag expr) : unit expr =
     | EIf(cond, _then, _else, _) ->
        let (cond_imm, cond_setup) = helpI cond in
        (EIf(cond_imm, anf _then, anf _else, ()), cond_setup)
+    | EScIf(cond, _then, _else, _) ->
+       let (cond_imm, cond_setup) = helpI cond in
+       (EScIf(cond_imm, anf _then, anf _else, ()), cond_setup)
     | ENumber(n, _) -> (ENumber(n, ()), [])
     | EBool(b, _) -> (EBool(b, ()), [])
     | ELet([], body, _) -> helpC body
@@ -179,6 +213,10 @@ let anf (e : tag expr) : unit expr =
        let tmp = sprintf "if_%d" tag in
        let (cond_imm, cond_setup) = helpI cond in
        (EId(tmp, ()), cond_setup @ [(tmp, EIf(cond_imm, anf _then, anf _else, ()))])
+    | EScIf(cond, _then, _else, tag) ->
+       let tmp = sprintf "scif_%d" tag in
+       let (cond_imm, cond_setup) = helpI cond in
+       (EId(tmp, ()), cond_setup @ [(tmp, EScIf(cond_imm, anf _then, anf _else, ()))])
     | ENumber(n, _) -> (ENumber(n, ()), [])
     | EBool(b, _) -> (EBool(b, ()), [])
     | ELet([], body, _) -> helpI body
@@ -395,7 +433,7 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
         | Not ->
            [IMov(Reg(RAX), e_reg)]
            @ (check_rax_for_bool "err_LOGIC_NOT_BOOL")
-           (* need to use temp register R8 because Test cannot accept a 64 bit immediate *)
+           (* need to use temp register R8 because Xor cannot accept a 64 bit immediate *)
            @ [IMov(Reg(R8), bool_mask)]
            @ [IXor(Reg(RAX), Reg(R8))]
         | PrintStack ->
@@ -433,52 +471,9 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
          @ (check_rax_for_num "err_ARITH_NOT_NUM")
          @ [IMul(Reg(RAX), rhs_reg)]
          @ check_for_overflow
-      | And ->
-         let lbl_lhs = sprintf "and_lhs_%d" tag in
-         let lbl_rhs = sprintf "and_rhs_%d" tag in
-         let lbl_done = sprintf "and_done_%d" tag in
-
-         (* LHS *)
-         [ILabel(lbl_lhs)]
-         @ [IMov(Reg(RAX), lhs_reg)]
-         @ (check_rax_for_bool "err_LOGIC_NOT_BOOL")
-         (* test for short circuit: if RAX is false then we're done *)
-         (* need to use temp register R8 because Test cannot accept a 64 bit immediate *)
-         @ [IMov(Reg(R8), bool_mask)]
-         @ [ITest(Reg(RAX), Reg(R8))]
-         @ [IJz(lbl_done)]
-
-         (* RHS *)
-         (* don't need to perform the AND because we know LHS is true *)
-         @ [ILabel(lbl_rhs)]
-         @ [IMov(Reg(RAX), rhs_reg)]
-         @ (check_rax_for_bool "err_LOGIC_NOT_BOOL")
-
-         (* done *)
-         @ [ILabel(lbl_done)]
-      | Or ->
-         let lbl_lhs = sprintf "or_lhs_%d" tag in
-         let lbl_rhs = sprintf "or_rhs_%d" tag in
-         let lbl_done = sprintf "or_done_%d" tag in
-
-         (* LHS *)
-         [ILabel(lbl_lhs)]
-         @ [IMov(Reg(RAX), lhs_reg)]
-         @ (check_rax_for_bool "err_LOGIC_NOT_BOOL")
-         (* test for short circuit: if RAX is true then we're done *)
-         (* need to use temp register R8 because Test cannot accept a 64 bit immediate *)
-         @ [IMov(Reg(R8), bool_mask)]
-         @ [ITest(Reg(RAX), Reg(R8))]
-         @ [IJnz(lbl_done)]
-
-         (* RHS *)
-         (* don't need to perform the OR because we know LHS is false *)
-         @ [ILabel(lbl_rhs)]
-         @ [IMov(Reg(RAX), rhs_reg)]
-         @ (check_rax_for_bool "err_LOGIC_NOT_BOOL")
-
-         (* done *)
-         @ [ILabel(lbl_done)]
+      | And -> raise (InternalCompilerError "Impossible: 'and' should be rewritten")
+      | Or -> raise (InternalCompilerError "Impossible: 'or' should be rewritten")
+      (* TODO, fix runtime error message for and/or *)
       | Greater ->
          let lbl_false = sprintf "greater_false_%d" tag in
          let lbl_done = sprintf "greater_done_%d" tag in
@@ -606,6 +601,28 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
      @ [ILabel(lbl_els)]
      @ (compile_expr els si env)
      @ [ILabel(lbl_done)]
+  | EScIf(cond, thn, els, tag) ->
+     let cond_reg = compile_imm cond env in
+     let lbl_thn = sprintf "scif_then_%d" tag in
+     let lbl_els = sprintf "scif_else_%d" tag in
+     let lbl_done = sprintf "scif_done_%d" tag in
+     (* check cond for boolean val *)
+     [IMov(Reg(RAX), cond_reg)]
+     @ (check_rax_for_bool "err_LOGIC_NOT_BOOL")
+     (* test for RAX == true *)
+     (* need to use temp register R8 because Test cannot accept a 64 bit immediate *)
+     @ [IMov(Reg(R8), bool_mask)]
+     @ [ITest(Reg(RAX), Reg(R8))]
+     @ [IJz(lbl_els)]
+
+     @ [ILabel(lbl_thn)]
+     @ (compile_expr thn si env)
+     @ [IJmp(lbl_done)]
+
+     @ [ILabel(lbl_els)]
+     @ (compile_expr els si env)
+     @ (check_rax_for_bool "err_LOGIC_NOT_BOOL")
+     @ [ILabel(lbl_done)]
   | ENumber(n, _) -> [ IMov(Reg(RAX), compile_imm e env) ]
   | EBool(n, _) -> [ IMov(Reg(RAX), compile_imm e env) ]
   | EId(x, _) -> [ IMov(Reg(RAX), compile_imm e env) ]
@@ -676,6 +693,7 @@ global our_code_starts_here" in
 let compile_to_string (prog : sourcespan program pipeline) : string pipeline =
   prog
   |> (add_phase well_formed check_scope)
+  |> (add_phase shortcircuit_rewrite and_or_rewrite)
   |> (add_phase tagged tag)
   |> (add_phase renamed rename)
   |> (add_phase anfed (fun p -> tag (anf p)))
