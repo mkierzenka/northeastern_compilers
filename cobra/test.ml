@@ -34,10 +34,10 @@ let max_snake_num_plus_one = Int64.add max_snake_num 1L
 let min_snake_num = (Int64.div Int64.min_int 2L)
 let min_snake_num_minus_one = Int64.sub min_snake_num 1L
 
-let prog_max_snake_num = (Int64.to_string max_snake_num)
-let prog_max_snake_num_plus_one = (Int64.to_string max_snake_num_plus_one)
-let prog_min_snake_num = (Int64.to_string min_snake_num)
-let prog_min_snake_num_minus_one = (Int64.to_string min_snake_num_minus_one)
+let str_max_snake_num = (Int64.to_string max_snake_num)
+let str_max_snake_num_plus_one = (Int64.to_string max_snake_num_plus_one)
+let str_min_snake_num = (Int64.to_string min_snake_num)
+let str_min_snake_num_minus_one = (Int64.to_string min_snake_num_minus_one)
 
 let forty = "let x = 40 in x"
 let neg_forty = "let x = -40 in x"
@@ -55,14 +55,26 @@ let suite =
   teprog "do_err/notNum.cobra" "logic expected a boolean";
 
   (* edge case test for compile time integer overflow *)
-  t "max_snake_num" prog_max_snake_num prog_max_snake_num;
+  t "max_snake_num" str_max_snake_num str_max_snake_num;
   te "overflow_max_snake_num_plus_one"
-    prog_max_snake_num_plus_one
-    prog_max_snake_num_plus_one;
-  t "min_snake_num" prog_min_snake_num prog_min_snake_num;
+    str_max_snake_num_plus_one
+    str_max_snake_num_plus_one;
+  t "min_snake_num" str_min_snake_num str_min_snake_num;
   te "overflow_min_snake_num_minus_one"
-    prog_min_snake_num_minus_one
-    prog_min_snake_num_minus_one;
+    str_min_snake_num_minus_one
+    str_min_snake_num_minus_one;
+
+  (* edge case test for runtime integer overflow *)
+  te "add1_overflow" (sprintf "add1(%s)" str_max_snake_num) "overflow";
+  te "sub1_overflow" (sprintf "sub1(%s)" str_min_snake_num) "overflow";
+  te "sub_add_overflow"
+    (sprintf "let x=sub1(%s) in add1(add1(x))" str_max_snake_num)
+    "overflow";
+  te "overflow_in_value"
+    (sprintf "let x=add1(%s) in 8" str_max_snake_num)
+    "overflow";
+
+    (* TODO use printf to test 'if' against eager eval *)
  ]
 ;;
 

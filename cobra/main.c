@@ -39,7 +39,6 @@ void printAsNumber(SNAKEVAL val) {
     signed_num = (val >> 1);
   }
   printf("%ld\n", signed_num);
-  //todo, does this print negative SNAKEVAL numbers correctly?
 }
 
 uint64_t print(SNAKEVAL val) {
