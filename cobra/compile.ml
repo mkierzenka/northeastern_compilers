@@ -94,15 +94,20 @@ match e with
       | And -> EScIf(EPrim1(Not, lhs_untagged, ()), EBool(false, ()), rhs_untagged, ())
       (* (e1 || e2) -> (if e1: true else: e2) *)
       | Or -> EScIf(lhs_untagged, EBool(true, ()), rhs_untagged, ())
-      | _ -> untag e
+      | _ -> EPrim2(op, (and_or_rewrite lhs), (and_or_rewrite rhs), ())
      end
-  | ELet _ -> untag e
-  | EPrim1 _ -> untag e
-  | EIf _ -> untag e
-  | EScIf _ -> untag e
+  | ELet(binds, body, _) -> ELet((bind_helper binds), (and_or_rewrite body), ())
+  | EPrim1(op, expr, _) -> EPrim1(op, (and_or_rewrite expr), ())
+  | EIf(cond, thn, els, _) ->
+      EIf((and_or_rewrite cond), (and_or_rewrite thn), (and_or_rewrite els), ())
   | ENumber _ -> untag e
   | EBool _ -> untag e
   | EId _ -> untag e
+  | EScIf _ -> raise (InternalCompilerError "Impossible: 'EScIf' is not in syntax")
+and bind_helper (binds : 'a bind list) : unit bind list =
+  match binds with
+  | [] -> []
+  | (sym, v, _) :: tail -> (sym, (and_or_rewrite v), ()) :: (bind_helper tail)
 ;;
 
 let rec lookup_rename (x : string) (env : (string * string) list) : string =
@@ -347,6 +352,7 @@ let rec replicate (x : 'a) (i : int) : 'a list =
 let check_rax_for_num (err_lbl : string) : instruction list =
   [
    (* this "test" trick depends on num_tag being 0 *)
+   ILineComment("check_rax_for_num (" ^ err_lbl ^ ")");
    ITest(Reg(RAX), HexConst(num_tag_mask));
    IJnz(err_lbl);
   ]
@@ -356,6 +362,7 @@ let check_rax_for_bool (err_lbl : string) : instruction list =
    (* Operate on temp register R8 instead of RAX. This is because we call AND
     * on the register, which will alter the value. We want to preserve the value
     * in RAX, hence we operate on R8 instead *)
+   ILineComment("check_rax_for_bool (" ^ err_lbl ^ ")");
    IMov(Reg(R8), Reg(RAX));
    IAnd(Reg(R8), HexConst(bool_tag_mask));
    ICmp(Reg(R8), HexConst(bool_tag));
@@ -437,7 +444,6 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
            @ [IMov(Reg(R8), bool_mask)]
            @ [IXor(Reg(RAX), Reg(R8))]
         | PrintStack ->
-            (* TODO *)
             raise (NotYetImplemented "PrintStack not yet implemented")
      end
   | EPrim2(op, lhs, rhs, tag) ->
@@ -469,11 +475,11 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
          (* check lhs for numerical val *)
          @ [IMov(Reg(RAX), lhs_reg)]
          @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         @ [ISar(Reg(RAX), Const(1L))]
          @ [IMul(Reg(RAX), rhs_reg)]
          @ check_for_overflow
       | And -> raise (InternalCompilerError "Impossible: 'and' should be rewritten")
       | Or -> raise (InternalCompilerError "Impossible: 'or' should be rewritten")
-      (* TODO, fix runtime error message for and/or *)
       | Greater ->
          let lbl_false = sprintf "greater_false_%d" tag in
          let lbl_done = sprintf "greater_done_%d" tag in
@@ -562,12 +568,7 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
          let lbl_false = sprintf "eq_false_%d" tag in
          let lbl_done = sprintf "eq_done_%d" tag in
 
-         (* check rhs for numerical val *)
-         [IMov(Reg(RAX), rhs_reg)]
-         @ (check_rax_for_num "err_ARITH_NOT_NUM")
-         (* check lhs for numerical val *)
-         @ [IMov(Reg(RAX), lhs_reg)]
-         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         [IMov(Reg(RAX), lhs_reg)]
 
          (* need to use temp register R8 because Test cannot accept a 64 bit immediate *)
          @ [IMov(Reg(R8), rhs_reg)]
@@ -582,11 +583,13 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
      end
   | EIf(cond, thn, els, tag) ->
      let cond_reg = compile_imm cond env in
+     let lbl_comment = sprintf "if_%d" tag in
      let lbl_thn = sprintf "if_then_%d" tag in
      let lbl_els = sprintf "if_else_%d" tag in
      let lbl_done = sprintf "if_done_%d" tag in
      (* check cond for boolean val *)
-     [IMov(Reg(RAX), cond_reg)]
+     [ILineComment(lbl_comment)]
+     @ [IMov(Reg(RAX), cond_reg)]
      @ (check_rax_for_bool "err_IF_NOT_BOOL")
      (* test for RAX == true *)
      (* need to use temp register R8 because Test cannot accept a 64 bit immediate *)
@@ -603,11 +606,13 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
      @ [ILabel(lbl_done)]
   | EScIf(cond, thn, els, tag) ->
      let cond_reg = compile_imm cond env in
+     let lbl_comment = sprintf "scif_%d" tag in
      let lbl_thn = sprintf "scif_then_%d" tag in
      let lbl_els = sprintf "scif_else_%d" tag in
      let lbl_done = sprintf "scif_done_%d" tag in
      (* check cond for boolean val *)
-     [IMov(Reg(RAX), cond_reg)]
+     [ILineComment(lbl_comment)]
+     @ [IMov(Reg(RAX), cond_reg)]
      @ (check_rax_for_bool "err_LOGIC_NOT_BOOL")
      (* test for RAX == true *)
      (* need to use temp register R8 because Test cannot accept a 64 bit immediate *)

@@ -74,6 +74,7 @@ let suite =
     (sprintf "let x=add1(%s) in 8" str_max_snake_num)
     "overflow";
 
+  (* print tests *)
   t "print_5" "print(5)" "5\n5";
   t "print_-5" "print(-5)" "-5\n-5";
   t "print_true" "print(true)" "true\ntrue";
@@ -82,6 +83,19 @@ let suite =
   t "nested_print_let_val"
       "let x = 1 in (let y = print(x + 1) in print(y + 2))"
       "2\n4\n4";
+  t "print_mul" "print(7 * 9)" "63\n63";
+
+  (* arithmetric tests *)
+  t "plus" "4 + 9" "13";
+  t "minus" "4 - 9" "-5";
+  t "times" "4 * 9" "36";
+  t "add1" "add1(8)" "9";
+  t "sub1" "sub1(8)" "7";
+  te "plus_err" "4 + false" "arithmetic expected a number";
+  te "minus_err" "(true && false) - 9" "arithmetic expected a number";
+  te "times_err" "4 * true" "arithmetic expected a number";
+  te "add1_err" "add1(false || false)" "arithmetic expected a number";
+  te "sub1_err" "sub1(false)" "arithmetic expected a number";
 
   (* and tests *)
   t "and_ff" "false && false" "false";
@@ -154,13 +168,22 @@ let suite =
   t "if_consts4" "if false: false else: true" "true";
   t "if_consts5" "if 2 < 3: add1(6 + 7) else: sub1(7 * 8)" "14";
   te "if_num_err" "if 1: true else: false" "if expected a boolean";
-    (* TODO use printf to test 'if' against eager eval *)
+
+  (* if not-eager eval tests *)
+  t "if_eager_consts1" "if true: 5 else: print(7)" "5";
+  t "if_eager_consts2" "if false: print(5) else: 7" "7";
+  t "if_eager_consts3" "if 2 < 3: add1(6 + 7) else: sub1(print(7) * 8)" "14";
+  t "if_eager_consts4" "if 2 < 3: add1(6 + 7) else: sub1(7 * print(8))" "14";
+  t "if_eager_consts5" "if 2 < 3: add1(6 + 7) else: print(sub1(7 * 8))" "14";
+
+  (* compound tests *)
+  t "compound_1" "true || false == true" "true";
+  t "compound_2" "(true || false) == true" "true";
  ]
 ;;
 
 
 (* input_file_test_suite () will run all the tests in the subdirectories of input/ *)
 let () =
-  (* run_test_tt_main ("all_tests">:::[suite; input_file_test_suite ()])  TODO add back the input file test suite*)
-  run_test_tt_main ("all_tests">:::[suite])
+  run_test_tt_main ("all_tests">:::[suite; input_file_test_suite ()])
 ;;
