@@ -29,6 +29,16 @@ let tprog (filename : string) (expected : string) = filename>::test_run_input fi
 (* Runs a program, given as the name of a file in the input/ directory, and compares its error to expected *)
 let teprog (filename : string) (expected : string) = filename>::test_err_input filename expected;;
 
+let max_snake_num = (Int64.div Int64.max_int 2L)
+let max_snake_num_plus_one = Int64.add max_snake_num 1L
+let min_snake_num = (Int64.div Int64.min_int 2L)
+let min_snake_num_minus_one = Int64.sub min_snake_num 1L
+
+let prog_max_snake_num = (Int64.to_string max_snake_num)
+let prog_max_snake_num_plus_one = (Int64.to_string max_snake_num_plus_one)
+let prog_min_snake_num = (Int64.to_string min_snake_num)
+let prog_min_snake_num_minus_one = (Int64.to_string min_snake_num_minus_one)
+
 let forty = "let x = 40 in x"
 let neg_forty = "let x = -40 in x"
 let fals = "let x = false in x"
@@ -43,6 +53,16 @@ let suite =
   t "tru" tru "true";
   teprog "do_err/add1Bool.cobra" "arithmetic expected a number";
   teprog "do_err/notNum.cobra" "logic expected a boolean";
+
+  (* edge case test for compile time integer overflow *)
+  t "max_snake_num" prog_max_snake_num prog_max_snake_num;
+  te "overflow_max_snake_num_plus_one"
+    prog_max_snake_num_plus_one
+    prog_max_snake_num_plus_one;
+  t "min_snake_num" prog_min_snake_num prog_min_snake_num;
+  te "overflow_min_snake_num_minus_one"
+    prog_min_snake_num_minus_one
+    prog_min_snake_num_minus_one;
  ]
 ;;
 

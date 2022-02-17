@@ -7,6 +7,7 @@ exception ParseError of string (* parse-error message *)
 exception NotYetImplemented of string (* TODO: Message to show *)
 exception InternalCompilerError of string (* Major failure: message to show *)
 exception BindingError of string (* problem with an identifier: message to show *)
+exception IntegerOverflowError of string (* integer overflow: message to show *)
 
 
   
@@ -23,6 +24,8 @@ let print_errors (exns : exn list) : string list =
          "Internal Compiler Error: " ^ msg
       | BindingError msg ->
          "Binding error: " ^ msg
+      | IntegerOverflowError msg ->
+         "Integer Overflow error: " ^ msg
       | _ ->
          sprintf "%s" (Printexc.to_string e)
     ) exns
