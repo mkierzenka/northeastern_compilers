@@ -583,7 +583,27 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
 
          @ [ILabel(lbl_done)]
      end
-  | EIf _ -> raise (NotYetImplemented "Fill in here")
+  | EIf(cond, thn, els, tag) ->
+     let cond_reg = compile_imm cond env in
+     let lbl_thn = sprintf "if_then_%d" tag in
+     let lbl_els = sprintf "if_else_%d" tag in
+     let lbl_done = sprintf "if_done_%d" tag in
+     (* check cond for boolean val *)
+     [IMov(Reg(RAX), cond_reg)]
+     @ (check_rax_for_bool "err_IF_NOT_BOOL")
+     (* test for RAX == true *)
+     (* need to use temp register R8 because Test cannot accept a 64 bit immediate *)
+     @ [IMov(Reg(R8), bool_mask)]
+     @ [ITest(Reg(RAX), Reg(R8))]
+     @ [IJz(lbl_els)]
+
+     @ [ILabel(lbl_thn)]
+     @ (compile_expr thn si env)
+     @ [IJmp(lbl_done)]
+
+     @ [ILabel(lbl_els)]
+     @ (compile_expr els si env)
+     @ [ILabel(lbl_done)]
   | ENumber(n, _) -> [ IMov(Reg(RAX), compile_imm e env) ]
   | EBool(n, _) -> [ IMov(Reg(RAX), compile_imm e env) ]
   | EId(x, _) -> [ IMov(Reg(RAX), compile_imm e env) ]
