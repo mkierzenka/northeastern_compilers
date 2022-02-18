@@ -209,20 +209,18 @@ let suite =
   t "if_consts3" "if true: false else: true" "false";
   t "if_consts4" "if false: false else: true" "true";
   t "if_consts5" "if 2 < 3: add1(6 + 7) else: sub1(7 * 8)" "14";
-  te "if_num_err" "if 1: true else: false" "if expected a boolean";
+  t "if_mixed" "print(if 2 < 3: true else: 4)" "true\ntrue";
+  t "if_mixed2" "print(if 99 < 3: true else: 4)" "4\n4";
+  te "if_cond_num_err" "if 1: true else: false" "if expected a boolean";
+  te "if_binding_err" "if (1 == 1): (let x=2 in x) else: x" "is not in scope";
 
-  (* if not-eager eval tests *)
-  t "if_eager_consts1" "if true: 5 else: print(7)" "5";
-  t "if_eager_consts2" "if false: print(5) else: 7" "7";
-  t "if_eager_consts3" "if 2 < 3: add1(6 + 7) else: sub1(print(7) * 8)" "14";
-  t "if_eager_consts4" "if 2 < 3: add1(6 + 7) else: sub1(7 * print(8))" "14";
-  t "if_eager_consts5" "if 2 < 3: add1(6 + 7) else: print(sub1(7 * 8))" "14";
+  (* if lazy eval tests *)
+  t "if_lazy_consts1" "if true: 5 else: print(7)" "5";
+  t "if_lazy_consts2" "if false: print(5) else: 7" "7";
+  t "if_lazy_consts3" "if 2 < 3: add1(6 + 7) else: sub1(true)" "14";
+  t "if_lazy_consts4" "if 2 > 3: (true + true) else: sub1(7 * print(8))" "8\n55";
 
-  (* compound tests *)
-  t "compound_1" "true || false == true" "true";
-  t "compound_2" "(true || false) == true" "true";
-  t "compound_3" "(true || false) == 88" "false";
-
+  (* let tests *)
   t "order_ops_1" "let z=true in false || z" "true";
   te "order_ops_2" "(let z=true in false) || z" "is not in scope";
  ]
