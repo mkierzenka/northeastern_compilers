@@ -106,6 +106,8 @@ let suite =
   t "isnum3" "isnum(9 + add1(2))" "true";
   t "isnum4" "isnum(true && false)" "false";
   t "isnum5" "isnum(true && true)" "false";
+  t "isnum6" (sprintf "isnum(%s)" str_max_snake_num) "true";
+  t "isnum7" (sprintf "isnum(%s)" str_min_snake_num) "true";
   t "isbool1" "isbool(true)" "true";
   t "isbool2" "isbool(false)" "true";
   t "isbool3" "isbool(false || (add1(1) == 3))" "true";
@@ -113,6 +115,8 @@ let suite =
   t "isbool5" "isbool(7)" "false";
   t "isbool6" "isbool(0)" "false";
   t "isbool7" "isbool(2 + 3)" "false";
+  t "isbool8" (sprintf "isbool(%s)" str_max_snake_num) "false";
+  t "isbool9" (sprintf "isbool(%s)" str_min_snake_num) "false";
 
   (* print tests *)
   t "print_5" "print(5)" "5\n5";
