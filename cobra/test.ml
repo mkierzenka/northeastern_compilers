@@ -51,8 +51,6 @@ let suite =
   t "neg_fory" neg_forty "-40";
   t "fals" fals "false";
   t "tru" tru "true";
-  teprog "do_err/add1Bool.cobra" "arithmetic expected a number";
-  teprog "do_err/notNum.cobra" "logic expected a boolean";
 
   (* edge case test for compile time integer overflow *)
   t "max_snake_num" str_max_snake_num str_max_snake_num;
