@@ -47,22 +47,25 @@ let tru = "let x = true in x"
 let suite =
 "unit_tests">:::
  [
+  (* basic value reporting *)
   t "forty" forty "40";
   t "neg_fory" neg_forty "-40";
   t "fals" fals "false";
   t "tru" tru "true";
+  t "max_snake_int" str_max_snake_num str_max_snake_num;
+  t "min_snake_int" str_min_snake_num str_min_snake_num;
 
-  (* edge case test for compile time integer overflow *)
+  (* edge case tests for compile time integer overflow *)
   t "max_snake_num" str_max_snake_num str_max_snake_num;
   te "overflow_max_snake_num_plus_one"
     str_max_snake_num_plus_one
     str_max_snake_num_plus_one;
   t "min_snake_num" str_min_snake_num str_min_snake_num;
-  te "overflow_min_snake_num_minus_one"
+  te "underflow_min_snake_num_minus_one"
     str_min_snake_num_minus_one
     str_min_snake_num_minus_one;
 
-  (* edge case test for runtime integer overflow *)
+  (* edge case tests for runtime integer overflow *)
   te "add1_overflow" (sprintf "add1(%s)" str_max_snake_num) "overflow";
   te "sub1_overflow" (sprintf "sub1(%s)" str_min_snake_num) "overflow";
   te "sub_add_overflow"
@@ -70,6 +73,30 @@ let suite =
     "overflow";
   te "overflow_in_value"
     (sprintf "let x=add1(%s) in 8" str_max_snake_num)
+    "overflow";
+  te "overflow_in_plus"
+    (sprintf "%s + 1" str_max_snake_num)
+    "overflow";
+  te "overflow_in_plus_flipped"
+    (sprintf "1 + %s" str_max_snake_num)
+    "overflow";
+  te "overflow_in_plus2"
+    (sprintf "let x= 1 + %s in 98" str_max_snake_num)
+    "overflow";
+  te "overflow_in_minus"
+    (sprintf "print(0 - %s)" str_min_snake_num)
+    "overflow";
+  te "overflow_in_times"
+    (sprintf "2 * %s" str_max_snake_num)
+    "overflow";
+  te "underflow_in_plus"
+    (sprintf "let x= -1 + %s in 98" str_min_snake_num)
+    "overflow";
+  te "underflow_in_minus"
+    (sprintf "%s - 1" str_min_snake_num)
+    "overflow";
+  te "underflow_in_times"
+    (sprintf "2 * %s" str_min_snake_num)
     "overflow";
 
   (* print tests *)
@@ -89,6 +116,7 @@ let suite =
   t "times" "4 * 9" "36";
   t "add1" "add1(8)" "9";
   t "sub1" "sub1(8)" "7";
+  t "add_sub_edge" (sprintf "add1(sub1(%s)) + 0" str_max_snake_num) str_max_snake_num;
   te "plus_err" "4 + false" "arithmetic expected a number";
   te "minus_err" "(true && false) - 9" "arithmetic expected a number";
   te "times_err" "4 * true" "arithmetic expected a number";

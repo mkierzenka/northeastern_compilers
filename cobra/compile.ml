@@ -457,7 +457,9 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
          (* check lhs for numerical val *)
          @ [IMov(Reg(RAX), lhs_reg)]
          @ (check_rax_for_num "err_ARITH_NOT_NUM")
-         @ [IAdd(Reg(RAX), rhs_reg)]
+         (* need to use a temp register because ADD does not properly handle imm64 (for overflow) *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [IAdd(Reg(RAX), Reg(R8))]
          @ check_for_overflow
       | Minus ->
          (* check rhs for numerical val *)
@@ -466,7 +468,9 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
          (* check lhs for numerical val *)
          @ [IMov(Reg(RAX), lhs_reg)]
          @ (check_rax_for_num "err_ARITH_NOT_NUM")
-         @ [ISub(Reg(RAX), rhs_reg)]
+         (* need to use a temp register because SUB does not properly handle imm64 (for overflow) *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [ISub(Reg(RAX), Reg(R8))]
          @ check_for_overflow
       | Times ->
          (* check rhs for numerical val *)
@@ -476,7 +480,9 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
          @ [IMov(Reg(RAX), lhs_reg)]
          @ (check_rax_for_num "err_ARITH_NOT_NUM")
          @ [ISar(Reg(RAX), Const(1L))]
-         @ [IMul(Reg(RAX), rhs_reg)]
+         (* need to use a temp register because IMUL does not properly handle imm64 (for overflow) *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [IMul(Reg(RAX), Reg(R8))]
          @ check_for_overflow
       | And -> raise (InternalCompilerError "Impossible: 'and' should be rewritten")
       | Or -> raise (InternalCompilerError "Impossible: 'or' should be rewritten")
