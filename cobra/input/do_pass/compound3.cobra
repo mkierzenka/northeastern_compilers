@@ -1,0 +1,10 @@
+let x=9,y=false,goal=4,bad=-1 in
+  if isbool(x) && print(1000): y
+  else:
+    if isbool(y):
+      if !(isnum(y)):
+        if isnum(x):
+          goal
+        else: print(bad)
+      else: print(bad - 1)
+    else: print(bad - 2)

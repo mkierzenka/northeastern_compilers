@@ -1,0 +1,5 @@
+let x=6,y=10 in
+let z=11,t=true,f=false in
+  if t: if f: false
+        else: print(y*z + x)
+  else: print(22)

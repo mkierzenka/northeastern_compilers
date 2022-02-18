@@ -115,6 +115,11 @@ let suite =
   t "eq_3" "3 == 2" "false";
   t "eq_4" "33 == 32" "false";
   t "eq_5" "88 == 88" "true";
+  t "eq_6" "0 == false" "false";
+  t "eq_7" "true == 1" "false";
+  t "eq_8" "true == true" "true";
+  t "eq_9" "false == false" "true";
+  t "eq_10" "false == true" "false";
 
   (* greater tests *)
   t "greater_1" "2 > 2" "false";
@@ -179,6 +184,10 @@ let suite =
   (* compound tests *)
   t "compound_1" "true || false == true" "true";
   t "compound_2" "(true || false) == true" "true";
+  t "compound_3" "(true || false) == 88" "false";
+
+  t "order_ops_1" "let z=true in false || z" "true";
+  te "order_ops_2" "(let z=true in false) || z" "is not in scope";
  ]
 ;;
 
