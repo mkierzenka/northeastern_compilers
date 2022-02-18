@@ -351,9 +351,10 @@ let rec replicate (x : 'a) (i : int) : 'a list =
 (* Compiled Type Checking *)
 let check_rax_for_num (err_lbl : string) : instruction list =
   [
-   (* this "test" trick depends on num_tag being 0 *)
+   (* This "test" trick depends on num_tag being 0. R8 used because Test doesn't support imm64 *)
    ILineComment("check_rax_for_num (" ^ err_lbl ^ ")");
-   ITest(Reg(RAX), HexConst(num_tag_mask));
+   IMov(Reg(R8), HexConst(num_tag_mask));
+   ITest(Reg(RAX), Reg(R8));
    IJnz(err_lbl);
   ]
 
@@ -361,11 +362,14 @@ let check_rax_for_bool (err_lbl : string) : instruction list =
   [
    (* Operate on temp register R8 instead of RAX. This is because we call AND
     * on the register, which will alter the value. We want to preserve the value
-    * in RAX, hence we operate on R8 instead *)
+    * in RAX, hence we operate on R8 instead. R9 is used as intermediate because
+      And, Cmp don't work on imm64s *)
    ILineComment("check_rax_for_bool (" ^ err_lbl ^ ")");
    IMov(Reg(R8), Reg(RAX));
-   IAnd(Reg(R8), HexConst(bool_tag_mask));
-   ICmp(Reg(R8), HexConst(bool_tag));
+   IMov(Reg(R9), HexConst(bool_tag_mask));
+   IAnd(Reg(R8), Reg(R9));
+   IMov(Reg(R9), HexConst(bool_tag));
+   ICmp(Reg(R8), Reg(R9));
    IJnz(err_lbl);
   ]
 
@@ -403,10 +407,12 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
           let done_lbl = sprintf "is_bool_done_%d" tag in
           [
            IMov(Reg(RAX), e_reg);
-           (* we don't need to save RAX on the stack because we overwrite the
-            * value with true/false later *)
-           IAnd(Reg(RAX), HexConst(bool_tag_mask));
-           ICmp(Reg(RAX), HexConst(bool_tag));
+           (* Don't need to save RAX on the stack because we overwrite the
+            * value with true/false later. R8 used because And, Cmp don't support imm64 *)
+           IMov(Reg(R8), HexConst(bool_tag_mask));
+           IAnd(Reg(RAX), Reg(R8));
+           IMov(Reg(R8), HexConst(bool_tag));
+           ICmp(Reg(RAX), Reg(R8));
            IJz(true_lbl);
            (* case not bool *)
            ILabel(false_lbl);
@@ -424,8 +430,9 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
           let done_lbl = sprintf "is_num_done_%d" tag in
           [
            IMov(Reg(RAX), e_reg);
-           (* this "test" trick depends on num_tag being 0 *)
-           ITest(Reg(RAX), HexConst(num_tag_mask));
+           (* This "test" trick depends on num_tag being 0. R8 used because Test doesn't support imm64 *)
+           IMov(Reg(R8), HexConst(num_tag_mask));
+           ITest(Reg(RAX), Reg(R8));
            IJz(true_lbl);
            (* case not num *)
            ILabel(false_lbl);
@@ -440,7 +447,7 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
         | Not ->
            [IMov(Reg(RAX), e_reg)]
            @ (check_rax_for_bool "err_LOGIC_NOT_BOOL")
-           (* need to use temp register R8 because Xor cannot accept a 64 bit immediate *)
+           (* need to use temp register R8 because Xor cannot accept imm64 *)
            @ [IMov(Reg(R8), bool_mask)]
            @ [IXor(Reg(RAX), Reg(R8))]
         | PrintStack ->
@@ -497,7 +504,7 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
          @ [IMov(Reg(RAX), lhs_reg)]
          @ (check_rax_for_num "err_ARITH_NOT_NUM")
 
-         (* need to use temp register R8 because Test cannot accept a 64 bit immediate *)
+         (* need to use temp register R8 because Test cannot accept imm64 *)
          @ [IMov(Reg(R8), rhs_reg)]
          @ [ICmp(Reg(RAX), Reg(R8))]
          @ [IMov(Reg(RAX), const_true)]
@@ -518,7 +525,7 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
          @ [IMov(Reg(RAX), lhs_reg)]
          @ (check_rax_for_num "err_ARITH_NOT_NUM")
 
-         (* need to use temp register R8 because Test cannot accept a 64 bit immediate *)
+         (* need to use temp register R8 because Test cannot accept imm64 *)
          @ [IMov(Reg(R8), rhs_reg)]
          @ [ICmp(Reg(RAX), Reg(R8))]
          @ [IMov(Reg(RAX), const_true)]
@@ -539,7 +546,7 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
          @ [IMov(Reg(RAX), lhs_reg)]
          @ (check_rax_for_num "err_ARITH_NOT_NUM")
 
-         (* need to use temp register R8 because Test cannot accept a 64 bit immediate *)
+         (* need to use temp register R8 because Test cannot accept imm64 *)
          @ [IMov(Reg(R8), rhs_reg)]
          @ [ICmp(Reg(RAX), Reg(R8))]
          @ [IMov(Reg(RAX), const_true)]
@@ -560,7 +567,7 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
          @ [IMov(Reg(RAX), lhs_reg)]
          @ (check_rax_for_num "err_ARITH_NOT_NUM")
 
-         (* need to use temp register R8 because Test cannot accept a 64 bit immediate *)
+         (* need to use temp register R8 because Test cannot accept imm64 *)
          @ [IMov(Reg(R8), rhs_reg)]
          @ [ICmp(Reg(RAX), Reg(R8))]
          @ [IMov(Reg(RAX), const_true)]
@@ -576,7 +583,7 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
 
          [IMov(Reg(RAX), lhs_reg)]
 
-         (* need to use temp register R8 because Test cannot accept a 64 bit immediate *)
+         (* need to use temp register R8 because Test cannot accept imm64 *)
          @ [IMov(Reg(R8), rhs_reg)]
          @ [ICmp(Reg(RAX), Reg(R8))]
          @ [IMov(Reg(RAX), const_true)]
@@ -598,7 +605,7 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
      @ [IMov(Reg(RAX), cond_reg)]
      @ (check_rax_for_bool "err_IF_NOT_BOOL")
      (* test for RAX == true *)
-     (* need to use temp register R8 because Test cannot accept a 64 bit immediate *)
+     (* need to use temp register R8 because Test cannot accept imm64 *)
      @ [IMov(Reg(R8), bool_mask)]
      @ [ITest(Reg(RAX), Reg(R8))]
      @ [IJz(lbl_els)]
@@ -621,7 +628,7 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
      @ [IMov(Reg(RAX), cond_reg)]
      @ (check_rax_for_bool "err_LOGIC_NOT_BOOL")
      (* test for RAX == true *)
-     (* need to use temp register R8 because Test cannot accept a 64 bit immediate *)
+     (* need to use temp register R8 because Test cannot accept imm64 *)
      @ [IMov(Reg(R8), bool_mask)]
      @ [ITest(Reg(RAX), Reg(R8))]
      @ [IJz(lbl_els)]
