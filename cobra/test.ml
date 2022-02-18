@@ -254,6 +254,8 @@ let suite =
   te "let_unknown_var" "let x=1,s=2 in t" "is not in scope";
   te "let_backwards_binds" "let x=y,y=2 in 3" "is not in scope";
   te "let_bind_eval_first" "let x=true, y=add1(x) in x" "arithmetic expected a number";
+  t "shadow_across_lets_allowed" "let x = 4 in let x = 2 in x" "2";
+  te "shadow_within_let_not_allowed" "let x = 4, x=2 in x" "shadows";
 
   (* order ops tests *)
   t "order_ops1" "let z=true in isbool(1) || z" "true";
