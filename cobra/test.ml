@@ -254,6 +254,9 @@ let suite =
   (* order ops tests *)
   t "order_ops1" "let z=true in isbool(1) || z" "true";
   te "order_op2" "(let z=true in isbool(1)) || z" "is not in scope";
+
+  (* PrintStack not yet implemented *)
+  te "print_stack" "printStack(2)" "PrintStack not yet implemented";
  ]
 ;;
 
