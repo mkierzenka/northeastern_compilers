@@ -100,6 +100,20 @@ let suite =
     (sprintf "2 * %s" str_min_snake_num)
     "overflow";
 
+  (* isnum/isbool *)
+  t "isnum1" "isnum(0)" "true";
+  t "isnum2" "isnum(-2)" "true";
+  t "isnum3" "isnum(9 + add1(2))" "true";
+  t "isnum4" "isnum(true && false)" "false";
+  t "isnum5" "isnum(true && true)" "false";
+  t "isbool1" "isbool(true)" "true";
+  t "isbool2" "isbool(false)" "true";
+  t "isbool3" "isbool(false || (add1(1) == 3))" "true";
+  t "isbool4" "isbool(isnum(7))" "true";
+  t "isbool5" "isbool(7)" "false";
+  t "isbool6" "isbool(0)" "false";
+  t "isbool7" "isbool(2 + 3)" "false";
+
   (* print tests *)
   t "print_5" "print(5)" "5\n5";
   t "print_-5" "print(-5)" "-5\n-5";
@@ -121,7 +135,7 @@ let suite =
   t "plus_minus_times" "(add1(4) + 7) - sub1(3) * add1(2)" "30";
   t "add_sub_edge" (sprintf "add1(sub1(%s)) + 0" str_max_snake_num) str_max_snake_num;
   te "plus_err" "4 + false" "arithmetic expected a number";
-  te "minus_err" "(true && false) - 9" "arithmetic expected a number";
+  te "minus_err" "(isnum(4) && false) - 9" "arithmetic expected a number";
   te "times_err" "4 * true" "arithmetic expected a number";
   te "add1_err" "add1(false || false)" "arithmetic expected a number";
   te "sub1_err" "sub1(false)" "arithmetic expected a number";
@@ -216,7 +230,7 @@ let suite =
   t "if_mixed" "print(if 2 < 3: true else: 4)" "true\ntrue";
   t "if_mixed2" "print(if 99 < 3: true else: 4)" "4\n4";
   te "if_cond_num_err" "if 1: true else: false" "if expected a boolean";
-  te "if_binding_err" "if (1 == 1): (let x=2 in x) else: x" "is not in scope";
+  te "if_binding_err" "if isnum(1): (let x=2 in x) else: x" "is not in scope";
 
   (* if lazy eval tests *)
   t "if_lazy_consts1" "if true: 5 else: print(7)" "5";
@@ -232,14 +246,14 @@ let suite =
   t "let_multi" "let x=2, y=add1(98), z=(100) in x + y + x" "103";
   t "let_multi_bind_ref" "let x=3, y=add1(x), z=9*2*y in z" "72";
   t "let_side_effect_unused" "let x=print(false) in 3" "false\n3";  (* src: Piazza post #49 *)
-  t "let_side_effect_used" "let x=print(false) in x" "false\nfalse";
+  t "let_side_effect_used" "let x=print(isbool(6)) in x" "false\nfalse";
   te "let_unknown_var" "let x=1,s=2 in t" "is not in scope";
   te "let_backwards_binds" "let x=y,y=2 in 3" "is not in scope";
   te "let_bind_eval_first" "let x=true, y=add1(x) in x" "arithmetic expected a number";
 
   (* order ops tests *)
-  t "order_ops1" "let z=true in false || z" "true";
-  te "order_op2" "(let z=true in false) || z" "is not in scope";
+  t "order_ops1" "let z=true in isbool(1) || z" "true";
+  te "order_op2" "(let z=true in isbool(1)) || z" "is not in scope";
  ]
 ;;
 
