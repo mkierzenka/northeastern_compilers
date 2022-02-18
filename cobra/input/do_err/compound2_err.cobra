@@ -1,0 +1,5 @@
+if (let ian=88 in false): print(99)
+else:
+  let marcin=101 in
+  let marcin=77,other=!(marcin) in
+    add1(sub1(marcin - 2))

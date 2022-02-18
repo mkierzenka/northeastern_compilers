@@ -1,0 +1,7 @@
+let goal=100,bad=-1 in
+  if (let z=true in print(z) && add1(false)): print(bad)
+  else: 
+    if print(bad < 0):
+      true && (goal >= 101)
+    else:
+      print(bad - 1)
