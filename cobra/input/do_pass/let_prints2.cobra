@@ -1,0 +1,1 @@
+let x=print(true), y=print(add1(-1)), z=print(y + 1) in z + z * z

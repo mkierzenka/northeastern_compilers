@@ -54,6 +54,7 @@ let suite =
   t "tru" tru "true";
   t "max_snake_int" str_max_snake_num str_max_snake_num;
   t "min_snake_int" str_min_snake_num str_min_snake_num;
+  te "unbound_id" "v" "is not in scope";
 
   (* edge case tests for compile time integer overflow *)
   t "max_snake_num" str_max_snake_num str_max_snake_num;
@@ -109,6 +110,7 @@ let suite =
       "let x = 1 in (let y = print(x + 1) in print(y + 2))"
       "2\n4\n4";
   t "print_mul" "print(7 * 9)" "63\n63";
+  t "print_nest" "print(print(1 + 2))" "3\n3\n3";
 
   (* arithmetric tests *)
   t "plus" "4 + 9" "13";
@@ -116,6 +118,7 @@ let suite =
   t "times" "4 * 9" "36";
   t "add1" "add1(8)" "9";
   t "sub1" "sub1(8)" "7";
+  t "plus_minus_times" "(add1(4) + 7) - sub1(3) * add1(2)" "30";
   t "add_sub_edge" (sprintf "add1(sub1(%s)) + 0" str_max_snake_num) str_max_snake_num;
   te "plus_err" "4 + false" "arithmetic expected a number";
   te "minus_err" "(true && false) - 9" "arithmetic expected a number";
@@ -201,6 +204,7 @@ let suite =
   t "not_f" "!(false)" "true";
   t "not1" "!(2 == 3)" "true";
   t "not2" "!(3 == 3)" "false";
+  t "not_let" "let x=true in !(x)" "false";
   te "not_err1" "!(1 + 2)" "logic expected a boolean";
 
   (* if tests *)
@@ -221,8 +225,21 @@ let suite =
   t "if_lazy_consts4" "if 2 > 3: (true + true) else: sub1(7 * print(8))" "8\n55";
 
   (* let tests *)
-  t "order_ops_1" "let z=true in false || z" "true";
-  te "order_ops_2" "(let z=true in false) || z" "is not in scope";
+  t "let_const_num1" "let x=2,y=3 in x" "2";
+  t "let_const_num2" "let x=2,y=3 in 4" "4";
+  t "let_const_bool1" "let x=false,y=true in y" "true";
+  t "let_const_bool2" "let x=true in false" "false";
+  t "let_multi" "let x=2, y=add1(98), z=(100) in x + y + x" "103";
+  t "let_multi_bind_ref" "let x=3, y=add1(x), z=9*2*y in z" "72";
+  t "let_side_effect_unused" "let x=print(false) in 3" "false\n3";  (* src: Piazza post #49 *)
+  t "let_side_effect_used" "let x=print(false) in x" "false\nfalse";
+  te "let_unknown_var" "let x=1,s=2 in t" "is not in scope";
+  te "let_backwards_binds" "let x=y,y=2 in 3" "is not in scope";
+  te "let_bind_eval_first" "let x=true, y=add1(x) in x" "arithmetic expected a number";
+
+  (* order ops tests *)
+  t "order_ops1" "let z=true in false || z" "true";
+  te "order_op2" "(let z=true in false) || z" "is not in scope";
  ]
 ;;
 
