@@ -183,8 +183,8 @@ let suite =
   t "greater_3" "3 > 2" "true";
   t "greater_4" "33 > 32" "true";
   t "greater_5" "88 > 88" "false";
-  te "greater_er_1" "88 > true" "arithmetic expected a number";
-  te "greater_er_2" "(1 == 1) > 2" "arithmetic expected a number";
+  te "greater_er_1" "88 > true" "comparison expected a number";
+  te "greater_er_2" "(1 == 1) > 2" "comparison expected a number";
 
   (* greater eq tests *)
   t "greater_eq_1" "2 >= 2" "true";
@@ -192,8 +192,8 @@ let suite =
   t "greater_eq_3" "3 >= 2" "true";
   t "greater_eq_4" "33 >= 32" "true";
   t "greater_eq_5" "88 >= 88" "true";
-  te "greater_eq_er_1" "88 > (9 == 8)" "arithmetic expected a number";
-  te "greater_eq_er_2" "true > 2" "arithmetic expected a number";
+  te "greater_eq_er_1" "88 > (9 == 8)" "comparison expected a number";
+  te "greater_eq_er_2" "true > 2" "comparison expected a number";
 
   (* less tests *)
   t "less_1" "2 < 2" "false";
@@ -201,8 +201,8 @@ let suite =
   t "less_3" "3 < 2" "false";
   t "less_4" "33 < 32" "false";
   t "less_5" "88 < 88" "false";
-  te "less_er_1" "88 < (1 == 1)" "arithmetic expected a number";
-  te "less_er_2" "(1 == -1) < 2" "arithmetic expected a number";
+  te "less_er_1" "88 < (1 == 1)" "comparison expected a number";
+  te "less_er_2" "(1 == -1) < 2" "comparison expected a number";
 
   (* less eq tests *)
   t "less_eq_1" "2 <= 2" "true";
@@ -210,8 +210,8 @@ let suite =
   t "less_eq_3" "3 <= 2" "false";
   t "less_eq_4" "33 <= 32" "false";
   t "less_eq_5" "88 <= 88" "true";
-  te "less_eq_er_1" "88 <= (1 == 1)" "arithmetic expected a number";
-  te "less_eq_er_2" "(1 == -1) <= 2" "arithmetic expected a number";
+  te "less_eq_er_1" "88 <= (1 == 1)" "comparison expected a number";
+  te "less_eq_er_2" "(1 == -1) <= 2" "comparison expected a number";
 
   (* not tests *)
   t "not_t" "!(true)" "false";

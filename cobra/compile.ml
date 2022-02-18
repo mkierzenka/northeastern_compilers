@@ -499,10 +499,10 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
 
          (* check rhs for numerical val *)
          [IMov(Reg(RAX), rhs_reg)]
-         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         @ (check_rax_for_num "err_COMP_NOT_NUM")
          (* check lhs for numerical val *)
          @ [IMov(Reg(RAX), lhs_reg)]
-         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         @ (check_rax_for_num "err_COMP_NOT_NUM")
 
          (* need to use temp register R8 because Test cannot accept imm64 *)
          @ [IMov(Reg(R8), rhs_reg)]
@@ -520,10 +520,10 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
 
          (* check rhs for numerical val *)
          [IMov(Reg(RAX), rhs_reg)]
-         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         @ (check_rax_for_num "err_COMP_NOT_NUM")
          (* check lhs for numerical val *)
          @ [IMov(Reg(RAX), lhs_reg)]
-         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         @ (check_rax_for_num "err_COMP_NOT_NUM")
 
          (* need to use temp register R8 because Test cannot accept imm64 *)
          @ [IMov(Reg(R8), rhs_reg)]
@@ -541,10 +541,10 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
 
          (* check rhs for numerical val *)
          [IMov(Reg(RAX), rhs_reg)]
-         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         @ (check_rax_for_num "err_COMP_NOT_NUM")
          (* check lhs for numerical val *)
          @ [IMov(Reg(RAX), lhs_reg)]
-         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         @ (check_rax_for_num "err_COMP_NOT_NUM")
 
          (* need to use temp register R8 because Test cannot accept imm64 *)
          @ [IMov(Reg(R8), rhs_reg)]
@@ -562,10 +562,10 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
 
          (* check rhs for numerical val *)
          [IMov(Reg(RAX), rhs_reg)]
-         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         @ (check_rax_for_num "err_COMP_NOT_NUM")
          (* check lhs for numerical val *)
          @ [IMov(Reg(RAX), lhs_reg)]
-         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         @ (check_rax_for_num "err_COMP_NOT_NUM")
 
          (* need to use temp register R8 because Test cannot accept imm64 *)
          @ [IMov(Reg(R8), rhs_reg)]
