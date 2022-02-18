@@ -128,12 +128,23 @@ let suite =
   t "and_ft" "false && true" "false";
   t "and_tf" "true && false" "false";
   t "and_tt" "true && true" "true";
+  t "and_side_effect" "true && print(true)" "true\ntrue";
+  te "and_num" "true && 2" "logic expected a boolean";
+  te "and_num2" "(true && true) && 3" "logic expected a boolean";
+  te "and_num_flipped" "2 && true" "logic expected a boolean";
+  t "and_short_circuit" "false && print(2)" "false";
+  t "and_short_circuit1" "false && 8" "false";
 
   (* or tests *)
   t "or_ff" "false || false" "false";
   t "or_ft" "false || true" "true";
   t "or_tf" "true || false" "true";
   t "or_tt" "true || true" "true";
+  t "or_side_effects" "print(false) || print(true) && print(false)" "false\ntrue\nfalse\nfalse";
+  te "or_num" "false || 8" "logic expected a boolean";
+  te "or_num_flipped" "8 || false" "logic expected a boolean";
+  t "or_short_circuit_1" "true || 8" "true";
+  t "or_short_circuit_2" "true || print(2)" "true";
 
   (* eq tests *)
   t "eq_1" "2 == 2" "true";
@@ -146,6 +157,8 @@ let suite =
   t "eq_8" "true == true" "true";
   t "eq_9" "false == false" "true";
   t "eq_10" "false == true" "false";
+  t "eq_11" "(-5 == -4) == !(3 == 3)" "true";
+  t "eq_12" "(-5 == -4) == (3 == 3)" "false";
 
   (* greater tests *)
   t "greater_1" "2 > 2" "false";
@@ -153,6 +166,8 @@ let suite =
   t "greater_3" "3 > 2" "true";
   t "greater_4" "33 > 32" "true";
   t "greater_5" "88 > 88" "false";
+  te "greater_er_1" "88 > true" "arithmetic expected a number";
+  te "greater_er_2" "(1 == 1) > 2" "arithmetic expected a number";
 
   (* greater eq tests *)
   t "greater_eq_1" "2 >= 2" "true";
@@ -160,6 +175,8 @@ let suite =
   t "greater_eq_3" "3 >= 2" "true";
   t "greater_eq_4" "33 >= 32" "true";
   t "greater_eq_5" "88 >= 88" "true";
+  te "greater_eq_er_1" "88 > (9 == 8)" "arithmetic expected a number";
+  te "greater_eq_er_2" "true > 2" "arithmetic expected a number";
 
   (* less tests *)
   t "less_1" "2 < 2" "false";
@@ -167,6 +184,8 @@ let suite =
   t "less_3" "3 < 2" "false";
   t "less_4" "33 < 32" "false";
   t "less_5" "88 < 88" "false";
+  te "less_er_1" "88 < (1 == 1)" "arithmetic expected a number";
+  te "less_er_2" "(1 == -1) < 2" "arithmetic expected a number";
 
   (* less eq tests *)
   t "less_eq_1" "2 <= 2" "true";
@@ -174,23 +193,15 @@ let suite =
   t "less_eq_3" "3 <= 2" "false";
   t "less_eq_4" "33 <= 32" "false";
   t "less_eq_5" "88 <= 88" "true";
+  te "less_eq_er_1" "88 <= (1 == 1)" "arithmetic expected a number";
+  te "less_eq_er_2" "(1 == -1) <= 2" "arithmetic expected a number";
 
   (* not tests *)
   t "not_t" "!(true)" "false";
   t "not_f" "!(false)" "true";
   t "not1" "!(2 == 3)" "true";
   t "not2" "!(3 == 3)" "false";
-
-  t "and_short_circuit_1" "false && 8" "false";
-  te "and_short_circuit_2" "true && 8" "logic expected a boolean";
-  t "or_short_circuit_1" "true || 8" "true";
-  te "or_short_circuit_2" "false || 8" "logic expected a boolean";
-
-  t "side_effect_1" "false && print(9)" "false";
-  t "side_effect_2" "false && print(true)" "false";
-  t "side_effect_3" "true && print(true)" "true\ntrue";
-  t "side_effect_4" "true || print(true)" "true";
-  t "side_effect_5" "print(false) || print(true) && print(false)" "false\ntrue\nfalse\nfalse";
+  te "not_err1" "!(1 + 2)" "logic expected a boolean";
 
   (* if tests *)
   t "if_consts1" "if true: 5 else: 7" "5";
