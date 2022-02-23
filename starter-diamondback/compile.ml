@@ -222,6 +222,11 @@ let anf (p : tag program) : unit aprogram =
 ;;
 
 
+(* TODO possibly move typedef to exprs? *)
+type env_entry =
+  | Var
+  | Func of int
+
 
 let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
   let rec wf_E e (* other parameters may be needed here *) =
