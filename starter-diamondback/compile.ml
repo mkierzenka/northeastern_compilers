@@ -157,6 +157,13 @@ let anf (p : tag program) : unit aprogram =
   and helpD (d : tag decl) : unit adecl =
     match d with
     | DFun(name, args, body, _) -> ADFun(name, List.map fst args, helpA body, ())
+  and helpArgs (args : tag expr list) : (unit immexpr list * (string * unit cexpr) list) =
+    match args with
+    | [] -> ([], [])
+    | expr :: tail ->
+      let (immedsTail, setupsTail) = (helpArgs tail) in
+      let (immedExpr, setupExpr) = (helpI expr) in
+      (immedExpr :: immedsTail, setupExpr @ setupsTail)
   and helpC (e : tag expr) : (unit cexpr * (string * unit cexpr) list) = 
     match e with
     | EPrim1(op, arg, _) ->
@@ -175,7 +182,8 @@ let anf (p : tag program) : unit aprogram =
        let (body_ans, body_setup) = helpC (ELet(rest, body, pos)) in
        (body_ans, exp_setup @ [(bind, exp_ans)] @ body_setup)
     | EApp(funname, args, _) ->
-       raise (NotYetImplemented "Implement ANF conversion for function calls")
+       let (immargs, args_setups) = (helpArgs args) in
+       (CApp(funname, immargs, ()), args_setups)
     | _ -> let (imm, setup) = helpI e in (CImmExpr imm, setup)
 
   and helpI (e : tag expr) : (unit immexpr * (string * unit cexpr) list) =
@@ -198,7 +206,9 @@ let anf (p : tag program) : unit aprogram =
        let (cond_imm, cond_setup) = helpI cond in
        (ImmId(tmp, ()), cond_setup @ [(tmp, CIf(cond_imm, helpA _then, helpA _else, ()))])
     | EApp(funname, args, tag) ->
-       raise (NotYetImplemented "Implement ANF conversion for function calls")
+       let tmp = sprintf "app_%d" tag in
+       let (capp, capp_setup) = helpC e in
+       (ImmId(tmp, ()), capp_setup @ [(tmp, capp)])
     | ELet([], body, _) -> helpI body
     | ELet((bind, exp, _)::rest, body, pos) ->
        let (exp_ans, exp_setup) = helpC exp in
