@@ -232,17 +232,27 @@ type env_entry = sourcespan * id_t
 ;;
 
 
-(* Given a function name and an env, this function will check whether the function name is
- * already present in the env.  If it is, then we will return a list that contains the
+(* Given a function name and a list of decls, this function will check whether the function name
+ * is duplicated in the decl list.  If it is, then we will return a list that contains the
  * DuplicateFun error. *)
-let rec check_duplicate_decl (env : env_entry envt) (fname : string) (loc_sp : sourcespan) : exn list =
-  match env with
+let rec check_duplicate_decl (fname : string) (decls : sourcespan decl list) (existing : sourcespan) : exn list =
+  match decls with
   | [] -> [] (* no duplicates found -> no error *)
-  | (k, (existing_sp, _)) :: tail ->
+  | DFun(k, _, _, loc) :: tail ->
       if k = fname then
-        [DuplicateFun(fname, loc_sp, existing_sp)]
+        [DuplicateFun(fname, loc, existing)]
       else
-        check_duplicate_decl tail fname loc_sp
+        check_duplicate_decl fname tail loc
+;;
+
+let rec check_duplicate_var (sym : string) (binds : sourcespan bind list) (existing : sourcespan) : exn list =
+  match binds with
+  | [] -> [] (* no duplicates found -> no error *)
+  | (k, v, loc) :: tail ->
+      if k = sym then
+        [DuplicateId(sym, loc, existing)]
+      else
+        check_duplicate_var sym tail loc
 ;;
 
 let rec var_in_env (id : string) (env : env_entry envt) : bool =
@@ -257,9 +267,26 @@ let rec var_in_env (id : string) (env : env_entry envt) : bool =
       false
 ;;
 
-(* TODO implement *)
+let rec func_in_env (id : string) (env : env_entry envt) : bool =
+  match env with
+  | [] -> false
+  | (k, (_, Var)) :: tail ->
+      (* this key semantic choice stipulates that variables shadow functions *)
+      if id = k then false
+      else func_in_env id tail
+  | (k, (_, Func(_))) :: tail ->
+      if id = k then true
+      else func_in_env id tail
+;;
+
 let rec add_args_to_env (args : (string * sourcespan) list) (env : env_entry envt) : env_entry envt =
-  env
+  (* fold direction doesn't matter since arg names are required to be unique *)
+  List.fold_left
+    (fun env_acc arg ->
+      match arg with
+      | (arg_name, loc) -> (arg_name, (loc, Var)) :: env_acc)
+    env
+    args
 ;;
 
 let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
@@ -268,29 +295,50 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
   let rec setup_env (d : sourcespan decl list) : (env_entry envt) * (exn list) =
     match d with
     | [] -> ([], [])
-    | DFun(fname, args, body, sp) :: tail ->
+    | DFun(fname, args, body, loc) :: tail ->
         let (tail_env, tail_errs) = (setup_env tail) in
-        let new_errs = tail_errs @ (check_duplicate_decl tail_env fname sp) in
-        let new_env = (fname, (sp, Func(List.length args))) :: tail_env in
+        let new_errs = (check_duplicate_decl fname tail loc) @ tail_errs in
+        let new_env = (fname, (loc, Func(List.length args))) :: tail_env in
         (new_env, new_errs)
   (* checks an expr to see if it's well formed *)
   and wf_E (e : sourcespan expr) (env : env_entry envt) : (exn list) =
     match e with
-    (*| ELet of 'a bind list * 'a expr * 'a*)
+    | ELet(binds, body, loc) ->
+        let (let_env, let_errs) = wf_Binds binds env in
+        let_errs @ (wf_E body let_env)
     | EPrim1(op, expr, _) -> wf_E expr env
     | EPrim2(op, lhs, rhs, _) -> (wf_E lhs env) @ (wf_E rhs env)
     | EIf(cond, thn, els, _) -> (wf_E cond env) @ (wf_E thn env) @ (wf_E els env)
-    | ENumber(n, sp) ->
+    | ENumber(n, loc) ->
        if n > (Int64.div Int64.max_int 2L) || n < (Int64.div Int64.min_int 2L) then
-         [Overflow(n, sp)]
+         [Overflow(n, loc)]
        else
          []
     | EBool _ -> []
-    | EId(id, sp) ->
+    | EId(id, loc) ->
         if var_in_env id env then []
-        else [UnboundId(id, sp)]
-    (*| EApp of string * 'a expr list * 'a*)
-    | _ -> []
+        else [UnboundId(id, loc)]
+    | EApp(fname, args, loc) ->
+        let arg_errs = List.fold_left (fun errs arg -> errs @ (wf_E arg env)) [] args in
+        if func_in_env fname env then
+          let (decl_loc, id_t) = find env fname in
+          match id_t with
+          | Func(arity) ->
+              let callsite_arity = List.length args in
+              if arity = callsite_arity then
+                arg_errs
+              else
+                [Arity(arity,callsite_arity,loc)] @ arg_errs
+          | Var -> raise (InternalCompilerError (sprintf "Applying variable %s as a function" fname))
+        else
+          [UnboundFun(fname,loc)] @ arg_errs
+  and wf_Binds (binds : sourcespan bind list) (env : env_entry envt) : (env_entry envt) * (exn list) =
+    match binds with
+    | [] -> (env, [])
+    | (sym, expr, loc) :: tail ->
+        let (tail_env, tail_errs) = wf_Binds tail env in
+        let new_env = (sym, (loc, Var)) :: env in
+        (new_env, (check_duplicate_var sym tail loc) @ tail_errs)
   (* checks a decl list to see if it's well formed *)
   and wf_D (d : sourcespan decl list) (env : env_entry envt) : (exn list) =
     match d with
