@@ -223,20 +223,93 @@ let anf (p : tag program) : unit aprogram =
 
 
 (* TODO possibly move typedef to exprs? *)
-type env_entry =
+type id_t =
   | Var
   | Func of int
+;;
 
+type env_entry = sourcespan * id_t
+;;
+
+
+(* Given a function name and an env, this function will check whether the function name is
+ * already present in the env.  If it is, then we will return a list that contains the
+ * DuplicateFun error. *)
+let rec check_duplicate_decl (env : env_entry envt) (fname : string) (loc_sp : sourcespan) : exn list =
+  match env with
+  | [] -> [] (* no duplicates found -> no error *)
+  | (k, (existing_sp, _)) :: tail ->
+      if k = fname then
+        [DuplicateFun(fname, loc_sp, existing_sp)]
+      else
+        check_duplicate_decl tail fname loc_sp
+;;
+
+let rec var_in_env (id : string) (env : env_entry envt) : bool =
+  match env with
+  | [] -> false
+  | (k, (_, Var)) :: tail ->
+      if id = k then true
+      else var_in_env id tail
+  | (k, (_, Func(_))) :: tail ->
+      (* an optimization: funcs are last in our env so by the time we see
+       * the first func we know we can stop looking for a var *)
+      false
+;;
+
+(* TODO implement *)
+let rec add_args_to_env (args : (string * sourcespan) list) (env : env_entry envt) : env_entry envt =
+  env
+;;
 
 let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
-  let rec wf_E e (* other parameters may be needed here *) =
-    Error([NotYetImplemented "Implement well-formedness checking for expressions"])
-  and wf_D d (* other parameters may be needed here *) =
-    Error([NotYetImplemented "Implement well-formedness checking for definitions"])
+  (* Goes through the list of function decls and adds them all to our env.  We also
+   * gather any errors along the way. *)
+  let rec setup_env (d : sourcespan decl list) : (env_entry envt) * (exn list) =
+    match d with
+    | [] -> ([], [])
+    | DFun(fname, args, body, sp) :: tail ->
+        let (tail_env, tail_errs) = (setup_env tail) in
+        let new_errs = tail_errs @ (check_duplicate_decl tail_env fname sp) in
+        let new_env = (fname, (sp, Func(List.length args))) :: tail_env in
+        (new_env, new_errs)
+  (* checks an expr to see if it's well formed *)
+  and wf_E (e : sourcespan expr) (env : env_entry envt) : (exn list) =
+    match e with
+    (*| ELet of 'a bind list * 'a expr * 'a*)
+    | EPrim1(op, expr, _) -> wf_E expr env
+    | EPrim2(op, lhs, rhs, _) -> (wf_E lhs env) @ (wf_E rhs env)
+    | EIf(cond, thn, els, _) -> (wf_E cond env) @ (wf_E thn env) @ (wf_E els env)
+    | ENumber(n, sp) ->
+       if n > (Int64.div Int64.max_int 2L) || n < (Int64.div Int64.min_int 2L) then
+         [Overflow(n, sp)]
+       else
+         []
+    | EBool _ -> []
+    | EId(id, sp) ->
+        if var_in_env id env then []
+        else [UnboundId(id, sp)]
+    (*| EApp of string * 'a expr list * 'a*)
+    | _ -> []
+  (* checks a decl list to see if it's well formed *)
+  and wf_D (d : sourcespan decl list) (env : env_entry envt) : (exn list) =
+    match d with
+    | [] -> []
+    | DFun(fname, args, body, _) :: tail ->
+        wf_E body (add_args_to_env args env)
   in
   match p with
   | Program(decls, body, _) ->
-     Error([NotYetImplemented "Implement well-formedness checking for programs"])
+      (* gather all functions into the env *)
+      let (env, init_errs) = setup_env decls in
+      (* check decls *)
+      let decl_errs = wf_D decls env in
+      (* check the body *)
+      let body_errs = wf_E body env in
+      if (init_errs = []) && (decl_errs = []) && (body_errs = []) then
+        Ok(p)
+      else
+        Error(init_errs @ decl_errs @ body_errs)
 ;;
 
 (* ASSUMES that the program has been alpha-renamed and all names are unique *)
