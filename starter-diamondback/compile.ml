@@ -423,7 +423,12 @@ let compile_prog ((anfed : tag aprogram), (env : arg envt)) : string =
   | AProgram(decls, body, _) ->
       let compiled_decls =
         List.fold_left
-          (fun accum_instrs decl -> accum_instrs @ (compile_decl decl env)) [] decls in
+          (fun accum_instrs decl ->
+            accum_instrs
+            (* basically a line of whitespace between function decls *)
+            @ [ILineComment("")]
+            @ (compile_decl decl env))
+          [] decls in
       let num_prog_body_vars = (deepest_stack body env) in
       let compiled_body = (compile_aexpr body env num_prog_body_vars false) in
       let prelude =
