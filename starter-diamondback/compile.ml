@@ -364,7 +364,9 @@ let naive_stack_allocation (prog : tag aprogram) : tag aprogram * arg envt =
   let rec help_decl (decl : tag adecl) (env : arg envt) : arg envt =
     match decl with
     | ADFun(fname, args, body, _) ->
-        let (decl_env, _) = help_aexpr body 1 env in
+        let args_with_idx = List.mapi (fun i arg -> (arg, RegOffset((i + 2)*word_size, RBP))) args in
+        let new_env = List.fold_left (fun accum_env cell -> cell :: accum_env) env args_with_idx in
+        let (decl_env, _) = help_aexpr body 1 new_env in
         decl_env
   and help_aexpr (body : tag aexpr) (si : int) (env : arg envt) : arg envt * int =
     match body with
@@ -402,23 +404,310 @@ let naive_stack_allocation (prog : tag aprogram) : tag aprogram * arg envt =
 *)
 ;;
 
-let rec compile_fun_prelude (fun_name : string) (args : string list) (env : arg envt) (num_local_vars : int): instruction list =
-  [ILabel(fun_name)]
-  fname:
-    <<RBP, RSP stack >>
-    <<make space on stack for local vars>>
+(* Compiled Type Checking *)
+let check_rax_for_num (err_lbl : string) : instruction list =
+  [
+   (* This "test" trick depends on num_tag being 0. R8 used because Test doesn't support imm64 *)
+   ILineComment("check_rax_for_num (" ^ err_lbl ^ ")");
+   IMov(Reg(R8), HexConst(num_tag_mask));
+   ITest(Reg(RAX), Reg(R8));
+   IJnz(err_lbl);
+  ]
 
-let rec compile_fun_postlude (num_local_vars : int) : instruction list =
-    <<cleanup local vars>>
-    <<cleanup RBP, RSP>>
+let check_rax_for_bool (err_lbl : string) : instruction list =
+  [
+   (* Operate on temp register R8 instead of RAX. This is because we call AND
+    * on the register, which will alter the value. We want to preserve the value
+    * in RAX, hence we operate on R8 instead. R9 is used as intermediate because
+      And, Cmp don't work on imm64s *)
+   ILineComment("check_rax_for_bool (" ^ err_lbl ^ ")");
+   IMov(Reg(R8), Reg(RAX));
+   IMov(Reg(R9), HexConst(bool_tag_mask));
+   IAnd(Reg(R8), Reg(R9));
+   IMov(Reg(R9), HexConst(bool_tag));
+   ICmp(Reg(R8), Reg(R9));
+   IJnz(err_lbl);
+  ]
+
+let check_for_overflow = [IJo("err_OVERFLOW")]
 
 
-  raise (NotYetImplemented "Compile funs not yet implemented")
-and compile_aexpr (e : tag aexpr) (env : arg envt) (num_args : int) (is_tail : bool) : instruction list =
-  raise (NotYetImplemented "Compile aexpr not yet implemented")
+let compile_fun_prelude (fun_name : string) (args : string list) (env : arg envt) (num_local_vars : int): instruction list =
+  [
+    ILabel(fun_name);
+    IPush(Reg(RBP));
+    IMov(Reg(RBP), Reg(RSP));
+    ISub(Reg(RSP), Const(Int64.of_int (word_size * num_local_vars)))  (* allocates stack space for all local vars *)
+  ]
+
+let compile_fun_postlude (num_local_vars : int) : instruction list =
+  [
+    IAdd(Reg(RSP), Const(Int64.of_int (word_size * num_local_vars)));  (* Undoes the allocation *)
+    IPop(Reg(RBP));
+    IRet;
+  ]
+
+let rec compile_aexpr (e : tag aexpr) (env : arg envt) (num_args : int) (is_tail : bool) : instruction list =
+  match e with
+  | ALet(id, bind, body, _) -> 
+    let compiled_bind = compile_cexpr bind env num_args is_tail in
+    let dest = (find env id) in
+    let compiled_body = compile_aexpr body env num_args is_tail in
+    compiled_bind @ [IMov(dest, Reg(RAX))] @ compiled_body
+  | ACExpr(expr) -> (compile_cexpr expr env num_args is_tail)
 and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : bool) =
-  raise (NotYetImplemented "Compile cexpr not yet implemented")
-and compile_imm e (env : arg envt) =
+  match e with
+  | CIf(cond, thn, els, tag) ->
+     let cond_reg = compile_imm cond env in
+     let lbl_comment = sprintf "if_%d" tag in
+     let lbl_thn = sprintf "if_then_%d" tag in
+     let lbl_els = sprintf "if_else_%d" tag in
+     let lbl_done = sprintf "if_done_%d" tag in
+     (* check cond for boolean val *)
+     [ILineComment(lbl_comment)]
+     @ [IMov(Reg(RAX), cond_reg)]
+     @ (check_rax_for_bool "err_IF_NOT_BOOL")
+     (* test for RAX == true *)
+     (* need to use temp register R8 because Test cannot accept imm64 *)
+     @ [IMov(Reg(R8), bool_mask)]
+     @ [ITest(Reg(RAX), Reg(R8))]
+     @ [IJz(lbl_els)]
+
+     @ [ILabel(lbl_thn)]
+     @ (compile_aexpr thn env num_args is_tail)
+     @ [IJmp(lbl_done)]
+
+     @ [ILabel(lbl_els)]
+     @ (compile_aexpr els env num_args is_tail)
+     @ [ILabel(lbl_done)]
+  | CPrim1(op, body, tag) -> 
+    let body_imm = compile_imm body env in
+     begin match op with
+       | Add1 ->
+           [IMov(Reg(RAX), body_imm)]
+           @ (check_rax_for_num "err_ARITH_NOT_NUM")
+           @ [IAdd(Reg(RAX), Const(2L))]
+           @ check_for_overflow
+       | Sub1 ->
+           [IMov(Reg(RAX), body_imm)]
+           @ (check_rax_for_num "err_ARITH_NOT_NUM")
+           @ [ISub(Reg(RAX), Const(2L))]
+           @ check_for_overflow
+        | Print -> [
+            IMov(Reg(RDI), body_imm);
+            ICall("print");
+          ]
+        | IsBool ->
+          let true_lbl = sprintf "is_bool_true_%d" tag in
+          let false_lbl = sprintf "is_bool_false_%d" tag in
+          let done_lbl = sprintf "is_bool_done_%d" tag in
+          [
+           IMov(Reg(RAX), body_imm);
+           (* Don't need to save RAX on the stack because we overwrite the
+            * value with true/false later. R8 used because And, Cmp don't support imm64 *)
+           IMov(Reg(R8), HexConst(bool_tag_mask));
+           IAnd(Reg(RAX), Reg(R8));
+           IMov(Reg(R8), HexConst(bool_tag));
+           ICmp(Reg(RAX), Reg(R8));
+           IJz(true_lbl);
+           (* case not bool *)
+           ILabel(false_lbl);
+           IMov(Reg(RAX), const_false);
+           IJmp(done_lbl);
+           (* case is a bool *)
+           ILabel(true_lbl);
+           IMov(Reg(RAX), const_true);
+           (* done *)
+           ILabel(done_lbl);
+          ]
+        | IsNum ->
+          let true_lbl = sprintf "is_num_true_%d" tag in
+          let false_lbl = sprintf "is_num_false_%d" tag in
+          let done_lbl = sprintf "is_num_done_%d" tag in
+          [
+           IMov(Reg(RAX), body_imm);
+           (* This "test" trick depends on num_tag being 0. R8 used because Test doesn't support imm64 *)
+           IMov(Reg(R8), HexConst(num_tag_mask));
+           ITest(Reg(RAX), Reg(R8));
+           IJz(true_lbl);
+           (* case not num *)
+           ILabel(false_lbl);
+           IMov(Reg(RAX), const_false);
+           IJmp(done_lbl);
+           (* case is a num *)
+           ILabel(true_lbl);
+           IMov(Reg(RAX), const_true);
+           (* done *)
+           ILabel(done_lbl);
+          ]
+        | Not ->
+           [IMov(Reg(RAX), body_imm)]
+           @ (check_rax_for_bool "err_LOGIC_NOT_BOOL")
+           (* need to use temp register R8 because Xor cannot accept imm64 *)
+           @ [IMov(Reg(R8), bool_mask)]
+           @ [IXor(Reg(RAX), Reg(R8))]
+        | PrintStack ->
+            raise (NotYetImplemented "PrintStack not yet implemented")
+     end
+  | CPrim2(op, lhs, rhs, tag) ->
+     let lhs_reg = compile_imm lhs env in
+     let rhs_reg = compile_imm rhs env in
+     begin match op with
+      | Plus ->
+         (* check rhs for numerical val *)
+         [IMov(Reg(RAX), rhs_reg)]
+         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         (* check lhs for numerical val *)
+         @ [IMov(Reg(RAX), lhs_reg)]
+         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         (* need to use a temp register because ADD does not properly handle imm64 (for overflow) *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [IAdd(Reg(RAX), Reg(R8))]
+         @ check_for_overflow
+      | Minus ->
+         (* check rhs for numerical val *)
+         [IMov(Reg(RAX), rhs_reg)]
+         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         (* check lhs for numerical val *)
+         @ [IMov(Reg(RAX), lhs_reg)]
+         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         (* need to use a temp register because SUB does not properly handle imm64 (for overflow) *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [ISub(Reg(RAX), Reg(R8))]
+         @ check_for_overflow
+      | Times ->
+         (* check rhs for numerical val *)
+         [IMov(Reg(RAX), rhs_reg)]
+         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         (* check lhs for numerical val *)
+         @ [IMov(Reg(RAX), lhs_reg)]
+         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         @ [ISar(Reg(RAX), Const(1L))]
+         (* need to use a temp register because IMUL does not properly handle imm64 (for overflow) *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [IMul(Reg(RAX), Reg(R8))]
+         @ check_for_overflow
+      | And -> raise (InternalCompilerError "Impossible: 'and' should be rewritten")
+      | Or -> raise (InternalCompilerError "Impossible: 'or' should be rewritten")
+      | Greater ->
+         let lbl_false = sprintf "greater_false_%d" tag in
+         let lbl_done = sprintf "greater_done_%d" tag in
+
+         (* check rhs for numerical val *)
+         [IMov(Reg(RAX), rhs_reg)]
+         @ (check_rax_for_num "err_COMP_NOT_NUM")
+         (* check lhs for numerical val *)
+         @ [IMov(Reg(RAX), lhs_reg)]
+         @ (check_rax_for_num "err_COMP_NOT_NUM")
+
+         (* need to use temp register R8 because Test cannot accept imm64 *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [ICmp(Reg(RAX), Reg(R8))]
+         @ [IMov(Reg(RAX), const_true)]
+         @ [IJg(lbl_done)]
+
+         @ [ILabel(lbl_false)]
+         @ [IMov(Reg(RAX), const_false)]
+
+         @ [ILabel(lbl_done)]
+      | GreaterEq ->
+         let lbl_false = sprintf "greater_eq_false_%d" tag in
+         let lbl_done = sprintf "greater_eq_done_%d" tag in
+
+         (* check rhs for numerical val *)
+         [IMov(Reg(RAX), rhs_reg)]
+         @ (check_rax_for_num "err_COMP_NOT_NUM")
+         (* check lhs for numerical val *)
+         @ [IMov(Reg(RAX), lhs_reg)]
+         @ (check_rax_for_num "err_COMP_NOT_NUM")
+
+         (* need to use temp register R8 because Test cannot accept imm64 *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [ICmp(Reg(RAX), Reg(R8))]
+         @ [IMov(Reg(RAX), const_true)]
+         @ [IJge(lbl_done)]
+
+         @ [ILabel(lbl_false)]
+         @ [IMov(Reg(RAX), const_false)]
+
+         @ [ILabel(lbl_done)]
+      | Less ->
+         let lbl_false = sprintf "less_false_%d" tag in
+         let lbl_done = sprintf "less_done_%d" tag in
+
+         (* check rhs for numerical val *)
+         [IMov(Reg(RAX), rhs_reg)]
+         @ (check_rax_for_num "err_COMP_NOT_NUM")
+         (* check lhs for numerical val *)
+         @ [IMov(Reg(RAX), lhs_reg)]
+         @ (check_rax_for_num "err_COMP_NOT_NUM")
+
+         (* need to use temp register R8 because Test cannot accept imm64 *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [ICmp(Reg(RAX), Reg(R8))]
+         @ [IMov(Reg(RAX), const_true)]
+         @ [IJl(lbl_done)]
+
+         @ [ILabel(lbl_false)]
+         @ [IMov(Reg(RAX), const_false)]
+
+         @ [ILabel(lbl_done)]
+      | LessEq ->
+         let lbl_false = sprintf "less_eq_false_%d" tag in
+         let lbl_done = sprintf "less_eq_done_%d" tag in
+
+         (* check rhs for numerical val *)
+         [IMov(Reg(RAX), rhs_reg)]
+         @ (check_rax_for_num "err_COMP_NOT_NUM")
+         (* check lhs for numerical val *)
+         @ [IMov(Reg(RAX), lhs_reg)]
+         @ (check_rax_for_num "err_COMP_NOT_NUM")
+
+         (* need to use temp register R8 because Test cannot accept imm64 *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [ICmp(Reg(RAX), Reg(R8))]
+         @ [IMov(Reg(RAX), const_true)]
+         @ [IJle(lbl_done)]
+
+         @ [ILabel(lbl_false)]
+         @ [IMov(Reg(RAX), const_false)]
+
+         @ [ILabel(lbl_done)]
+      | Eq ->
+         let lbl_false = sprintf "eq_false_%d" tag in
+         let lbl_done = sprintf "eq_done_%d" tag in
+
+         [IMov(Reg(RAX), lhs_reg)]
+
+         (* need to use temp register R8 because Test cannot accept imm64 *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [ICmp(Reg(RAX), Reg(R8))]
+         @ [IMov(Reg(RAX), const_true)]
+         @ [IJe(lbl_done)]
+
+         @ [ILabel(lbl_false)]
+         @ [IMov(Reg(RAX), const_false)]
+
+         @ [ILabel(lbl_done)]
+     end
+  | CApp(fname, args, _) ->
+    let padding = (if (List.length args) mod 2 = 0 then [] else [IPush(Sized(QWORD_PTR, Const(0L)))]) in
+    let compiled_args = List.map
+                       (fun arg ->
+                          let compiled_imm = (compile_imm arg env) in
+                          IPush(compiled_imm))
+                       args
+                       in
+    let padded_comp_args = compiled_args @ padding in
+    let num_args_passed = List.length padded_comp_args in
+    (List.rev padded_comp_args)
+    @
+    [
+    ICall(fname);
+    IAdd(Reg(RSP), Const(Int64.of_int (word_size * num_args_passed)));
+    ]
+  | CImmExpr(expr) -> [IMov(Reg(RAX), (compile_imm expr env))]
+and compile_imm e (env : arg envt) : arg =
   match e with
   | ImmNum(n, _) -> Const(Int64.shift_left n 1)
   | ImmBool(true, _) -> const_true
