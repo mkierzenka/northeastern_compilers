@@ -364,7 +364,7 @@ let naive_stack_allocation (prog : tag aprogram) : tag aprogram * arg envt =
   let rec help_decl (decl : tag adecl) (env : arg envt) : arg envt =
     match decl with
     | ADFun(fname, args, body, _) ->
-        let (decl_env, _) = help_aexpr body 0 env in
+        let (decl_env, _) = help_aexpr body 1 env in
         decl_env
   and help_aexpr (body : tag aexpr) (si : int) (env : arg envt) : arg envt * int =
     match body with
@@ -387,7 +387,7 @@ let naive_stack_allocation (prog : tag aprogram) : tag aprogram * arg envt =
   | AProgram(decls, body, _) ->
       let decl_env =
         List.fold_left (fun accum_env decl -> help_decl decl accum_env) [] decls in
-      let (prog_env, _) = help_aexpr body 0 decl_env in
+      let (prog_env, _) = help_aexpr body 1 decl_env in
       (prog, prog_env)
 
 (* In Cobra, you had logic somewhere that tracked the stack index, starting at 1 and incrementing it
@@ -419,7 +419,60 @@ let compile_decl (d : tag adecl) (env : arg envt): instruction list =
   raise (NotYetImplemented "Compile decl not yet implemented")
 
 let compile_prog ((anfed : tag aprogram), (env : arg envt)) : string =
-  raise (NotYetImplemented "Compiling programs not implemented yet")
+  match anfed with
+  | AProgram(decls, body, _) ->
+      let compiled_decls =
+        List.fold_left
+          (fun accum_instrs decl -> accum_instrs @ (compile_decl decl env)) [] decls in
+      let num_prog_body_vars = (deepest_stack body env) in
+      let compiled_body = (compile_aexpr body env num_prog_body_vars false) in
+      let prelude =
+        "section .text
+extern error
+extern print
+extern error
+global our_code_starts_here" in
+      let stack_setup = [
+          ILabel("our_code_starts_here");
+          IPush(Reg(RBP));
+          IMov(Reg(RBP), Reg(RSP));
+          ISub(Reg(RSP), Const(Int64.of_int (word_size * num_prog_body_vars)))  (* allocates stack space for all local vars *)
+        ] in
+      let postlude = [
+          ILabel("program_done");
+          IAdd(Reg(RSP), Const(Int64.of_int (word_size * num_prog_body_vars)));  (* Undoes the allocation *)
+          IPop(Reg(RBP));
+          IRet;
+
+          (* Error Labels *)
+          ILabel("err_COMP_NOT_NUM");
+          IMov(Reg(RDI), Const(err_COMP_NOT_NUM));
+          ICall("error");
+          IJmp("program_done");
+
+          ILabel("err_ARITH_NOT_NUM");
+          IMov(Reg(RDI), Const(err_ARITH_NOT_NUM));
+          ICall("error");
+          IJmp("program_done");
+
+          ILabel("err_LOGIC_NOT_BOOL");
+          IMov(Reg(RDI), Const(err_LOGIC_NOT_BOOL));
+          ICall("error");
+          IJmp("program_done");
+
+          ILabel("err_IF_NOT_BOOL");
+          IMov(Reg(RDI), Const(err_IF_NOT_BOOL));
+          ICall("error");
+          IJmp("program_done");
+
+          ILabel("err_OVERFLOW");
+          IMov(Reg(RDI), Const(err_OVERFLOW));
+          ICall("error");
+          IJmp("program_done");
+        ] in
+      let decl_assembly_string = (to_asm compiled_decls) in
+      let body_assembly_string = (to_asm (stack_setup @ compiled_body @ postlude)) in
+      sprintf "%s%s%s\n" prelude decl_assembly_string body_assembly_string 
 
 (* Feel free to add additional phases to your pipeline.
    The final pipeline phase needs to return a string,
