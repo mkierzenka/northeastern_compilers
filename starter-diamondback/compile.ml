@@ -242,6 +242,8 @@ let rec check_duplicate_decl (fname : string) (decls : sourcespan decl list) (ex
         check_duplicate_decl fname tail loc
 ;;
 
+(* TODO better comment *)
+(* for lets *)
 let rec check_duplicate_var (sym : string) (binds : sourcespan bind list) (existing : sourcespan) : exn list =
   match binds with
   | [] -> [] (* no duplicates found -> no error *)
@@ -359,7 +361,35 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
 
 (* ASSUMES that the program has been alpha-renamed and all names are unique *)
 let naive_stack_allocation (prog : tag aprogram) : tag aprogram * arg envt =
-  raise (NotYetImplemented "Extract your stack-slot allocation logic from Cobra's compile_expr into here")
+  let rec help_decl (decl : tag adecl) (env : arg envt) : arg envt =
+    match decl with
+    | ADFun(fname, args, body, _) ->
+        let (decl_env, _) = help_aexpr body 0 env in
+        decl_env
+  and help_aexpr (body : tag aexpr) (si : int) (env : arg envt) : arg envt * int =
+    match body with
+    | ALet(sym, bind, body, _) ->
+        let newenv = (sym, RegOffset(~-si*word_size, RBP)) :: env in
+        let (bindenv, newsi) = help_cexpr bind (si+1) newenv in
+        help_aexpr body newsi bindenv
+    | ACExpr(cexpr) -> help_cexpr cexpr si env
+  and help_cexpr (expr : tag cexpr) (si : int) (env : arg envt) : arg envt * int =
+    match expr with
+    | CIf(cond, lhs, rhs, _) ->
+        let (lhs_env, lhs_si) = help_aexpr lhs si env in
+        help_aexpr rhs lhs_si lhs_env
+    | CPrim1 _ -> (env, si)
+    | CPrim2 _ -> (env, si)
+    | CApp _ -> (env, si)
+    | CImmExpr _ -> (env, si)
+  in
+  match prog with
+  | AProgram(decls, body, _) ->
+      let decl_env =
+        List.fold_left (fun accum_env decl -> help_decl decl accum_env) [] decls in
+      let (prog_env, _) = help_aexpr body 0 decl_env in
+      (prog, prog_env)
+
 (* In Cobra, you had logic somewhere that tracked the stack index, starting at 1 and incrementing it
    within the bodies of let-bindings.  It built up an environment that mapped each let-bound name to
    a stack index, so that RegOffset(~-8 * stackIndex, RBP) stored the value of that let-binding.
