@@ -223,12 +223,9 @@ let anf (p : tag program) : unit aprogram =
 
 
 (* TODO possibly move typedef to exprs? *)
-type id_t =
+type env_entry =
   | Var
   | Func of int
-;;
-
-type env_entry = sourcespan * id_t
 ;;
 
 
@@ -258,10 +255,10 @@ let rec check_duplicate_var (sym : string) (binds : sourcespan bind list) (exist
 let rec var_in_env (id : string) (env : env_entry envt) : bool =
   match env with
   | [] -> false
-  | (k, (_, Var)) :: tail ->
+  | (k, Var) :: tail ->
       if id = k then true
       else var_in_env id tail
-  | (k, (_, Func(_))) :: tail ->
+  | (k, Func(_)) :: tail ->
       (* an optimization: funcs are last in our env so by the time we see
        * the first func we know we can stop looking for a var *)
       false
@@ -270,11 +267,11 @@ let rec var_in_env (id : string) (env : env_entry envt) : bool =
 let rec func_in_env (id : string) (env : env_entry envt) : bool =
   match env with
   | [] -> false
-  | (k, (_, Var)) :: tail ->
+  | (k, Var) :: tail ->
       (* this key semantic choice stipulates that variables shadow functions *)
       if id = k then false
       else func_in_env id tail
-  | (k, (_, Func(_))) :: tail ->
+  | (k, Func(_)) :: tail ->
       if id = k then true
       else func_in_env id tail
 ;;
@@ -284,7 +281,7 @@ let rec add_args_to_env (args : (string * sourcespan) list) (env : env_entry env
   List.fold_left
     (fun env_acc arg ->
       match arg with
-      | (arg_name, loc) -> (arg_name, (loc, Var)) :: env_acc)
+      | (arg_name, loc) -> (arg_name, Var) :: env_acc)
     env
     args
 ;;
@@ -298,7 +295,7 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
     | DFun(fname, args, body, loc) :: tail ->
         let (tail_env, tail_errs) = (setup_env tail) in
         let new_errs = (check_duplicate_decl fname tail loc) @ tail_errs in
-        let new_env = (fname, (loc, Func(List.length args))) :: tail_env in
+        let new_env = (fname, Func(List.length args)) :: tail_env in
         (new_env, new_errs)
   (* checks an expr to see if it's well formed *)
   and wf_E (e : sourcespan expr) (env : env_entry envt) : (exn list) =
@@ -321,7 +318,7 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
     | EApp(fname, args, loc) ->
         let arg_errs = List.fold_left (fun errs arg -> errs @ (wf_E arg env)) [] args in
         if func_in_env fname env then
-          let (decl_loc, id_t) = find env fname in
+          let id_t = find env fname in
           match id_t with
           | Func(arity) ->
               let callsite_arity = List.length args in
@@ -337,7 +334,7 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
     | [] -> (env, [])
     | (sym, expr, loc) :: tail ->
         let (tail_env, tail_errs) = wf_Binds tail env in
-        let new_env = (sym, (loc, Var)) :: env in
+        let new_env = (sym, Var) :: env in
         (new_env, (check_duplicate_var sym tail loc) @ tail_errs)
   (* checks a decl list to see if it's well formed *)
   and wf_D (d : sourcespan decl list) (env : env_entry envt) : (exn list) =
