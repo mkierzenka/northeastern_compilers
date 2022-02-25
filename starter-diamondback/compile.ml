@@ -402,7 +402,17 @@ let naive_stack_allocation (prog : tag aprogram) : tag aprogram * arg envt =
 *)
 ;;
 
-let rec compile_fun (fun_name : string) (args : string list) (env : arg envt) : instruction list =
+let rec compile_fun_prelude (fun_name : string) (args : string list) (env : arg envt) (num_local_vars : int): instruction list =
+  [ILabel(fun_name)]
+  fname:
+    <<RBP, RSP stack >>
+    <<make space on stack for local vars>>
+
+let rec compile_fun_postlude (num_local_vars : int) : instruction list =
+    <<cleanup local vars>>
+    <<cleanup RBP, RSP>>
+
+
   raise (NotYetImplemented "Compile funs not yet implemented")
 and compile_aexpr (e : tag aexpr) (env : arg envt) (num_args : int) (is_tail : bool) : instruction list =
   raise (NotYetImplemented "Compile aexpr not yet implemented")
@@ -416,7 +426,13 @@ and compile_imm e (env : arg envt) =
   | ImmId(x, _) -> (find env x)
 
 let compile_decl (d : tag adecl) (env : arg envt): instruction list =
-  raise (NotYetImplemented "Compile decl not yet implemented")
+  match d with
+  | ADFun(fname, args, body, _) ->
+    let num_body_vars = (deepest_stack body env) in
+    let prelude = compile_fun_prelude fname args env num_body_vars in
+    let compiled_body = compile_aexpr body env (List.length args) false in
+    let postlude = compile_fun_postlude num_body_vars in
+    prelude @ compiled_body @ postlude
 
 let compile_prog ((anfed : tag aprogram), (env : arg envt)) : string =
   match anfed with
