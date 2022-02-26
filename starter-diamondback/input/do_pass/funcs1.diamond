@@ -1,0 +1,7 @@
+def t():
+  true
+def f():
+  false
+
+if f(): 77
+else: 919
