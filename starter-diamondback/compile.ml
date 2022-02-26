@@ -15,6 +15,7 @@ let rec is_anf (e : 'a expr) : bool =
      List.for_all (fun (_, e, _) -> is_anf e) binds
      && is_anf body
   | EIf(cond, thn, els, _) -> is_imm cond && is_anf thn && is_anf els
+  | EScIf(cond, thn, els, _) -> is_imm cond && is_anf thn && is_anf els
   | _ -> is_imm e
 and is_imm e =
   match e with
@@ -58,6 +59,7 @@ let deepest_stack e env =
   and helpC e =
     match e with
     | CIf(c, t, f, _) -> List.fold_left max 0 [helpI c; helpA t; helpA f]
+    | CScIf(c, t, f, _) -> List.fold_left max 0 [helpI c; helpA t; helpA f]
     | CPrim1(_, i, _) -> helpI i
     | CPrim2(_, i1, i2, _) -> max (helpI i1) (helpI i2)
     | CApp(_, args, _) -> List.fold_left max 0 (List.map helpI args)
@@ -100,6 +102,53 @@ let rec find_dup (l : 'a list) : 'a option =
 
 (* IMPLEMENT EVERYTHING BELOW *)
 
+let and_or_rewrite (p : 'a program) : unit program =
+  let rec help_decl (d : 'a decl) : unit decl =
+    match d with
+    | DFun(fname, args, body, _) ->
+        let rw_body = help_expr body in
+        let rw_args =
+          List.map
+            (fun arg ->
+              match arg with
+              | (sym, _) -> (sym, ()))
+            args in
+        DFun(fname, rw_args, rw_body, ())
+  and help_expr (e : 'a expr) : unit expr =
+    match e with
+    | EPrim2(op, lhs, rhs, _) ->
+       let lhs_untagged = help_expr lhs in
+       let rhs_untagged = help_expr rhs in
+       begin match op with
+        (* (e1 && e2) -> (if !e1: false else: e2) *)
+        | And -> EScIf(EPrim1(Not, lhs_untagged, ()), EBool(false, ()), rhs_untagged, ())
+        (* (e1 || e2) -> (if e1: true else: e2) *)
+        | Or -> EScIf(lhs_untagged, EBool(true, ()), rhs_untagged, ())
+        | _ -> EPrim2(op, (help_expr lhs), (help_expr rhs), ())
+       end
+    | ELet(binds, body, _) -> ELet((bind_helper binds), (help_expr body), ())
+    | EPrim1(op, expr, _) -> EPrim1(op, (help_expr expr), ())
+    | EIf(cond, thn, els, _) ->
+        EIf((help_expr cond), (help_expr thn), (help_expr els), ())
+    | ENumber(n, _) -> ENumber(n, ())
+    | EBool(b, _) -> EBool(b, ())
+    | EId(sym, _) -> EId(sym, ())
+    | EScIf _ -> raise (InternalCompilerError "Impossible: 'EScIf' is not in syntax")
+    | EApp(fname, args, _) ->
+        let rw_args = List.map help_expr args in
+        EApp(fname, rw_args, ())
+  and bind_helper (binds : 'a bind list) : unit bind list =
+    match binds with
+    | [] -> []
+    | (sym, v, _) :: tail -> (sym, (help_expr v), ()) :: (bind_helper tail)
+  in
+  match p with
+  | Program(decls, body, _) ->
+      let rw_decls = List.map help_decl decls in
+      let rw_body = help_expr body in
+      Program(rw_decls, rw_body, ())
+;;
+
 let rec lookup_rename (x : string) (env : (string * string) list) : string =
   match env with
   | [] -> failwith (sprintf "Failed to lookup %s" x) (* should never happen, make sure to check_scope and tag first *)
@@ -129,8 +178,7 @@ let rename (e : tag program) : tag program =
     | EPrim1(op, e, t) -> EPrim1(op, (help_expr env e), t)
     | EPrim2(op, e1, e2, t) -> EPrim2(op, (help_expr env e1), (help_expr env e2), t)
     | EIf(cond, thn, els, t) -> EIf((help_expr env cond), (help_expr env thn), (help_expr env els), t)
-    (* TODO add this back *)
-    (*| EScIf(cond, thn, els, t) -> EScIf((help_expr env cond), (help_expr env thn), (help_expr env els), t)*)
+    | EScIf(cond, thn, els, t) -> EScIf((help_expr env cond), (help_expr env thn), (help_expr env els), t)
     | EApp(fname, args, t) -> e
   and bind_help (env : (string * string) list) (binds : tag bind list) : tag bind list * ((string * string) list) =
     match binds with
@@ -176,6 +224,9 @@ let anf (p : tag program) : unit aprogram =
     | EIf(cond, _then, _else, _) ->
        let (cond_imm, cond_setup) = helpI cond in
        (CIf(cond_imm, helpA _then, helpA _else, ()), cond_setup)
+    | EScIf(cond, _then, _else, _) ->
+       let (cond_imm, cond_setup) = helpI cond in
+       (CScIf(cond_imm, helpA _then, helpA _else, ()), cond_setup)
     | ELet([], body, _) -> helpC body
     | ELet((bind, exp, _)::rest, body, pos) ->
        let (exp_ans, exp_setup) = helpC exp in
@@ -205,6 +256,10 @@ let anf (p : tag program) : unit aprogram =
        let tmp = sprintf "if_%d" tag in
        let (cond_imm, cond_setup) = helpI cond in
        (ImmId(tmp, ()), cond_setup @ [(tmp, CIf(cond_imm, helpA _then, helpA _else, ()))])
+    | EScIf(cond, _then, _else, tag) ->
+       let tmp = sprintf "if_%d" tag in
+       let (cond_imm, cond_setup) = helpI cond in
+       (ImmId(tmp, ()), cond_setup @ [(tmp, CScIf(cond_imm, helpA _then, helpA _else, ()))])
     | EApp(funname, args, tag) ->
        let tmp = sprintf "app_%d" tag in
        let (capp, capp_setup) = helpC e in
@@ -308,6 +363,7 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
     | EPrim1(op, expr, _) -> wf_E expr env
     | EPrim2(op, lhs, rhs, _) -> (wf_E lhs env) @ (wf_E rhs env)
     | EIf(cond, thn, els, _) -> (wf_E cond env) @ (wf_E thn env) @ (wf_E els env)
+    | EScIf(cond, thn, els, _) -> raise (InternalCompilerError "EScIf is not part of the diamondback language")
     | ENumber(n, loc) ->
        if n > (Int64.div Int64.max_int 2L) || n < (Int64.div Int64.min_int 2L) then
          [Overflow(n, loc)]
@@ -378,6 +434,9 @@ let naive_stack_allocation (prog : tag aprogram) : tag aprogram * arg envt =
   and help_cexpr (expr : tag cexpr) (si : int) (env : arg envt) : arg envt * int =
     match expr with
     | CIf(cond, lhs, rhs, _) ->
+        let (lhs_env, lhs_si) = help_aexpr lhs si env in
+        help_aexpr rhs lhs_si lhs_env
+    | CScIf(cond, lhs, rhs, _) ->
         let (lhs_env, lhs_si) = help_aexpr lhs si env in
         help_aexpr rhs lhs_si lhs_env
     | CPrim1 _ -> (env, si)
@@ -479,6 +538,30 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
 
      @ [ILabel(lbl_els)]
      @ (compile_aexpr els env num_args is_tail)
+     @ [ILabel(lbl_done)]
+  | CScIf(cond, thn, els, tag) ->
+     let cond_reg = compile_imm cond env in
+     let lbl_comment = sprintf "scif_%d" tag in
+     let lbl_thn = sprintf "scif_then_%d" tag in
+     let lbl_els = sprintf "scif_else_%d" tag in
+     let lbl_done = sprintf "scif_done_%d" tag in
+     (* check cond for boolean val *)
+     [ILineComment(lbl_comment)]
+     @ [IMov(Reg(RAX), cond_reg)]
+     @ (check_rax_for_bool "err_LOGIC_NOT_BOOL")
+     (* test for RAX == true *)
+     (* need to use temp register R8 because Test cannot accept imm64 *)
+     @ [IMov(Reg(R8), bool_mask)]
+     @ [ITest(Reg(RAX), Reg(R8))]
+     @ [IJz(lbl_els)]
+
+     @ [ILabel(lbl_thn)]
+     @ (compile_aexpr thn env num_args is_tail)
+     @ [IJmp(lbl_done)]
+
+     @ [ILabel(lbl_els)]
+     @ (compile_aexpr els env num_args is_tail)
+     @ (check_rax_for_bool "err_LOGIC_NOT_BOOL")
      @ [ILabel(lbl_done)]
   | CPrim1(op, body, tag) -> 
     let body_imm = compile_imm body env in
@@ -790,6 +873,7 @@ global our_code_starts_here" in
 let compile_to_string (prog : sourcespan program pipeline) : string pipeline =
   prog
   |> (add_err_phase well_formed is_well_formed)
+  |> (add_phase shortcircuit_rewrite and_or_rewrite)
   |> (add_phase tagged tag)
   |> (add_phase renamed rename)
   |> (add_phase anfed (fun p -> atag (anf p)))

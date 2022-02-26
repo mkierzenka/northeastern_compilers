@@ -18,6 +18,7 @@ type phase =
   | Source of string
   | Parsed of sourcespan program
   | WellFormed of sourcespan program
+  | ShortcircuitRewrite of unit program
   | Renamed of tag program
   | Desugared of sourcespan program
   | Tagged of tag program
@@ -30,6 +31,7 @@ type phase =
 let source s = Source s
 let parsed p = Parsed p
 let well_formed p = WellFormed p
+let shortcircuit_rewrite p = ShortcircuitRewrite p
 let renamed p = Renamed p
 let desugared p = Desugared p
 let tagged p = Tagged p
@@ -102,6 +104,7 @@ let print_trace (trace : phase list) : string list =
     | Source _ -> "Source"
     | Parsed _ -> "Parsed"
     | WellFormed _ -> "Well-formed"
+    | ShortcircuitRewrite _ -> "Shortcircuit-Rewrite"
     | Renamed  _ -> "Renamed"
     | Desugared _ -> "Desugared"
     | Tagged _ -> "Tagged"
@@ -112,6 +115,7 @@ let print_trace (trace : phase list) : string list =
     | Source s -> s
     | Parsed p
     | WellFormed p -> string_of_program p
+    | ShortcircuitRewrite p -> string_of_program p
     | Renamed p -> string_of_program p
     | Desugared p -> string_of_program p
     | Tagged p -> string_of_program_with (fun tag -> sprintf "@%d" tag) p

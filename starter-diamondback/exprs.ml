@@ -33,6 +33,7 @@ and 'a expr =
   | EPrim1 of prim1 * 'a expr * 'a
   | EPrim2 of prim2 * 'a expr * 'a expr * 'a
   | EIf of 'a expr * 'a expr * 'a expr * 'a
+  | EScIf of 'a expr * 'a expr * 'a expr * 'a
   | ENumber of int64 * 'a
   | EBool of bool * 'a
   | EId of string * 'a
@@ -50,6 +51,7 @@ type 'a immexpr = (* immediate expressions *)
   | ImmId of string * 'a
 and 'a cexpr = (* compound expressions *)
   | CIf of 'a immexpr * 'a aexpr * 'a aexpr * 'a
+  | CScIf of 'a immexpr * 'a aexpr * 'a aexpr * 'a
   | CPrim1 of prim1 * 'a immexpr * 'a
   | CPrim2 of prim2 * 'a immexpr * 'a immexpr * 'a
   | CApp of string * 'a immexpr list * 'a
@@ -86,6 +88,9 @@ let tag (p : 'a program) : tag program =
     | EIf(cond, thn, els, _) ->
        let if_tag = tag() in
        EIf(helpE cond, helpE thn, helpE els, if_tag)
+    | EScIf(cond, thn, els, _) ->
+       let if_tag = tag() in
+       EScIf(helpE cond, helpE thn, helpE els, if_tag)
     | EApp(name, args, _) ->
        let app_tag = tag() in
        EApp(name, List.map helpE args, app_tag)
@@ -114,6 +119,8 @@ let rec untag (p : 'a program) : unit program =
        ELet(List.map(fun (x, b, _) -> (x, helpE b, ())) binds, helpE body, ())
     | EIf(cond, thn, els, _) ->
        EIf(helpE cond, helpE thn, helpE els, ())
+    | EScIf(cond, thn, els, _) ->
+       EScIf(helpE cond, helpE thn, helpE els, ())
     | EApp(name, args, _) ->
        EApp(name, List.map helpE args, ())
   and helpD d =
@@ -148,6 +155,9 @@ let atag (p : 'a aprogram) : tag aprogram =
     | CIf(cond, thn, els, _) ->
        let if_tag = tag() in
        CIf(helpI cond, helpA thn, helpA els, if_tag)
+    | CScIf(cond, thn, els, _) ->
+       let if_tag = tag() in
+       CScIf(helpI cond, helpA thn, helpA els, if_tag)
     | CApp(name, args, _) ->
        let app_tag = tag() in
        CApp(name, List.map helpI args, app_tag)
