@@ -392,7 +392,7 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
     | [] -> (env, [])
     | (sym, expr, loc) :: tail ->
         let (tail_env, tail_errs) = wf_Binds tail env in
-        let new_env = (sym, Var) :: env in
+        let new_env = (sym, Var) :: tail_env in
         (new_env, (check_duplicate_var sym tail loc) @ tail_errs)
   (* checks a decl list to see if it's well formed *)
   and wf_D (d : sourcespan decl list) (env : env_entry envt) : (exn list) =
@@ -512,7 +512,10 @@ let rec compile_aexpr (e : tag aexpr) (env : arg envt) (num_args : int) (is_tail
     let compiled_bind = compile_cexpr bind env num_args is_tail in
     let dest = (find env id) in
     let compiled_body = compile_aexpr body env num_args is_tail in
-    compiled_bind @ [IMov(dest, Reg(RAX))] @ compiled_body
+    [ILineComment(sprintf "Let: %s" id)]
+    @ compiled_bind
+    @ [IMov(dest, Reg(RAX))]
+    @ compiled_body
   | ACExpr(expr) -> (compile_cexpr expr env num_args is_tail)
 and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : bool) =
   match e with
