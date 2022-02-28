@@ -269,12 +269,16 @@ let tests = [
   (* PrintStack not yet implemented *)
   te "print_stack" "printStack(2)" "PrintStack not yet implemented";
 
+  (* ** Functions ** *)
   t "func_not_used_1" "def t(): true true" "true";
   t "func_not_used_2" "def t(): true false" "false";
   t "func_not_used_3" "def t(): 1 23" "23";
   t "func_not_used_4" "def t(): if true: 88 else: 92 -3" "-3";
-
-  t "func_arg" "def id(x): x id(5 + 5)" "10";
+  t "func_not_used_1a" "def id(x): x 10" "10";
+  t "func_not_used_2a" "def id(x): x true" "true";
+  t "func_not_used_3a" "def func(x): add1(x) true" "true";
+  t "func_not_used_4a" "def func(x): (2 + x) true" "true";
+  t "func_not_used_5a" "def func(x): if x<2: 0 else: 1 8" "8";
 ]
 
 let suite =

@@ -163,8 +163,11 @@ let rename (e : tag program) : tag program =
     match decls with
     | [] -> []
     | DFun(fname, args, body, tag) :: tail ->
-        (* TODO do we need to pass in the params in the env?? *)
-        let newbody = help_expr [] body in
+        (* Note, we do not rename func args to include tags, since no nested function decls so no name conflicts *)
+        let args_env = (List.map
+                        (fun tagged_arg -> let arg_name = (fst tagged_arg) in (arg_name, arg_name))
+                        args) in
+        let newbody = help_expr args_env body in
         DFun(fname, args, newbody, tag) :: (help_decl tail)
   and help_expr (env : (string * string) list) (e : tag expr) : tag expr =
     match e with
