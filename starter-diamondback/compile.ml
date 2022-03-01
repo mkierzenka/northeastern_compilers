@@ -784,7 +784,7 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
     let compiled_args = List.map
                        (fun arg ->
                           let compiled_imm = (compile_imm arg env) in
-                          IPush(compiled_imm))
+                          IPush(Sized(QWORD_PTR, compiled_imm)))
                        args
                        in
     let padded_comp_args = compiled_args @ padding in
