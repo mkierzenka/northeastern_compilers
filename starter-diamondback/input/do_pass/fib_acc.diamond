@@ -1,0 +1,13 @@
+def fib_acc(n, pre_n, steps_left):
+  if steps_left <= 0: n
+  else: let next_n = n + pre_n in
+            fib_acc(next_n, n, sub1(steps_left))
+
+def fib(n):
+  fib_acc(1, 0, n)
+
+(fib(0) == 1)
+&& (fib(1) == 1)
+&& (fib(2) == 2)
+&& (fib(3) == 3)
+&& (fib(4) == 5)

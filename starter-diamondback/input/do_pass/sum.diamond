@@ -1,0 +1,9 @@
+def cat(x):
+  print(x)
+
+def sum(x,y):
+  let x=x, s = cat(x) + y in
+  let unused = x * add1(y) in
+    0 + s
+
+sum(cat(1), cat(3))
