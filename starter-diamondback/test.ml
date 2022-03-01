@@ -299,8 +299,8 @@ let tests = [
   t "general_func_call2" "def add_eight(x): (x + (4 * add1(1))) def sub_seven(x): (x - 7)
                           if add_eight(2) < 10: print(false) else: add_eight(sub_seven(10))"
                           "11";
-  t "general_func_call3" "def ident(x): x  ident(let x=11 in x + 9)" "20";
-
+  t "general_func_call3a" "def ident(x): x  ident(let y=11 in y + 9)" "20";
+  t "general_func_call3b" "def ident(x): x  ident(let x=11 in x + 9)" "20";
 ]
 
 

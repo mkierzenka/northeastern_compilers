@@ -182,7 +182,9 @@ let rename (e : tag program) : tag program =
     | EPrim2(op, e1, e2, t) -> EPrim2(op, (help_expr env e1), (help_expr env e2), t)
     | EIf(cond, thn, els, t) -> EIf((help_expr env cond), (help_expr env thn), (help_expr env els), t)
     | EScIf(cond, thn, els, t) -> EScIf((help_expr env cond), (help_expr env thn), (help_expr env els), t)
-    | EApp(fname, args, t) -> e
+    | EApp(fname, args, t) ->
+        let newargs = (List.map (help_expr env) args) in
+        EApp(fname, newargs, t)
   and bind_help (env : (string * string) list) (binds : tag bind list) : tag bind list * ((string * string) list) =
     match binds with
     | [] -> (binds, env)
