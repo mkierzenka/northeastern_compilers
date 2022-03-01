@@ -504,7 +504,7 @@ let compile_fun_prelude (fun_name : string) (args : string list) (env : arg envt
 
 let compile_fun_postlude (num_local_vars : int) : instruction list =
   [
-    IAdd(Reg(RSP), Const(Int64.of_int (word_size * num_local_vars)));  (* Undoes the allocation *)
+    IMov(Reg(RSP), Reg(RBP));  (* Move stack to how it was at start of this function *)
     IPop(Reg(RBP));
     IRet;
   ]
@@ -780,16 +780,21 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
          @ [ILabel(lbl_done)]
      end
   | CApp(fname, args, _) ->
-    let padding = (if (List.length args) mod 2 = 0 then [] else [IPush(Sized(QWORD_PTR, Const(0L)))]) in
-    let compiled_args = List.map
-                       (fun arg ->
+    let is_even_num_args = (List.length args) mod 2 == 0 in
+    let padding = (if is_even_num_args then [] else [IMov(Reg(R8), HexConst(0xF0F0F0F0L)); IPush(Reg(R8))]) in
+    (* Push the args onto stack in reverse order *)
+    let args_rev = List.rev args in
+    let compiled_args = List.fold_left
+                       (fun accum_instrs arg ->
                           let compiled_imm = (compile_imm arg env) in
-                          IPush(Sized(QWORD_PTR, compiled_imm)))
-                       args
+                          accum_instrs @ [IMov(Reg(R8) ,compiled_imm);
+                                          IPush(Sized(QWORD_PTR, Reg(R8)))])
+                       []
+                       args_rev
                        in
-    let padded_comp_args = compiled_args @ padding in
+    let padded_comp_args = padding @ compiled_args in
     let num_args_passed = List.length padded_comp_args in
-    (List.rev padded_comp_args)
+    padded_comp_args
     @
     [
     ICall(fname);
