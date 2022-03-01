@@ -34,7 +34,9 @@ let neg_forty = "let x = -40 in x"
 let fals = "let x = false in x"
 let tru = "let x = true in x"
 
-let tests = [
+
+(* ### Regression test suite (from Cobra) ### *)
+let tests_from_cobra = [
   te "unbound_id_l" "a" "The identifier a, used at";
   te "unbound_id_r" "a" ", is not in scope";
   te "unbound_fun_l" "f()" "The function name f, used at";
@@ -268,7 +270,14 @@ let tests = [
 
   (* PrintStack not yet implemented *)
   te "print_stack" "printStack(2)" "PrintStack not yet implemented";
+]
 
+let cobra_suite =
+"cobra_suite">:::tests_from_cobra
+
+
+(* ### Tests related to Diamondback's new functionality ### *)
+let tests = [
   (* ** Functions ** *)
   t "func_not_used_1" "def t(): true true" "true";
   t "func_not_used_2" "def t(): true false" "false";
@@ -281,12 +290,12 @@ let tests = [
   t "func_not_used_5a" "def func(x): if x<2: 0 else: 1 8" "8";
 ]
 
+
 let suite =
 "suite">:::tests
- 
 
 
 
 let () =
-  run_test_tt_main ("all_tests">:::[suite; input_file_test_suite ()])
+  run_test_tt_main ("all_tests">:::[cobra_suite; suite; input_file_test_suite ()])
 ;;
