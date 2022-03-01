@@ -499,6 +499,7 @@ let compile_fun_prelude (fun_name : string) (args : string list) (env : arg envt
     ILabel(fun_name);
     IPush(Reg(RBP));
     IMov(Reg(RBP), Reg(RSP));
+    (* Don't use temp register here because we assume the RHS will never be very big *)
     ISub(Reg(RSP), Const(Int64.of_int (word_size * num_local_vars)))  (* allocates stack space for all local vars *)
   ]
 
@@ -787,17 +788,19 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
     let compiled_args = List.fold_left
                        (fun accum_instrs arg ->
                           let compiled_imm = (compile_imm arg env) in
+                          (* Use temp register because can't push imm64 directly *)
                           accum_instrs @ [IMov(Reg(R8) ,compiled_imm);
                                           IPush(Sized(QWORD_PTR, Reg(R8)))])
                        []
                        args_rev
                        in
     let padded_comp_args = padding @ compiled_args in
-    let num_args_passed = List.length padded_comp_args in
+    let num_args_passed = (List.length args) + (if is_even_num_args then 0 else 1) in
     padded_comp_args
     @
     [
     ICall(fname);
+    (* Don't use temp register here because we assume the RHS will never be very big *)
     IAdd(Reg(RSP), Const(Int64.of_int (word_size * num_args_passed)));
     ]
   | CImmExpr(expr) -> [IMov(Reg(RAX), (compile_imm expr env))]
