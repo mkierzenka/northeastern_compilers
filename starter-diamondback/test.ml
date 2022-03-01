@@ -288,6 +288,19 @@ let tests = [
   t "func_not_used_3a" "def func(x): add1(x) true" "true";
   t "func_not_used_4a" "def func(x): (2 + x) true" "true";
   t "func_not_used_5a" "def func(x): if x<2: 0 else: 1 8" "8";
+  t "multiple_func_not_used" "def a(): 2 def ident(x): x def cat(x): print(x) 8" "8";
+  t "func_unused_args" "def fun(x, y, z): print(y) 8" "8";
+
+  (* Calling funcs *)
+  t "basic_func_call" "def ident(x): x ident(10)" "10";
+  t "basic_func_call2" "def ident(x): x ident(false)" "false";
+
+  t "general_func_call" "def ident(x): x  11 * ident(print(7)+9)" "7\n176";
+  t "general_func_call2" "def add_eight(x): (x + (4 * add1(1))) def sub_seven(x): (x - 7)
+                          if add_eight(2) < 10: print(false) else: add_eight(sub_seven(10))"
+                          "11";
+  t "general_func_call3" "def ident(x): x  ident(let x=11 in x + 9)" "20";
+
 ]
 
 
