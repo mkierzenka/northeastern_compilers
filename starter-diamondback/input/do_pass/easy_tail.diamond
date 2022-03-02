@@ -1,0 +1,7 @@
+def f(x):
+  g(x)
+
+def g(x):
+  add1(x)
+
+f(1)

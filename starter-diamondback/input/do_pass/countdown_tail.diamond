@@ -1,0 +1,5 @@
+def countdown(n):
+  if n == 0: n
+  else: countdown(print(sub1(n)))
+
+countdown(5)

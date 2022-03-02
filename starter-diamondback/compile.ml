@@ -509,8 +509,8 @@ let compile_fun_postlude (num_local_vars : int) : instruction list =
 
 let rec compile_aexpr (e : tag aexpr) (env : arg envt) (num_args : int) (is_tail : bool) : instruction list =
   match e with
-  | ALet(id, bind, body, _) -> 
-    let compiled_bind = compile_cexpr bind env num_args is_tail in
+  | ALet(id, bind, body, _) ->
+    let compiled_bind = compile_cexpr bind env num_args false in
     let dest = (find env id) in
     let compiled_body = compile_aexpr body env num_args is_tail in
     [ILineComment(sprintf "Let: %s" id)]
@@ -560,11 +560,13 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
      @ [IJz(lbl_els)]
 
      @ [ILabel(lbl_thn)]
-     @ (compile_aexpr thn env num_args is_tail)
+     (* LHS is compiled before RHS, so definitely not tail position *)
+     @ (compile_aexpr thn env num_args false)
      @ [IJmp(lbl_done)]
 
      @ [ILabel(lbl_els)]
-     @ (compile_aexpr els env num_args is_tail)
+     (* Since we check that result is bool, RHS is also not in tail position *)
+     @ (compile_aexpr els env num_args false)
      @ (check_rax_for_bool "err_LOGIC_NOT_BOOL")
      @ [ILabel(lbl_done)]
   | CPrim1(op, body, tag) -> 
@@ -778,28 +780,48 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
          @ [ILabel(lbl_done)]
      end
   | CApp(fname, args, _) ->
-    let is_even_num_args = (List.length args) mod 2 == 0 in
-    let padding = (if is_even_num_args then [] else [IMov(Reg(R8), HexConst(0xF0F0F0F0L)); IPush(Reg(R8))]) in
+    let f_num_args = (List.length args) in
+    let is_even_f_num_args = f_num_args mod 2 == 0 in
+    let padding = (if is_even_f_num_args then [] else [IMov(Reg(R8), HexConst(0xF0F0F0F0L)); IPush(Reg(R8))]) in
     (* Push the args onto stack in reverse order *)
     let args_rev = List.rev args in
-    let compiled_args = List.fold_left
+    let f_num_args_passed = f_num_args + (if is_even_f_num_args then 0 else 1) in
+    let is_even_num_args = num_args mod 2 == 0 in
+    let num_args_passed = num_args + (if is_even_num_args then 0 else 1) in
+    (* Technically we allow tailcall optimization with 1 more arg if this function has odd num of args *)
+    if is_tail && (f_num_args <= num_args_passed) then
+        let (compiled_args, _) = List.fold_left
+                       (fun accum_instrs_idx arg ->
+                          let compiled_imm = (compile_imm arg env) in
+                          let (accum_instrs, i) = accum_instrs_idx in
+                          (* Use temp register because can't push imm64 directly *)
+                          (accum_instrs
+                            @ [IMov(Reg(R8), compiled_imm);
+                               IMov(RegOffset((i + 2) * word_size, RBP), Reg(R8))],
+                           i + 1))
+                       ([], 0)
+                       args
+                       in
+        let body_label = sprintf "%s_body" fname in
+        compiled_args @ [IJmp(body_label)]
+    else
+        let compiled_args = List.fold_left
                        (fun accum_instrs arg ->
                           let compiled_imm = (compile_imm arg env) in
                           (* Use temp register because can't push imm64 directly *)
-                          accum_instrs @ [IMov(Reg(R8) ,compiled_imm);
+                          accum_instrs @ [IMov(Reg(R8), compiled_imm);
                                           IPush(Sized(QWORD_PTR, Reg(R8)))])
                        []
                        args_rev
                        in
-    let padded_comp_args = padding @ compiled_args in
-    let num_args_passed = (List.length args) + (if is_even_num_args then 0 else 1) in
-    padded_comp_args
-    @
-    [
-    ICall(fname);
-    (* Don't use temp register here because we assume the RHS will never be very big *)
-    IAdd(Reg(RSP), Const(Int64.of_int (word_size * num_args_passed)));
-    ]
+        let padded_comp_args = padding @ compiled_args in
+        padded_comp_args
+        @
+        [
+        ICall(fname);
+        (* Don't use temp register here because we assume the RHS will never be very big *)
+        IAdd(Reg(RSP), Const(Int64.of_int (word_size * f_num_args_passed)));
+        ]
   | CImmExpr(expr) -> [IMov(Reg(RAX), (compile_imm expr env))]
 and compile_imm e (env : arg envt) : arg =
   match e with
@@ -813,9 +835,10 @@ let compile_decl (d : tag adecl) (env : arg envt): instruction list =
   | ADFun(fname, args, body, _) ->
     let num_body_vars = (deepest_stack body env) in
     let prelude = compile_fun_prelude fname args env num_body_vars in
-    let compiled_body = compile_aexpr body env (List.length args) false in
+    let compiled_body = compile_aexpr body env (List.length args) true in
     let postlude = compile_fun_postlude num_body_vars in
-    prelude @ compiled_body @ postlude
+    let body_label = sprintf "%s_body" fname in
+    prelude @ [ILabel(body_label)] @ compiled_body @ postlude
 
 let compile_prog ((anfed : tag aprogram), (env : arg envt)) : string =
   match anfed with
@@ -829,7 +852,7 @@ let compile_prog ((anfed : tag aprogram), (env : arg envt)) : string =
             @ (compile_decl decl env))
           [] decls in
       let num_prog_body_vars = (deepest_stack body env) in
-      let compiled_body = (compile_aexpr body env num_prog_body_vars false) in
+      let compiled_body = (compile_aexpr body env 0 false) in
       let prelude =
         "section .text
 extern error
