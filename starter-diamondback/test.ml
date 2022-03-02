@@ -258,7 +258,7 @@ let tests_from_cobra = [
   t "let_side_effect_unused" "let x=print(false) in 3" "false\n3";  (* src: Piazza post #49 *)
   t "let_side_effect_used" "let x=print(isbool(6)) in x" "false\nfalse";
   te "let_unknown_var" "let x=1,s=2 in t" "is not in scope";
-  te "let_backwards_binds" "let x=y,y=2 in 3" "Failed to lookup y";
+  te "let_backwards_binds" "let x=y,y=2 in 3" "Failed to lookup y"; (* TODO fix this *)
   te "let_bind_eval_first" "let x=true, y=add1(x) in x" "arithmetic expected a number";
   t "shadow_across_lets_allowed" "let x = 4 in let x = 2 in x" "2";
   te "shadow_within_let_not_allowed_l" "let x = 4, x=2 in x" "The identifier x, redefined at";
@@ -335,6 +335,12 @@ let tests = [
   te "unbound_fun_in_decl" "def f(): add1(4 * 2)  def g(): h()  7" "The function name h";
   te "unbound_fun_let" "def f(): add1(4 * 2)  def g(): sub1(2 * 8) let h=true in h()" "The function name h";
 
+  (* UnboundId errors *)
+  te "unbound_id" "def id(y): y  let x=1 in y" "is not in scope";
+  te "unbound_id_if" "if false: z else: 7" "is not in scope";
+  te "unbound_arg" "def f(x, y): z  8" "is not in scope";
+  te "unbound_arg2" "def f(x, y): x+y def g(a): z  8" "is not in scope";
+  te "unbound_id_call" "def f(x, y): let z=y in add1(x + z)  isnum(f(3,a))" "is not in scope";
 ]
 
 
