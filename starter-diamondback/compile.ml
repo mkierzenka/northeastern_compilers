@@ -399,7 +399,7 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
     match d with
     | [] -> []
     | DFun(fname, args, body, _) :: tail ->
-        wf_E body (add_args_to_env args env)
+        (wf_E body (add_args_to_env args env)) @ (wf_D tail env)
   in
   match p with
   | Program(decls, body, _) ->

@@ -300,17 +300,40 @@ let tests = [
                           "11";
   t "general_func_call3a" "def ident(x): x  ident(let y=11 in y + 9)" "20";
   t "general_func_call3b" "def ident(x): x  ident(let x=11 in x + 9)" "20";
+  t "general_func_call4" "def f(x): x  let x=6 in f(8)" "8";
+  t "noarg_func_call" "def f(): (let a=23,b=true in b) f()" "true";
 
   t "fname_bind_in_body" "def fun(a,b,c): let fun=4 in add1(fun) \n fun(9,10,11)" "5";
   t "func_split_env" "def f(x,y): let z = x * y in sub1(z)   let z = 9 in f(z, add1(z))" "89";
+  t "func_from_func" "def f(x,y): let z = x * y in z + z  def g(x): if isbool(x): 0 else: f(x,x) g(4)" "32";
+  t "func_from_func_backwards" "def f(): g()  def g(): sub1(2 * 8)  f()" "15";
 
+  (* Asserting that functions don't leak envs *)
   te "func_split_env_err" "def f(x,y): let z = x * y in sub1(z)   let z = 9 in f(x, add1(z))" "is not in scope";
   te "func_split_env_err2a" "def f(x,y): let z = x * y in sub1(z)   let a = f(1, 2) in z" "is not in scope";
   te "func_split_env_err2b" "def f(x,y): let z = x * y in sub1(z)   let a = f(1, 2) in y" "is not in scope";
   te "func_split_env_err3" "def f(x,y): sub1(z)   let z=1 in f(1, 2)" "is not in scope";
-  te "func_split_env_err4a" "def f(x,y): let z=99 in x+y  def g(x): print(z)   8" "Failed to lookup z";
-  te "func_split_env_err4b" "def f(x,y): let z=99 in x+y  def g(x): print(z)   let one=f(1,2) in g(3)" "Failed to lookup z";
+  te "func_split_env_err4a" "def f(x,y): let z=99 in x+y  def g(x): print(z)   8" "is not in scope";
+  te "func_split_env_err4b" "def f(x,y): let z=99 in x+y  def g(x): print(z)   let one=f(1,2) in g(3)" "is not in scope";
   te "func_split_env_err4c" "def f(x,y): let z=99 in x+y  z" "is not in scope";
+  te "func_split_env_err4d" "def f(x,y): let z=99 in x+y  def g(w): print(x)   let one=f(1,2) in f(1,2)" "is not in scope";
+
+  (* Arity errors *)
+  te "arity_err0" "def f(): (if isnum(12): 7 else: false)  f(4)" "expected an arity of 0, but received 1 arguments";
+  te "arity_err1a" "def f(x): (if isnum(12): x else: false)  f()" "expected an arity of 1, but received 0 arguments";
+  te "arity_err1b" "def f(x): (if isnum(12): x else: false)  f(4,8)" "expected an arity of 1, but received 2 arguments";
+  te "arity_err2a" "def f(x,y): (if isnum(12): 7 else: false)  f(1)" "expected an arity of 2, but received 1 arguments";
+  te "arity_err2b" "def f(x,y): (if isnum(12): 7 else: false)  f(1,3,4)" "expected an arity of 2, but received 3 arguments";
+
+  (* Name resolution for vars vs. funcs (vars shadow function names) *)
+  te "func_let_name" "def f(x,y): (if isnum(12): 7 else: false)  let f=99 in f(1,3)" "is not in scope";
+  te "func_let_name2" "def f(x,y): (if isnum(12): 7 else: false)  let f=99 in f(1,3,4)" "is not in scope";
+  t "func_let_name3" "def f(x,y): (if isnum(12): 7 else: false)  let f=99 in add1(f)" "100";
+
+  (* UnboundFun errors *)
+  te "unbound_fun" "def f(): add1(4 * 2)  def g(): sub1(2 * 8)  if false: h() else: 9" "The function name h";
+  te "unbound_fun_in_decl" "def f(): add1(4 * 2)  def g(): h()  7" "The function name h";
+  te "unbound_fun_let" "def f(): add1(4 * 2)  def g(): sub1(2 * 8) let h=true in h()" "The function name h";
 
 ]
 
