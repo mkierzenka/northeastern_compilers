@@ -37,22 +37,6 @@ let tru = "let x = true in x"
 
 (* ### Regression test suite (from Cobra) ### *)
 let tests_from_cobra = [
-  te "unbound_id_l" "a" "The identifier a, used at";
-  te "unbound_id_r" "a" ", is not in scope";
-  te "unbound_fun_l" "f()" "The function name f, used at";
-  te "unbound_fun_r" "f()" ", is not in scope";
-  te "duplicate_id_l" "let x=1,x=2 in 3" "The identifier x, redefined at";
-  te "duplicate_id_r" "let x=1,x=2 in 3" ", duplicates one at";
-  te "duplicate_fun_l" "def f(): 2 def f(): 3 8" "The function name f, redefined at";
-  te "duplicate_fun_r" "def f(): 2 def f(): 3 8" ", duplicates one at";
-  te "arity_l" "def f(x): 2 f(4,5)" "The function called at";
-  te "arity_r" "def f(x): 2 f(4,5)" "expected an arity of 1, but received 2 arguments";
-
-  te "unbound_duplicate_id_unbl" "let x=1,x=2 in y" "The identifier y, used at";
-  te "unbound_duplicate_id_unbr" "let x=1,x=2 in y" ", is not in scope";
-  te "unbound_duplicate_id_dupl" "let x=1,x=2 in y" "The identifier x, redefined at";
-  te "unbound_duplicate_id_dupr" "let x=1,x=2 in y" ", duplicates one at";
-
   (* basic value reporting *)
   t "forty" forty "40";
   t "neg_fory" neg_forty "-40";
@@ -319,6 +303,8 @@ let tests = [
   te "func_split_env_err4d" "def f(x,y): let z=99 in x+y  def g(w): print(x)   let one=f(1,2) in f(1,2)" "is not in scope";
 
   (* Arity errors *)
+  te "arity_l" "def f(x): 2 f(4,5)" "The function called at";
+  te "arity_r" "def f(x): 2 f(4,5)" "expected an arity of 1, but received 2 arguments";
   te "arity_err0" "def f(): (if isnum(12): 7 else: false)  f(4)" "expected an arity of 0, but received 1 arguments";
   te "arity_err1a" "def f(x): (if isnum(12): x else: false)  f()" "expected an arity of 1, but received 0 arguments";
   te "arity_err1b" "def f(x): (if isnum(12): x else: false)  f(4,8)" "expected an arity of 1, but received 2 arguments";
@@ -331,16 +317,38 @@ let tests = [
   t "func_let_name3" "def f(x,y): (if isnum(12): 7 else: false)  let f=99 in add1(f)" "100";
 
   (* UnboundFun errors *)
+  te "unbound_fun_l" "f()" "The function name f, used at";
+  te "unbound_fun_r" "f()" ", is not in scope";
   te "unbound_fun" "def f(): add1(4 * 2)  def g(): sub1(2 * 8)  if false: h() else: 9" "The function name h";
   te "unbound_fun_in_decl" "def f(): add1(4 * 2)  def g(): h()  7" "The function name h";
   te "unbound_fun_let" "def f(): add1(4 * 2)  def g(): sub1(2 * 8) let h=true in h()" "The function name h";
 
   (* UnboundId errors *)
+  te "unbound_id_l" "a" "The identifier a, used at";
+  te "unbound_id_r" "a" ", is not in scope";
   te "unbound_id" "def id(y): y  let x=1 in y" "is not in scope";
   te "unbound_id_if" "if false: z else: 7" "is not in scope";
   te "unbound_arg" "def f(x, y): z  8" "is not in scope";
   te "unbound_arg2" "def f(x, y): x+y def g(a): z  8" "is not in scope";
   te "unbound_id_call" "def f(x, y): let z=y in add1(x + z)  isnum(f(3,a))" "is not in scope";
+
+  (* DuplicateId errors *)
+  te "duplicate_id_l" "let x=1,x=2 in 3" "The identifier x, redefined at";
+  te "duplicate_id_r" "let x=1,x=2 in 3" ", duplicates one at";
+
+  (* DuplicateFun errors *)
+  te "duplicate_fun_l" "def f(): 2 def f(): 3 8" "The function name f, redefined at";
+  te "duplicate_fun_r" "def f(): 2 def f(): 3 8" ", duplicates one at";
+
+  (* Overflow errors were tested in Cobra *)
+
+  (* Multiple errors *)
+  te "unbound_duplicate_id_unbl" "let x=1,x=2 in y" "The identifier y, used at";
+  te "unbound_duplicate_id_unbr" "let x=1,x=2 in y" ", is not in scope";
+  te "unbound_duplicate_id_dupl" "let x=1,x=2 in y" "The identifier x, redefined at";
+  te "unbound_duplicate_id_dupr" "let x=1,x=2 in y" ", duplicates one at";
+
+  (* TODO- add more multi-error tests *)
 ]
 
 
