@@ -305,7 +305,7 @@ let rec check_duplicate_var (sym : string) (binds : sourcespan bind list) (loc :
       if k = sym then
         [DuplicateId(sym, existing_loc, loc)]
       else
-        check_duplicate_var sym tail existing_loc
+        check_duplicate_var sym tail loc
 ;;
 
 let rec var_in_env (id : string) (env : env_entry envt) : bool =
