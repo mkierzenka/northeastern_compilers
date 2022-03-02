@@ -7,6 +7,13 @@ open Errors
        
 type 'a envt = (string * 'a) list
 
+(* Our envs track either existence of a var (let binding) or function with arity *)
+type env_entry =
+  | Var
+  | Func of int
+;;
+
+
 let rec is_anf (e : 'a expr) : bool =
   match e with
   | EPrim1(_, e, _) -> is_imm e
@@ -281,37 +288,24 @@ let anf (p : tag program) : unit aprogram =
   helpP p
 ;;
 
-
-(* TODO possibly move typedef to exprs? *)
-type env_entry =
-  | Var
-  | Func of int
-;;
-
-
 (* Given a function name and a list of decls, this function will check whether the function name
- * is duplicated in the decl list.  If it is, then we will return a list that contains the
- * DuplicateFun error. *)
-let rec check_duplicate_decl (fname : string) (decls : sourcespan decl list) (existing : sourcespan) : exn list =
-  match decls with
-  | [] -> [] (* no duplicates found -> no error *)
-  | DFun(k, _, _, loc) :: tail ->
-      if k = fname then
-        [DuplicateFun(fname, loc, existing)]
-      else
-        check_duplicate_decl fname tail loc
+ * is duplicated in the decl list. If it is, then we will return a list that contains the
+ * DuplicateFun error. Also takes in location where the function was just declared. *)
+let rec check_duplicate_decl (fname : string) (decls : sourcespan decl list) (loc : sourcespan) : exn list =
+  match (find_decl decls fname) with
+  | None -> []  (* no duplicates found -> no error *)
+  | Some(DFun(_, _, _, existing_loc)) -> [DuplicateFun(fname, existing_loc, loc)]
 ;;
 
-(* TODO better comment *)
-(* for lets *)
-let rec check_duplicate_var (sym : string) (binds : sourcespan bind list) (existing : sourcespan) : exn list =
+(* Checks if a sym is already bound in a binds list, returns an exception if so otherwise empty list. Also takes in location where this symbol was just bound. *)
+let rec check_duplicate_var (sym : string) (binds : sourcespan bind list) (loc : sourcespan) : exn list =
   match binds with
   | [] -> [] (* no duplicates found -> no error *)
-  | (k, v, loc) :: tail ->
+  | (k, v, existing_loc) :: tail ->
       if k = sym then
-        [DuplicateId(sym, loc, existing)]
+        [DuplicateId(sym, existing_loc, loc)]
       else
-        check_duplicate_var sym tail loc
+        check_duplicate_var sym tail existing_loc
 ;;
 
 let rec var_in_env (id : string) (env : env_entry envt) : bool =
@@ -330,7 +324,7 @@ let rec func_in_env (id : string) (env : env_entry envt) : bool =
   match env with
   | [] -> false
   | (k, Var) :: tail ->
-      (* this key semantic choice stipulates that variables shadow functions *)
+      (* this semantic choice stipulates that variables shadow functions *)
       if id = k then false
       else func_in_env id tail
   | (k, Func(_)) :: tail ->
@@ -338,6 +332,7 @@ let rec func_in_env (id : string) (env : env_entry envt) : bool =
       else func_in_env id tail
 ;;
 
+(* Add a list of unique args to an env as Vars *)
 let rec add_args_to_env (args : (string * sourcespan) list) (env : env_entry envt) : env_entry envt =
   (* fold direction doesn't matter since arg names are required to be unique *)
   List.fold_left
