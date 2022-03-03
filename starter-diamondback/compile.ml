@@ -109,6 +109,26 @@ let rec find_dup (l : 'a list) : 'a option =
 
 (* IMPLEMENT EVERYTHING BELOW *)
 
+let func_arg_rewrite (p : 'a program) : unit program =
+  let rec help_decl (d : 'a decl) : unit decl =
+    match d with
+    | DFun(fname, args, body, _) ->
+        (* purposely shadow the args with let bindings to prevent the potential
+         * for the 'max' (or 'min) problem during tail recursion *)
+        let arg_binds = List.map
+          (fun argp ->
+            let (arg, _) = argp in
+            (arg, EId(arg, ()), ()))
+          args in
+        let new_body = ELet(arg_binds, body, ()) in
+        DFun(fname, args, new_body, ())
+  in
+  match p with
+  | Program(decls, body, _) ->
+      let rw_decls = List.map help_decl decls in
+      Program(rw_decls, body, ())
+;;
+
 let and_or_rewrite (p : 'a program) : unit program =
   let rec help_decl (d : 'a decl) : unit decl =
     match d with
@@ -155,6 +175,9 @@ let and_or_rewrite (p : 'a program) : unit program =
       let rw_body = help_expr body in
       Program(rw_decls, rw_body, ())
 ;;
+
+let desugar (p : 'a program) : unit program =
+  and_or_rewrite (func_arg_rewrite (untag p))
 
 let rec lookup_rename (x : string) (env : (string * string) list) : string =
   match env with
@@ -308,6 +331,16 @@ let rec check_duplicate_var (sym : string) (binds : sourcespan bind list) (loc :
         check_duplicate_var sym tail loc
 ;;
 
+let rec check_duplicate_arg (sym : string) (args : (string * sourcespan) list) (loc : sourcespan) : exn list =
+  match args with
+  | [] -> [] (* no duplicates found -> no error *)
+  | (k, existing_loc) :: tail ->
+      if k = sym then
+        [DuplicateId(sym, existing_loc, loc)]
+      else
+        check_duplicate_arg sym tail loc
+;;
+
 let rec var_in_env (id : string) (env : env_entry envt) : bool =
   match env with
   | [] -> false
@@ -391,15 +424,21 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
     match binds with
     | [] -> (env, [])
     | (sym, expr, loc) :: tail ->
-        let (tail_env, tail_errs) = wf_Binds tail env in
-        let new_env = (sym, Var) :: tail_env in
-        (new_env, (check_duplicate_var sym tail loc) @ tail_errs)
+        let bind_env = (sym, Var) :: env in
+        let (tail_env, tail_errs) = wf_Binds tail bind_env in
+        let errs = (check_duplicate_var sym tail loc) @ (wf_E expr env) @ tail_errs in
+        (tail_env, errs)
+  and wf_Args (args : (string * sourcespan) list) : (exn list) =
+    match args with
+    | [] -> []
+    | (sym, loc) :: tail ->
+        (check_duplicate_arg sym tail loc) @ (wf_Args tail)
   (* checks a decl list to see if it's well formed *)
   and wf_D (d : sourcespan decl list) (env : env_entry envt) : (exn list) =
     match d with
     | [] -> []
     | DFun(fname, args, body, _) :: tail ->
-        (wf_E body (add_args_to_env args env)) @ (wf_D tail env)
+        (wf_Args args) @ (wf_E body (add_args_to_env args env)) @ (wf_D tail env)
   in
   match p with
   | Program(decls, body, _) ->
@@ -907,7 +946,7 @@ global our_code_starts_here" in
 let compile_to_string (prog : sourcespan program pipeline) : string pipeline =
   prog
   |> (add_err_phase well_formed is_well_formed)
-  |> (add_phase shortcircuit_rewrite and_or_rewrite)
+  |> (add_phase desugared desugar)
   |> (add_phase tagged tag)
   |> (add_phase renamed rename)
   |> (add_phase anfed (fun p -> atag (anf p)))

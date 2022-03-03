@@ -242,7 +242,7 @@ let tests_from_cobra = [
   t "let_side_effect_unused" "let x=print(false) in 3" "false\n3";  (* src: Piazza post #49 *)
   t "let_side_effect_used" "let x=print(isbool(6)) in x" "false\nfalse";
   te "let_unknown_var" "let x=1,s=2 in t" "is not in scope";
-  te "let_backwards_binds" "let x=y,y=2 in 3" "Failed to lookup y"; (* TODO fix this *)
+  te "let_backwards_binds" "let x=y,y=2 in 3" "The identifier y, used at <let_backwards_binds, 1:6-1:7>, is not in scope";
   te "let_bind_eval_first" "let x=true, y=add1(x) in x" "arithmetic expected a number";
   t "shadow_across_lets_allowed" "let x = 4 in let x = 2 in x" "2";
   te "shadow_within_let_not_allowed_l" "let x = 4, x=2 in x" "The identifier x, redefined at";
@@ -291,6 +291,20 @@ let tests = [
   t "func_split_env" "def f(x,y): let z = x * y in sub1(z)   let z = 9 in f(z, add1(z))" "89";
   t "func_from_func" "def f(x,y): let z = x * y in z + z  def g(x): if isbool(x): 0 else: f(x,x) g(4)" "32";
   t "func_from_func_backwards" "def f(): g()  def g(): sub1(2 * 8)  f()" "15";
+  t "max_tail_1" "def max(x,y): if x > y: x else: max(y,x) max(1,9)" "9";
+  t "max_tail_2" "def max(x,y): if x > y: x else: max(y,x) max(9,1)" "9";
+  t "rebind_arg" "def f(a,b): let a=b,b=8 in a+b f(4,10)" "18";
+
+  (* tail call testing *)
+  t "tail_larger_arity_2_to_3" "def f(x,y): g(x,y,4)  def g(a,b,c): a - b + c  f(2,5)" "1";
+  t "tail_larger_arity_3_to_4" "def f(x,y,z): g(x,4,z,y)  def g(a,b,c,d): a - b + c - d  f(1,2,3)" "-2";
+  t "tail_larger_arity_2_to_4" "def f(x,y): g(x,-9, y,4)  def g(a,b,c,d): a - b + c - d  f(2,5)" "12";
+  t "tail_same_arity_1" "def f(x): g(x + 8)  def g(x): x - 2  f(4)" "10";
+  t "tail_same_arity_2" "def f(x,y): g(sub1(x),add1(y))  def g(x,y): x * y  f(3,5)" "12";
+  t "tail_same_arity_3" "def f(x,y,z): g(x,z,y)  def g(a,b,c): (a + b) * c  f(2,2,4)" "12";
+  t "tail_smaller_arity_3_to_2" "def f(i,j,k): g(i+j,k)  def g(i,k): i * k  f(0,2,2)" "4";
+  t "tail_smaller_arity_4_to_3" "def f(i,j,k,hi): g(i+j,k*hi,hi)  def g(i,k,x): x + (i*k)  f(0,2,2,1)" "5";
+  t "tail_smaller_arity_4_to_2" "def f(i,j,k,hi): g(i+j,k*hi)  def g(i,k): 3 + (i*k)  f(0,2,2,1)" "7";
 
   (* Asserting that functions don't leak envs *)
   te "func_split_env_err" "def f(x,y): let z = x * y in sub1(z)   let z = 9 in f(x, add1(z))" "is not in scope";
@@ -349,6 +363,12 @@ let tests = [
   te "unbound_duplicate_id_dupr" "let x=1,x=2 in y" ", duplicates one at";
 
   (* TODO- add more multi-error tests *)
+  te "multi_errs_unbound_l" "def f(x, x): y  f(1)" "The identifier y, used at ";
+  te "multi_errs_unbound_r" "def f(x, x): y  f(1)" ", is not in scope";
+  te "multi_errs_duplicated_l" "def f(x, x): y  f(1)" "The identifier x, redefined at ";
+  te "multi_errs_duplicated_r" "def f(x, x): y  f(1)" ", duplicates one at ";
+  te "multi_errs_arity_mismatch_l" "def f(x, x): y  f(1)" "The function called at ";
+  te "multi_errs_arity_mismatch_r" "def f(x, x): y  f(1)" " expected an arity of 2, but received 1 arguments";
 ]
 
 
