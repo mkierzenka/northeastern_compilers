@@ -362,7 +362,6 @@ let tests = [
   te "unbound_duplicate_id_dupl" "let x=1,x=2 in y" "The identifier x, redefined at";
   te "unbound_duplicate_id_dupr" "let x=1,x=2 in y" ", duplicates one at";
 
-  (* TODO- add more multi-error tests *)
   te "multi_errs_unbound_l" "def f(x, x): y  f(1)" "The identifier y, used at ";
   te "multi_errs_unbound_r" "def f(x, x): y  f(1)" ", is not in scope";
   te "multi_errs_duplicated_l" "def f(x, x): y  f(1)" "The identifier x, redefined at ";
