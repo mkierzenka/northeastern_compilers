@@ -160,9 +160,6 @@ let rename_and_tag (p : tag program) : tag program =
     | EApp(name, args, native, tag) ->
        let call_type = match find_opt funenv name with None -> native | Some ct -> ct in
        EApp(name, List.map (helpE funenv env) args, call_type, tag)
-    | EApp(name, args, native, tag) ->
-       let call_type = match find_opt funenv name with None -> native | Some ct -> ct in
-       EApp(name, List.map (helpE funenv env) args, call_type, tag)
     | ELet(binds, body, tag) ->
        let (binds', env') = helpBG funenv env binds in
        let body' = helpE funenv env' body in
@@ -211,10 +208,13 @@ let anf (p : tag program) : unit aprogram =
   and helpD (d : tag decl) : unit adecl =
     match d with
     | DFun(name, args, body, _) ->
-       let args = List.map (fun a ->
-                      match a with
-                      | BName(a, _, _) -> a
-                      | _ -> raise (NotYetImplemented("Finish this"))) args in
+       let args = List.map
+         (fun a ->
+           match a with
+           | BBlank(tag) -> "blank" (* TODO is this necessary? *)
+           | BName(a, _, _) -> a
+           | BTuple(bindl, _) -> raise (InternalCompilerError "desugaring failed: tuples cannot be ANFed in function decl args"))
+         args in
        ADFun(name, args, helpA body, ())
   and helpC (e : tag expr) : (unit cexpr * (string * unit cexpr) list) = 
     match e with
@@ -229,15 +229,41 @@ let anf (p : tag program) : unit aprogram =
        let (cond_imm, cond_setup) = helpI cond in
        (CIf(cond_imm, helpA _then, helpA _else, ()), cond_setup)
     | ELet([], body, _) -> helpC body
-    | ELet(_::_, body, _) -> raise (NotYetImplemented "Finish this")
-    (* | ELet(((bind, _, _), exp, _)::rest, body, pos) ->
-     *    let (exp_ans, exp_setup) = helpC exp in
-     *    let (body_ans, body_setup) = helpC (ELet(rest, body, pos)) in
-     *    (body_ans, exp_setup @ [(bind, exp_ans)] @ body_setup) *)
+    | ELet((bind, expr, tag)::tail, body, _) ->
+       (* TODO make sure using same tag for all bindings is ok *)
+       let (expr_ans, expr_setup) = helpC expr in
+       let (body_ans, body_setup) = helpC (ELet(tail, body, tag)) in
+       begin match bind with
+       | BBlank(_) ->
+           let dummy_bind = "blank" in (* TODO better name? *)
+           (body_ans, expr_setup @ [(dummy_bind, expr_ans)] @ body_setup)
+       | BName(sym, _, _) ->
+           (body_ans, expr_setup @ [(sym, expr_ans)] @ body_setup)
+       | BTuple _ -> raise (InternalCompilerError "desugaring failed: tuples cannot be ANFed in let bindings")
+       end
     | EApp(funname, args, ct, _) ->
        let (new_args, new_setup) = List.split (List.map helpI args) in
        (CApp(funname, new_args, ct, ()), List.concat new_setup)
     (* NOTE: You may need more cases here, for sequences and tuples *)
+    | ESeq _ -> raise (InternalCompilerError "desugaring failed: sequences cannot be ANFed")
+    | ETuple([], tag) -> (CTuple([], ()), []) (* TODO is this nil? *)
+    | ETuple(elem::tail, tag) ->
+       let (elem_ans, elem_setup) = helpI elem in
+       let (tail_ans, tail_setup) = helpC (ETuple(tail, tag)) in
+       begin match tail_ans with
+       | CTuple(tail_elems, _) ->
+           (CTuple(elem_ans::tail_elems, ()), elem_setup @ tail_setup)
+       | _ -> raise (InternalCompilerError "error ANFing tuples")
+       end
+    | EGetItem(tup, idx, _) ->
+        let (tup_ans, tup_env) = helpI tup in
+        let (idx_ans, idx_env) = helpI idx in
+        (CGetItem(tup_ans, idx_ans, ()), tup_env @ idx_env)
+    | ESetItem(tup, idx, nval, _) ->
+        let (tup_ans, tup_env) = helpI tup in
+        let (idx_ans, idx_env) = helpI idx in
+        let (nval_ans, nval_env) = helpI nval in
+        (CSetItem(tup_ans, idx_ans, nval_ans, ()), tup_env @ idx_env @ nval_env)
     | _ -> let (imm, setup) = helpI e in (CImmExpr imm, setup)
 
   and helpI (e : tag expr) : (unit immexpr * (string * unit cexpr) list) =
@@ -362,6 +388,7 @@ let run_if should_run f =
 let compile_to_string (prog : sourcespan program pipeline) : string pipeline =
   prog
   |> (add_err_phase well_formed is_well_formed)
+  (* TODO add desugaring, maybe not *right* here *)
   |> (add_phase tagged tag)
   |> (add_phase renamed rename_and_tag)
   |> (add_phase anfed (fun p -> atag (anf p)))
