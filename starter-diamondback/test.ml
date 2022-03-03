@@ -353,6 +353,8 @@ let tests = [
   (* DuplicateFun errors *)
   te "duplicate_fun_l" "def f(): 2 def f(): 3 8" "The function name f, redefined at";
   te "duplicate_fun_r" "def f(): 2 def f(): 3 8" ", duplicates one at";
+  te "duplicate_fun_2_l" "def f(a,b): 2 def f(): 3 8" "The function name f, redefined at";
+  te "duplicate_fun_2_r" "def f(a,b): 2 def f(): 3 8" ", duplicates one at";
 
   (* Overflow errors were tested in Cobra *)
 
