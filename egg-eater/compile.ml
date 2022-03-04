@@ -7,6 +7,7 @@ open Errors
        
 type 'a envt = (string * 'a) list
 
+(* This is unused (should fix before ever using it, e.g. support Tuples)
 let rec is_anf (e : 'a expr) : bool =
   match e with
   | EPrim1(_, e, _) -> is_imm e
@@ -22,7 +23,7 @@ and is_imm e =
   | EBool _ -> true
   | EId _ -> true
   | _ -> false
-;;
+;;*)
 
 
 let const_true     = HexConst(0xFFFFFFFFFFFFFFFFL)
@@ -271,7 +272,7 @@ let anf (p : tag program) : unit aprogram =
     | ENumber(n, _) -> (ImmNum(n, ()), [])
     | EBool(b, _) -> (ImmBool(b, ()), [])
     | EId(name, _) -> (ImmId(name, ()), [])
-
+    | ENil(_) -> (ImmNil(()), [])
     | EPrim1(op, arg, tag) ->
        let tmp = sprintf "unary_%d" tag in
        let (arg_imm, arg_setup) = helpI arg in
@@ -290,12 +291,24 @@ let anf (p : tag program) : unit aprogram =
        let (new_args, new_setup) = List.split (List.map helpI args) in
        (ImmId(tmp, ()), (List.concat new_setup) @ [(tmp, CApp(funname, new_args, ct, ()))])
     | ELet([], body, _) -> helpI body
-    | ELet(_::_, body, _) -> raise (NotYetImplemented "Finish this")
-    (* | ELet(((bind, _, _), exp, _)::rest, body, pos) ->
-     *    let (exp_ans, exp_setup) = helpC exp in
-     *    let (body_ans, body_setup) = helpI (ELet(rest, body, pos)) in
-     *    (body_ans, exp_setup @ [(bind, exp_ans)] @ body_setup) *)
-    | _ -> raise (NotYetImplemented "Finish the remaining cases")
+    | ELet(_::_, body, tag) ->
+       let tmp = sprintf "let_%d" tag in
+       let (let_ans, let_setup) = helpC e in
+       (ImmId(tmp, ()), let_setup @ [(tmp, let_ans)])
+    | ESeq _ -> raise (InternalCompilerError "desugaring failed: sequences cannot be ANFed")
+    | ETuple(_, tag) ->
+       let tmp = sprintf "tuple_%d" tag in
+       let (tup_ans, tup_setup) = helpC e in
+       (ImmId(tmp, ()), tup_setup @ [(tmp, tup_ans)])
+    | EGetItem(_, _, tag) ->
+       let tmp = sprintf "getitem_%d" tag in
+       let (gi_ans, gi_setup) = helpC e in
+       (ImmId(tmp, ()), gi_setup @ [(tmp, gi_ans)])
+    | ESetItem(_, _, _, tag) ->
+       let tmp = sprintf "setitem_%d" tag in
+       let (si_ans, si_setup) = helpC e in
+       (ImmId(tmp, ()), si_setup @ [(tmp, si_ans)])
+
   and helpA e : unit aexpr = 
     let (ans, ans_setup) = helpC e in
     List.fold_right (fun (bind, exp) body -> ALet(bind, exp, body, ())) ans_setup (ACExpr ans)
