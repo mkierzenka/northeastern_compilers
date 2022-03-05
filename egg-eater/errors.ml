@@ -12,9 +12,9 @@ exception DuplicateFun of string * sourcespan * sourcespan (* name, where used, 
 exception Overflow of int64 * sourcespan (* value, where used *)
 exception Arity of int * int * sourcespan (* intended arity, actual arity, where called *)
 exception NotYetImplemented of string (* TODO: Message to show *)
+exception GetItemError of string * sourcespan (* Error with GetItem call, takes a msg *)
 exception Unsupported of string * sourcespan
 exception InternalCompilerError of string (* Major failure: message to show *)
-
 
   
 
@@ -48,6 +48,7 @@ let print_errors (exns : exn list) : string list =
       | Arity(expected, actual, loc) ->
          sprintf "The function called at <%s> expected an arity of %d, but received %d arguments"
                  (string_of_sourcespan loc) expected actual
+      | GetItemError(msg, loc) -> sprintf "GetItem error: %s at <%s>" msg (string_of_sourcespan loc)
       | _ ->
          sprintf "%s" (Printexc.to_string e)
     ) exns
