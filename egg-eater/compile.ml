@@ -332,6 +332,30 @@ let rec check_duplicate_decl (fname : string) (decls : sourcespan decl list) (lo
   | Some(DFun(_, _, _, existing_loc)) -> [DuplicateFun(fname, existing_loc, loc)]
 ;;
 
+(* Checks if a sym is already bound in a binds list, returns an exception if so otherwise empty list. Also takes in location where this symbol was just bound. *)
+(*
+let rec check_duplicate_var (sym : string) (binds : sourcespan binding list) (loc : sourcespan) : exn list =
+  match binds with
+  | [] -> [] (* no duplicates found -> no error *)
+  | (k, v, existing_loc) :: tail ->
+      if k = sym then
+        [DuplicateId(sym, existing_loc, loc)]
+      else
+        check_duplicate_var sym tail loc
+;;
+*)
+
+(* checks for duplicate variables inside a let binding.  we do this by looking through a flattened list of (string * sourcepan) to make our lives easier. *)
+let rec check_duplicate_let_vars (sym : string) (existing_loc : sourcespan) (binds : (string * sourcespan) list) : exn list =
+  match binds with
+  | [] -> [] (* no duplicates found -> no error *)
+  | (k, loc) :: tail ->
+      if k = sym then
+        [DuplicateId(sym, loc, existing_loc)]
+      else
+        check_duplicate_let_vars sym loc tail
+;;
+
 let rec check_duplicate_arg (sym : string) (args : (string * sourcespan) list) (loc : sourcespan) : exn list =
   match args with
   | [] -> [] (* no duplicates found -> no error *)
@@ -392,6 +416,27 @@ let rec add_args_to_env (args : (string * sourcespan) list) (env : env_entry env
     args
 ;;
 
+let dup_binding_exns (binds : sourcespan binding list) : exn list =
+  let rec bind_list_pairs (binds : sourcespan binding list) : (string * sourcespan) list =
+    match binds with
+    | [] -> []
+    | (bind,_,_) :: tail -> (bind_pairs [bind]) @ (bind_list_pairs tail)
+  and bind_pairs (binds : sourcespan bind list) : (string * sourcespan) list =
+    match binds with
+    | [] -> []
+    | BBlank(loc) :: tail -> bind_pairs tail
+    | BName(sym,_,loc) :: tail -> (sym,loc) :: (bind_pairs tail)
+    | BTuple(tup_binds,loc) :: tail -> (bind_pairs tup_binds) @ (bind_pairs tail)
+  in
+  let rec check_dups (binds : (string * sourcespan) list) : exn list =
+    match binds with
+    | [] -> []
+    | (sym,loc) :: tail -> (check_duplicate_let_vars sym loc tail) @ (check_dups tail)
+  in
+  check_dups (bind_list_pairs binds)
+;;
+
+
 let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
   (* Goes through the list of function decls and adds them all to our env.  We also
    * gather any errors along the way. *)
@@ -412,8 +457,9 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
       | EGetItem(tup, idx, _) -> (wf_E tup env) @ (wf_E idx env)
       | ESetItem(tup, idx, nval, _) -> (wf_E tup env) @ (wf_E idx env) @ (wf_E nval env)
       | ELet(binds, body, _) ->
+        let dup_exns = dup_binding_exns binds in
         let (let_env, let_errs) = wf_Bindings binds env in
-        let_errs @ (wf_E body let_env)
+        dup_exns @ let_errs @ (wf_E body let_env)
       | EPrim1(op, expr, _) -> wf_E expr env
       | EPrim2(op, lhs, rhs, _) -> (wf_E lhs env) @ (wf_E rhs env)
       | EIf(cond, thn, els, _) -> (wf_E cond env) @ (wf_E thn env) @ (wf_E els env)
@@ -444,24 +490,17 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
   and wf_D (d : sourcespan decl) (* other parameters may be needed here *) =
     Error([NotYetImplemented "Implement well-formedness checking for definitions"])
   and wf_Bindings (bindings : sourcespan binding list) (env : env_entry envt) : (env_entry envt) * (exn list) =
-    List.fold_left
-      (fun (acc : (env_entry envt) * (exn list)) bnding  ->
-        let (env_acc, exns_acc) = acc in
-        let (benv, bexns) = (wf_Binding bnding env_acc) in (benv, bexns @ exns_acc))
-      (env, [])
-      bindings
-  and wf_Binding (bnding : sourcespan binding) (env : env_entry envt) : (env_entry envt) * (exn list) =
-    let (bnd, rhs, _) = bnding in
-    let (bnd_env, bnd_exns) = wf_Bind bnd env in
-    (* Use original env to check RHS, because we are checking the right-hand-side of the binding itself *)
-    let rhs_exns = wf_E rhs env in
-    (bnd_env, bnd_exns @ rhs_exns)
+    match bindings with
+    | [] -> (env, [])
+    | (bind,expr,_)::tail ->
+        let (env_bind, exns_bind) = wf_Bind bind env in
+        let exns_expr = wf_E expr env in
+        let (env_tail, exns_tail) = wf_Bindings tail env_bind in
+        (env_tail, exns_bind @ exns_expr @ exns_tail)
   and wf_Bind (bnd : sourcespan bind) (env : env_entry envt) : (env_entry envt) * (exn list) =
     match bnd with
     | BBlank(_) -> (env, [])
-    | BName(name, _, loc) ->
-      let bnd_exns = if (var_in_env name env) then [DuplicateId(name, (lookup_var_loc name env), loc)] else [] in
-      ((name, Var(loc))::env, bnd_exns)
+    | BName(name, _, loc) -> ((name, Var(loc))::env, [])
     | BTuple(binds, _) ->
       List.fold_left
       (fun (acc : (env_entry envt) * (exn list)) bnd ->
