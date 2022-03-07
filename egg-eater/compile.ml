@@ -346,14 +346,14 @@ let rec check_duplicate_var (sym : string) (binds : sourcespan binding list) (lo
 *)
 
 (* checks for duplicate variables inside a let binding.  we do this by looking through a flattened list of (string * sourcepan) to make our lives easier. *)
-let rec check_duplicate_let_vars (sym : string) (existing_loc : sourcespan) (binds : (string * sourcespan) list) : exn list =
+let rec check_duplicate_binds (sym : string) (existing_loc : sourcespan) (binds : (string * sourcespan) list) : exn list =
   match binds with
   | [] -> [] (* no duplicates found -> no error *)
   | (k, loc) :: tail ->
       if k = sym then
         [DuplicateId(sym, loc, existing_loc)]
       else
-        check_duplicate_let_vars sym loc tail
+        check_duplicate_binds sym loc tail
 ;;
 
 let rec check_duplicate_arg (sym : string) (args : (string * sourcespan) list) (loc : sourcespan) : exn list =
@@ -416,25 +416,33 @@ let rec add_args_to_env (args : (string * sourcespan) list) (env : env_entry env
     args
 ;;
 
+let rec bind_list_pairs (binds : sourcespan binding list) : (string * sourcespan) list =
+  match binds with
+  | [] -> []
+  | (bind,_,_) :: tail -> (bind_pairs [bind]) @ (bind_list_pairs tail)
+and bind_pairs (binds : sourcespan bind list) : (string * sourcespan) list =
+  match binds with
+  | [] -> []
+  | BBlank(loc) :: tail -> bind_pairs tail
+  | BName(sym,_,loc) :: tail -> (sym,loc) :: (bind_pairs tail)
+  | BTuple(tup_binds,loc) :: tail -> (bind_pairs tup_binds) @ (bind_pairs tail)
+;;
+
+let rec check_dups (binds : (string * sourcespan) list) : exn list =
+  match binds with
+  | [] -> []
+  | (sym,loc) :: tail -> (check_duplicate_binds sym loc tail) @ (check_dups tail)
+;;
+
 let dup_binding_exns (binds : sourcespan binding list) : exn list =
-  let rec bind_list_pairs (binds : sourcespan binding list) : (string * sourcespan) list =
-    match binds with
-    | [] -> []
-    | (bind,_,_) :: tail -> (bind_pairs [bind]) @ (bind_list_pairs tail)
-  and bind_pairs (binds : sourcespan bind list) : (string * sourcespan) list =
-    match binds with
-    | [] -> []
-    | BBlank(loc) :: tail -> bind_pairs tail
-    | BName(sym,_,loc) :: tail -> (sym,loc) :: (bind_pairs tail)
-    | BTuple(tup_binds,loc) :: tail -> (bind_pairs tup_binds) @ (bind_pairs tail)
-  in
-  let rec check_dups (binds : (string * sourcespan) list) : exn list =
-    match binds with
-    | [] -> []
-    | (sym,loc) :: tail -> (check_duplicate_let_vars sym loc tail) @ (check_dups tail)
-  in
   check_dups (bind_list_pairs binds)
 ;;
+
+(*
+let dup_decl_args_exns (args : sourcespan bind list) : exn list =
+  check_dups (bind_pairs args)
+;;
+*)
 
 
 let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
@@ -487,8 +495,16 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
           | Var(_) -> raise (InternalCompilerError (sprintf "Applying variable %s as a function" fname))
         else
           [UnboundFun(fname,loc)] @ arg_errs
-  and wf_D (d : sourcespan decl) (* other parameters may be needed here *) =
-    Error([NotYetImplemented "Implement well-formedness checking for definitions"])
+  and wf_D (d : sourcespan decl) : exn list =
+    match d with
+    | DFun(fname, args, body, _) ->
+        let flattened_args = bind_pairs args in
+        let env = List.fold_left
+          (fun accum_env arg_pair ->
+            let (sym,loc) = arg_pair in
+            (sym, Var(loc)) :: accum_env)
+          [] flattened_args
+        in (check_dups flattened_args) @ (wf_E body env)
   and wf_Bindings (bindings : sourcespan binding list) (env : env_entry envt) : (env_entry envt) * (exn list) =
     match bindings with
     | [] -> (env, [])
