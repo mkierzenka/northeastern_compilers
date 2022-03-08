@@ -16,7 +16,7 @@ exception GetItemError of string * sourcespan (* Error with GetItem call, takes 
 exception Unsupported of string * sourcespan
 exception InternalCompilerError of string (* Major failure: message to show *)
 
-  
+
 
 (* Stringifies a list of compilation errors *)
 let print_errors (exns : exn list) : string list =

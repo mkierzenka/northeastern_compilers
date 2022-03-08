@@ -527,10 +527,30 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
   in
   match p with
   | Program(decls, body, _) ->
-     Error([NotYetImplemented "Implement well-formedness checking for programs"])
+      (* gather all functions into the env *)
+      let (env, init_errs) = setup_env decls in
+      (* check decls *)
+      let decl_errs =
+        List.fold_left
+          (fun (acc : (exn list)) decl -> ((wf_D decl) @ acc))
+          []
+          decls in
+      (* check the body *)
+      let body_errs = wf_E body env in
+      let all_errs = init_errs @ decl_errs @ body_errs in
+      if all_errs = [] then
+        Ok(p)
+      else
+        Error(all_errs)
 ;;
 
-
+(* TODO, implement all our desugarings:
+ - and/or rewrite
+ - let bindings with tuple on the LHS
+ - tuples as func args
+ - add let binding for every func arg (to prevent tail-recursion overwrite)
+ - sequence -> let bindings with "_"
+*)
 let desugar (p : sourcespan program) : sourcespan program =
   let gensym =
     let next = ref 0 in
@@ -539,12 +559,40 @@ let desugar (p : sourcespan program) : sourcespan program =
       sprintf "%s_%d" name (!next)) in
   let rec helpE (e : sourcespan expr) (* other parameters may be needed here *) =
     Error([NotYetImplemented "Implement desugaring for expressions"])
+  and helpBinds (body : sourcespan expr) (bindlist : sourcespan bind list) (parent_sym : string) (parent_idx : int) : sourcespan expr =
+    List.fold_left
+      (fun body_acc arg ->
+        match arg with
+        | BBlank(_) -> body_acc
+        | BName(sym, is_nested, bloc) ->
+        if is_nested
+        then ELet([(arg, EGetItem(EId(parent_sym), ENumber(parent_idx), bloc), bloc)], body_acc, loc) else ELet([(arg, EId(sym, bloc), bloc)], body_acc, loc)
+        (* these locations aren't great, but nothing better it seems *)
+        | BTuple(binds, bloc) -> ELet([(arg, EId(gensym, bloc), bloc)], body_acc, loc)
+      )
+      body
+      bindlist
   and helpD (d : sourcespan decl) (* other parameters may be needed here *) =
-    Error([NotYetImplemented "Implement desugaring for definitions"])
+    match d with
+    | DFun(fname, args, body, loc) ->
+        let desugared_body = List.fold_left
+          (fun body_acc arg ->
+            begin
+            match arg with
+            | BBlank(_) -> body_acc
+            | BName(sym, _, bloc) -> ELet([(arg, EId(sym, bloc), bloc)], body_acc, loc) (* these locations aren't great, but nothing better it seems *)
+            | BTuple(binds, bloc) -> helpBinds body_acc binds
+            end
+          )
+          body
+          args in
+        DFun(fname, args, desugared_body, loc)
   in
   match p with
-  | Program(decls, body, _) ->
-      raise (NotYetImplemented "Implement desugaring for programs")
+  | Program(decls, body, loc) ->
+    let desugared_decls = List.map helpD decls in
+    let desugared_body = helpE body in
+    Program(desugared_decls, desugared_body, loc)
 ;;
 
 let naive_stack_allocation (prog: tag aprogram) : tag aprogram * arg envt =
@@ -595,7 +643,7 @@ let run_if should_run f =
   if should_run then f else no_op_phase
 ;;
 
-(* Add a desugaring phase somewhere in here *)
+(* TODO, read assignment description-- we need comments here *)
 let compile_to_string (prog : sourcespan program pipeline) : string pipeline =
   prog
   |> (add_err_phase well_formed is_well_formed)
