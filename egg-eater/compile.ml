@@ -544,14 +544,47 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
         Error(all_errs)
 ;;
 
+let desugar_decl_arg_tups (p : sourcespan program) : sourcespan program =
+  let gensym =
+    let next = ref 0 in
+    (fun name ->
+      next := !next + 1;
+      sprintf "%s_%d" name (!next)) in
+  let rec helpD (d : sourcespan decl) =
+    match d with
+    | DFun(fname, args, body, loc) ->
+        let (desugared_args, desugared_body) =
+          List.fold_left
+          (fun (args_acc, body_acc) arg ->
+            begin
+            match arg with
+            | BBlank(_) -> (arg::args_acc, body_acc)
+            | BName(_, _, _) -> (arg::args_acc, body_acc)
+            | BTuple(binds, bloc) ->
+                let new_arg_sym = gensym "tup" in (* TODO better name? *)
+                let new_body = ELet([(arg, EId(new_arg_sym,bloc), bloc)], body_acc, bloc) in
+                let new_bind = BName(new_arg_sym,false,bloc) in
+                (new_bind::args_acc, new_body)
+            end)
+          ([], body)
+          args in
+        DFun(fname, desugared_args, desugared_body, loc)
+  in
+  match p with
+  | Program(decls, body, loc) ->
+    let desugared_decls = List.map helpD decls in
+    Program(desugared_decls, body, loc)
+
 (* TODO, implement all our desugarings:
- - and/or rewrite
- - let bindings with tuple on the LHS
- - tuples as func args
- - add let binding for every func arg (to prevent tail-recursion overwrite)
- - sequence -> let bindings with "_"
+ 1. and/or rewrite
+ 2. let bindings with tuple on the LHS
+ 3. tuples as func args
+ 4. add let binding for every func arg (to prevent tail-recursion overwrite)
+ 5. sequence -> let bindings with "_"
 *)
 let desugar (p : sourcespan program) : sourcespan program =
+  p;;
+  (*
   let gensym =
     let next = ref 0 in
     (fun name ->
@@ -559,19 +592,24 @@ let desugar (p : sourcespan program) : sourcespan program =
       sprintf "%s_%d" name (!next)) in
   let rec helpE (e : sourcespan expr) (* other parameters may be needed here *) =
     Error([NotYetImplemented "Implement desugaring for expressions"])
-  and helpBinds (body : sourcespan expr) (bindlist : sourcespan bind list) (parent_sym : string) (parent_idx : int) : sourcespan expr =
-    List.fold_left
-      (fun body_acc arg ->
+  and helpBindsForTuple (body : sourcespan expr) (bindlist : sourcespan bind list) (parent_sym : string) : sourcespan expr =
+    let (expr, _) = List.fold_left
+      (fun (body_acc, parent_idx) arg ->
         match arg with
-        | BBlank(_) -> body_acc
+        | BBlank(_) -> (body_acc, parent_idx+1)
         | BName(sym, is_nested, bloc) ->
-        if is_nested
-        then ELet([(arg, EGetItem(EId(parent_sym), ENumber(parent_idx), bloc), bloc)], body_acc, loc) else ELet([(arg, EId(sym, bloc), bloc)], body_acc, loc)
+            (ELet([(arg, EGetItem(EId(parent_sym), ENumber(parent_idx), bloc), bloc)], body_acc, loc), parent_idx+1)
         (* these locations aren't great, but nothing better it seems *)
-        | BTuple(binds, bloc) -> ELet([(arg, EId(gensym, bloc), bloc)], body_acc, loc)
+        | BTuple(binds, bloc) ->
+            let tup_sym = gensym in
+            let tup_bind = BName(tup_sym, false, bloc) in
+            let tup_body = helpBindsForTuple body_acc binds tup_sym in
+            (ELet([(tup_bind, EGetItem(EId(parent_sym), ENumber(parent_idx), bloc), bloc)], tup_body, loc), parent_idx+1)
+            (*else (ELet([(arg, EId(tup_bind, bloc), bloc)], tup_body, loc), parent_idx+1)*)
       )
-      body
+      (body, 0)
       bindlist
+    in expr
   and helpD (d : sourcespan decl) (* other parameters may be needed here *) =
     match d with
     | DFun(fname, args, body, loc) ->
@@ -580,8 +618,15 @@ let desugar (p : sourcespan program) : sourcespan program =
             begin
             match arg with
             | BBlank(_) -> body_acc
-            | BName(sym, _, bloc) -> ELet([(arg, EId(sym, bloc), bloc)], body_acc, loc) (* these locations aren't great, but nothing better it seems *)
-            | BTuple(binds, bloc) -> helpBinds body_acc binds
+            | BName(sym, _, bloc) ->
+                (* this implements desugaring 4 *)
+                ELet([(arg, EId(sym, bloc), bloc)], body_acc, loc) (* these locations aren't great, but nothing better it seems *)
+            | BTuple(binds, bloc) ->
+                (* this implements desugaring 3, which inadvertently implements #4 *)
+                let tup_sym = gensym in
+                let tup_bind = BName(tup_sym, false, bloc) in
+                let tup_body = helpBindsForTuple body_acc binds tup_sym in
+                (ELet([(tup_bind, EId(tup_bind, bloc), bloc)], tup_body, loc), parent_idx+1)
             end
           )
           body
@@ -594,6 +639,7 @@ let desugar (p : sourcespan program) : sourcespan program =
     let desugared_body = helpE body in
     Program(desugared_decls, desugared_body, loc)
 ;;
+*)
 
 let naive_stack_allocation (prog: tag aprogram) : tag aprogram * arg envt =
   raise (NotYetImplemented "Implement stack allocation for egg-eater")
