@@ -100,6 +100,12 @@ and string_of_expr_with (print_a : 'a -> string) (e : 'a expr) : string =
              (string_of_expr thn)
              (string_of_expr els)
              (print_a a)
+  | EScIf(cond, thn, els, a) ->
+     sprintf "(scif %s: %s else: %s)%s"
+             (string_of_expr cond)
+             (string_of_expr thn)
+             (string_of_expr els)
+             (print_a a)
   | EApp(funname, args, call_type, a) ->
      sprintf "(%s%s(%s))%s" (string_of_call_type call_type) funname (ExtString.String.join ", " (List.map string_of_expr args)) (print_a a)
 let string_of_expr (e : 'a expr) : string =
@@ -149,6 +155,12 @@ and string_of_cexpr_with (print_a : 'a -> string) (c : 'a cexpr) : string =
      sprintf "(%s %s %s)%s" (string_of_immexpr left) (string_of_op2 op) (string_of_immexpr right) (print_a a)
   | CIf(cond, thn, els, a) ->
      sprintf "(if %s: %s else: %s)%s"
+             (string_of_immexpr cond)
+             (string_of_aexpr thn)
+             (string_of_aexpr els)
+             (print_a a)
+  | CScIf(cond, thn, els, a) ->
+     sprintf "(scif %s: %s else: %s)%s"
              (string_of_immexpr cond)
              (string_of_aexpr thn)
              (string_of_aexpr els)
@@ -272,6 +284,10 @@ let rec format_expr (fmt : Format.formatter) (print_a : 'a -> string) (e : 'a ex
      close_paren fmt
   | EIf(cond, thn, els, a) ->
      open_label fmt "EIf" (print_a a);
+     help cond; print_comma_sep fmt; help thn; print_comma_sep fmt; help els;
+     close_paren fmt
+  | EScIf(cond, thn, els, a) ->
+     open_label fmt "EScIf" (print_a a);
      help cond; print_comma_sep fmt; help thn; print_comma_sep fmt; help els;
      close_paren fmt
   | EApp(funname, args, call_type, a) ->

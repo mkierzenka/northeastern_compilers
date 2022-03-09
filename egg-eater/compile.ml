@@ -158,6 +158,7 @@ let rename_and_tag (p : tag program) : tag program =
     | EPrim1(op, arg, tag) -> EPrim1(op, helpE funenv env arg, tag)
     | EPrim2(op, left, right, tag) -> EPrim2(op, helpE funenv env left, helpE funenv env right, tag)
     | EIf(c, t, f, tag) -> EIf(helpE funenv env c, helpE funenv env t, helpE funenv env f, tag)
+    | EScIf(c, t, f, tag) -> EScIf(helpE funenv env c, helpE funenv env t, helpE funenv env f, tag)
     | ENumber _ -> e
     | EBool _ -> e
     | ENil _ -> e
@@ -185,6 +186,7 @@ let deepest_stack e env =
   and helpC e =
     match e with
     | CIf(c, t, f, _) -> List.fold_left max 0 [helpI c; helpA t; helpA f]
+    | CScIf(c, t, f, _) -> List.fold_left max 0 [helpI c; helpA t; helpA f]
     | CPrim1(_, i, _) -> helpI i
     | CPrim2(_, i1, i2, _) -> max (helpI i1) (helpI i2)
     | CApp(_, args, _, _) -> List.fold_left max 0 (List.map helpI args)
@@ -236,6 +238,9 @@ let anf (p : tag program) : unit aprogram =
     | EIf(cond, _then, _else, _) ->
        let (cond_imm, cond_setup) = helpI cond in
        (CIf(cond_imm, helpA _then, helpA _else, ()), cond_setup)
+    | EScIf(cond, _then, _else, _) ->
+       let (cond_imm, cond_setup) = helpI cond in
+       (CScIf(cond_imm, helpA _then, helpA _else, ()), cond_setup)
     | ELet([], body, _) -> helpC body
     | ELet((bind, expr, tag)::tail, body, _) ->
        (* TODO make sure using same tag for all bindings is ok *)
@@ -293,6 +298,10 @@ let anf (p : tag program) : unit aprogram =
        let tmp = sprintf "if_%d" tag in
        let (cond_imm, cond_setup) = helpI cond in
        (ImmId(tmp, ()), cond_setup @ [(tmp, CIf(cond_imm, helpA _then, helpA _else, ()))])
+    | EScIf(cond, _then, _else, tag) ->
+       let tmp = sprintf "scif_%d" tag in
+       let (cond_imm, cond_setup) = helpI cond in
+       (ImmId(tmp, ()), cond_setup @ [(tmp, CScIf(cond_imm, helpA _then, helpA _else, ()))])
     | EApp(funname, args, ct, tag) ->
        let tmp = sprintf "app_%d" tag in
        let (new_args, new_setup) = List.split (List.map helpI args) in
@@ -471,6 +480,7 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
       | EPrim1(op, expr, _) -> wf_E expr env
       | EPrim2(op, lhs, rhs, _) -> (wf_E lhs env) @ (wf_E rhs env)
       | EIf(cond, thn, els, _) -> (wf_E cond env) @ (wf_E thn env) @ (wf_E els env)
+      | EScIf(cond, thn, els, _) -> raise (InternalCompilerError "EScIf is not in the egg-eater syntax")
       | ENumber(n, loc) ->
           if n > (Int64.div Int64.max_int 2L) || n < (Int64.div Int64.min_int 2L) then
             [Overflow(n, loc)]
@@ -626,6 +636,7 @@ let desugar_let_bind_tups (p : sourcespan program) : sourcespan program =
     | EPrim1(op, expr, loc) -> EPrim1(op, helpE expr, loc)
     | EPrim2(op, lhs, rhs, loc) -> EPrim2(op, helpE lhs, helpE rhs, loc)
     | EIf(cond, thn, els, loc) -> EIf(helpE cond, helpE thn, helpE els, loc)
+    | EScIf(cond, thn, els, loc) -> EScIf(helpE cond, helpE thn, helpE els, loc)
     | EApp(fname, args, ctype, loc) -> EApp(fname, List.map helpE args, ctype, loc)
     | _ -> e
   and helpD (d : sourcespan decl) : sourcespan decl =
@@ -663,7 +674,53 @@ let desugar_args_as_let_binds (p : sourcespan program) : sourcespan program =
 ;;
 
 let desugar_and_or (p : sourcespan program) : sourcespan program =
-  (* TODO *)
+  (*
+  let rec help_decl (d : 'a decl) : sourcespan decl =
+    match d with
+    | DFun(fname, args, body, _) ->
+        let rw_body = help_expr body in
+        let rw_args =
+          List.map
+            (fun arg ->
+              match arg with
+              | (sym, _) -> (sym, ()))
+            args in
+        DFun(fname, rw_args, rw_body, ())
+  and help_expr (e : 'a expr) : sourcespan expr =
+    match e with
+    | EPrim2(op, lhs, rhs, _) ->
+       let lhs_untagged = help_expr lhs in
+       let rhs_untagged = help_expr rhs in
+       begin match op with
+        (* (e1 && e2) -> (if !e1: false else: e2) *)
+        | And -> EScIf(EPrim1(Not, lhs_untagged, ()), EBool(false, ()), rhs_untagged, ())
+        (* (e1 || e2) -> (if e1: true else: e2) *)
+        | Or -> EScIf(lhs_untagged, EBool(true, ()), rhs_untagged, ())
+        | _ -> EPrim2(op, (help_expr lhs), (help_expr rhs), ())
+       end
+    | ELet(binds, body, _) -> ELet((bind_helper binds), (help_expr body), ())
+    | EPrim1(op, expr, _) -> EPrim1(op, (help_expr expr), ())
+    | EIf(cond, thn, els, _) ->
+        EIf((help_expr cond), (help_expr thn), (help_expr els), ())
+    | EScIf(cond, thn, els, _) -> raise (InternalCompilerError "EScIf is not in the egg-eater syntax")
+    | ENumber(n, _) -> ENumber(n, ())
+    | EBool(b, _) -> EBool(b, ())
+    | EId(sym, _) -> EId(sym, ())
+    | EScIf _ -> raise (InternalCompilerError "Impossible: 'EScIf' is not in syntax")
+    | EApp(fname, args, _) ->
+        let rw_args = List.map help_expr args in
+        EApp(fname, rw_args, ())
+  and bind_helper (binds : 'a bind list) : sourcespan bind list =
+    match binds with
+    | [] -> []
+    | (sym, v, _) :: tail -> (sym, (help_expr v), ()) :: (bind_helper tail)
+  in
+  match p with
+  | Program(decls, body, _) ->
+      let rw_decls = List.map help_decl decls in
+      let rw_body = help_expr body in
+      Program(rw_decls, rw_body, ())
+*)
   p
 ;;
 
