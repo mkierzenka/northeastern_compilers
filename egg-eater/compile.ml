@@ -821,11 +821,28 @@ let run_if should_run f =
   if should_run then f else no_op_phase
 ;;
 
-(* TODO, read assignment description-- we need comments here *)
+(* We chose to put the desugar phase after the well_formed check to make sure we spit
+ * out the correct error location for ill-formed programs.  We choose to desugar before
+ * ANFing because the desugar phase is not guaranteed to perform ANFing, therefore we
+ * would need to call ANF a second time if we desugared after ANFing.  Tagging and
+ * renaming needs to happen before ANFing, so we desugar before these two phases because
+ * desugaring would invalidate both tagging and renaming.  Note: tagging and renaming
+ * is not a prerequisite to desugaring.
+ * *)
 let compile_to_string (prog : sourcespan program pipeline) : string pipeline =
   prog
   |> (add_err_phase well_formed is_well_formed)
-  (* TODO add desugaring, maybe not *right* here *)
+  (* Invariant: EScIf is not part of the AST *)
+  |> (add_phase desugared desugar)
+  (* Invariants:
+    * 1. EPrim2's should never have "and" or "or" operators
+    * 2. Every bind to a DFun will be shadowed in a ELet in the body.  This will
+    *     avoid the "min/max" tail-recursion problem; see the comment inside
+    *     desugar_args_as_let_binds for more details.
+    * 3. ELet's will never have BTuple's in the receiving position (the lhs).
+    * 4. The binds (arguments) to each DFun will never be an BTuple.
+    * 5. There will be no ESeq's in our AST.
+    * *)
   |> (add_phase tagged tag)
   |> (add_phase renamed rename_and_tag)
   |> (add_phase anfed (fun p -> atag (anf p)))
