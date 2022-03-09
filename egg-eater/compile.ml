@@ -717,8 +717,40 @@ let desugar_and_or (p : sourcespan program) : sourcespan program =
 ;;
 
 let desugar_sequences (p : sourcespan program) : sourcespan program =
-  (* TODO *)
-  p
+  let rec help_decl (d : sourcespan decl) : sourcespan decl =
+    match d with
+    | DFun(fname, args, body, loc) ->
+        DFun(fname, args, help_expr body, loc)
+  and help_expr (e : sourcespan expr) : sourcespan expr =
+    match e with
+    | ESeq(le, re, loc) ->
+        let binding = (BBlank(loc), help_expr le, loc) in
+        ELet([binding], help_expr re, loc)
+    | ETuple(exprs, loc) -> ETuple(List.map help_expr exprs, loc)
+    | EGetItem(tup, idx, loc) -> EGetItem(help_expr tup, help_expr idx, loc)
+    | ESetItem(tup, idx, rhs, loc) -> ESetItem(help_expr tup, help_expr idx, help_expr rhs, loc)
+    | ELet(binds, body, loc) ->
+        let rw_binds = List.map
+          (fun (bind, rhs, loc) ->
+            (bind, help_expr rhs, loc))
+          binds in
+        ELet(rw_binds, help_expr body, loc)
+    | EPrim1(op, expr, loc) -> EPrim1(op, (help_expr expr), loc)
+    | EPrim2(op, lhs, rhs, loc) -> EPrim2(op, help_expr lhs, help_expr rhs, loc)
+    | EIf(cond, thn, els, loc) ->
+        EIf((help_expr cond), (help_expr thn), (help_expr els), loc)
+    | EScIf(cond, thn, els, loc) ->
+        EScIf((help_expr cond), (help_expr thn), (help_expr els), loc)
+    | EApp(fname, args, ct, loc) ->
+        let rw_args = List.map help_expr args in
+        EApp(fname, rw_args, ct, loc)
+    | _ -> e
+  in
+  match p with
+  | Program(decls, body, loc) ->
+      let rw_decls = List.map help_decl decls in
+      let rw_body = help_expr body in
+      Program(rw_decls, rw_body, loc)
 ;;
 
 
