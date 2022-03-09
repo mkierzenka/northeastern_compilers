@@ -505,16 +505,16 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
           | Var(_) -> raise (InternalCompilerError (sprintf "Applying variable %s as a function" fname))
         else
           [UnboundFun(fname,loc)] @ arg_errs
-  and wf_D (d : sourcespan decl) : exn list =
+  and wf_D (d : sourcespan decl) (env : env_entry envt) : exn list =
     match d with
     | DFun(fname, args, body, _) ->
         let flattened_args = bind_pairs args in
-        let env = List.fold_left
+        let new_env = List.fold_left
           (fun accum_env arg_pair ->
             let (sym,loc) = arg_pair in
             (sym, Var(loc)) :: accum_env)
-          [] flattened_args
-        in (check_dups flattened_args) @ (wf_E body env)
+          env flattened_args
+        in (check_dups flattened_args) @ (wf_E body new_env)
   and wf_Bindings (bindings : sourcespan binding list) (env : env_entry envt) : (env_entry envt) * (exn list) =
     match bindings with
     | [] -> (env, [])
@@ -542,7 +542,7 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
       (* check decls *)
       let decl_errs =
         List.fold_left
-          (fun (acc : (exn list)) decl -> ((wf_D decl) @ acc))
+          (fun (acc : (exn list)) decl -> ((wf_D decl env) @ acc))
           []
           decls in
       (* check the body *)
