@@ -637,6 +637,40 @@ let desugar_let_bind_tups (p : sourcespan program) : sourcespan program =
     let desugared_decls = List.map helpD decls in
     let desugared_body = helpE body in
     Program(desugared_decls, desugared_body, loc)
+;;
+
+let desugar_args_as_let_binds (p : sourcespan program) : sourcespan program =
+  let rec help_decl (d : 'a decl) : sourcespan decl =
+    match d with
+    | DFun(fname, args, body, loc) ->
+        (* purposely shadow the args with let bindings to prevent the potential
+         * for the 'max' (or 'min) problem during tail recursion *)
+        let arg_binds = List.fold_left
+          (fun new_args_accum arg ->
+            match arg with
+            | BName(sym, _, loc) ->
+                (arg, EId(sym, loc), loc) :: new_args_accum
+            | BBlank _ -> new_args_accum
+            | BTuple _ -> new_args_accum)
+          [] args in
+        let new_body = ELet(arg_binds, body, loc) in
+        DFun(fname, args, new_body, loc)
+  in
+  match p with
+  | Program(decls, body, loc) ->
+      let rw_decls = List.map help_decl decls in
+      Program(rw_decls, body, loc)
+;;
+
+let desugar_and_or (p : sourcespan program) : sourcespan program =
+  (* TODO *)
+  p
+;;
+
+let desugar_sequences (p : sourcespan program) : sourcespan program =
+  (* TODO *)
+  p
+;;
 
 
 
@@ -648,63 +682,15 @@ let desugar_let_bind_tups (p : sourcespan program) : sourcespan program =
  5. sequence -> let bindings with "_"
 *)
 let desugar (p : sourcespan program) : sourcespan program =
-  p;;
-  (*
-  let gensym =
-    let next = ref 0 in
-    (fun name ->
-      next := !next + 1;
-      sprintf "%s_%d" name (!next)) in
-  let rec helpE (e : sourcespan expr) (* other parameters may be needed here *) =
-    Error([NotYetImplemented "Implement desugaring for expressions"])
-  and helpBindsForTuple (body : sourcespan expr) (bindlist : sourcespan bind list) (parent_sym : string) : sourcespan expr =
-    let (expr, _) = List.fold_left
-      (fun (body_acc, parent_idx) arg ->
-        match arg with
-        | BBlank(_) -> (body_acc, parent_idx+1)
-        | BName(sym, is_nested, bloc) ->
-            (ELet([(arg, EGetItem(EId(parent_sym), ENumber(parent_idx), bloc), bloc)], body_acc, loc), parent_idx+1)
-        (* these locations aren't great, but nothing better it seems *)
-        | BTuple(binds, bloc) ->
-            let tup_sym = gensym in
-            let tup_bind = BName(tup_sym, false, bloc) in
-            let tup_body = helpBindsForTuple body_acc binds tup_sym in
-            (ELet([(tup_bind, EGetItem(EId(parent_sym), ENumber(parent_idx), bloc), bloc)], tup_body, loc), parent_idx+1)
-            (*else (ELet([(arg, EId(tup_bind, bloc), bloc)], tup_body, loc), parent_idx+1)*)
-      )
-      (body, 0)
-      bindlist
-    in expr
-  and helpD (d : sourcespan decl) (* other parameters may be needed here *) =
-    match d with
-    | DFun(fname, args, body, loc) ->
-        let desugared_body = List.fold_left
-          (fun body_acc arg ->
-            begin
-            match arg with
-            | BBlank(_) -> body_acc
-            | BName(sym, _, bloc) ->
-                (* this implements desugaring 4 *)
-                ELet([(arg, EId(sym, bloc), bloc)], body_acc, loc) (* these locations aren't great, but nothing better it seems *)
-            | BTuple(binds, bloc) ->
-                (* this implements desugaring 3, which inadvertently implements #4 *)
-                let tup_sym = gensym in
-                let tup_bind = BName(tup_sym, false, bloc) in
-                let tup_body = helpBindsForTuple body_acc binds tup_sym in
-                (ELet([(tup_bind, EId(tup_bind, bloc), bloc)], tup_body, loc), parent_idx+1)
-            end
-          )
-          body
-          args in
-        DFun(fname, args, desugared_body, loc)
-  in
-  match p with
-  | Program(decls, body, loc) ->
-    let desugared_decls = List.map helpD decls in
-    let desugared_body = helpE body in
-    Program(desugared_decls, desugared_body, loc)
+  desugar_sequences
+  (desugar_and_or
+  (desugar_args_as_let_binds
+  (* "desugar_decl_arg_tups" comes before "desugar_let_bind_tups" to make sure we
+   * don't unnecessarily duplicate the "tup" variable we use as a func arg during
+   * the "desugar_decl_arg_tups" phase. *)
+  (desugar_let_bind_tups
+  (desugar_decl_arg_tups p))))
 ;;
-*)
 
 let naive_stack_allocation (prog: tag aprogram) : tag aprogram * arg envt =
   raise (NotYetImplemented "Implement stack allocation for egg-eater")
