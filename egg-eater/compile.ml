@@ -674,54 +674,46 @@ let desugar_args_as_let_binds (p : sourcespan program) : sourcespan program =
 ;;
 
 let desugar_and_or (p : sourcespan program) : sourcespan program =
-  (*
-  let rec help_decl (d : 'a decl) : sourcespan decl =
+  let rec help_decl (d : sourcespan decl) : sourcespan decl =
     match d with
-    | DFun(fname, args, body, _) ->
-        let rw_body = help_expr body in
-        let rw_args =
-          List.map
-            (fun arg ->
-              match arg with
-              | (sym, _) -> (sym, ()))
-            args in
-        DFun(fname, rw_args, rw_body, ())
-  and help_expr (e : 'a expr) : sourcespan expr =
+    | DFun(fname, args, body, loc) ->
+        DFun(fname, args, help_expr body, loc)
+  and help_expr (e : sourcespan expr) : sourcespan expr =
     match e with
-    | EPrim2(op, lhs, rhs, _) ->
+    | EPrim2(op, lhs, rhs, loc) ->
        let lhs_untagged = help_expr lhs in
        let rhs_untagged = help_expr rhs in
        begin match op with
         (* (e1 && e2) -> (if !e1: false else: e2) *)
-        | And -> EScIf(EPrim1(Not, lhs_untagged, ()), EBool(false, ()), rhs_untagged, ())
+        | And -> EScIf(EPrim1(Not, lhs_untagged, loc), EBool(false, loc), rhs_untagged, loc)
         (* (e1 || e2) -> (if e1: true else: e2) *)
-        | Or -> EScIf(lhs_untagged, EBool(true, ()), rhs_untagged, ())
-        | _ -> EPrim2(op, (help_expr lhs), (help_expr rhs), ())
+        | Or -> EScIf(lhs_untagged, EBool(true, loc), rhs_untagged, loc)
+        | _ -> EPrim2(op, (help_expr lhs), (help_expr rhs), loc)
        end
-    | ELet(binds, body, _) -> ELet((bind_helper binds), (help_expr body), ())
-    | EPrim1(op, expr, _) -> EPrim1(op, (help_expr expr), ())
-    | EIf(cond, thn, els, _) ->
-        EIf((help_expr cond), (help_expr thn), (help_expr els), ())
-    | EScIf(cond, thn, els, _) -> raise (InternalCompilerError "EScIf is not in the egg-eater syntax")
-    | ENumber(n, _) -> ENumber(n, ())
-    | EBool(b, _) -> EBool(b, ())
-    | EId(sym, _) -> EId(sym, ())
-    | EScIf _ -> raise (InternalCompilerError "Impossible: 'EScIf' is not in syntax")
-    | EApp(fname, args, _) ->
+    | ESeq(le, re, loc) -> ESeq(help_expr le, help_expr re, loc)
+    | ETuple(exprs, loc) -> ETuple(List.map help_expr exprs, loc)
+    | EGetItem(tup, idx, loc) -> EGetItem(help_expr tup, help_expr idx, loc)
+    | ESetItem(tup, idx, rhs, loc) -> ESetItem(help_expr tup, help_expr idx, help_expr rhs, loc)
+    | ELet(binds, body, loc) ->
+        let rw_binds = List.map
+          (fun (bind, rhs, loc) ->
+            (bind, help_expr rhs, loc))
+          binds in
+        ELet(rw_binds, help_expr body, loc)
+    | EPrim1(op, expr, loc) -> EPrim1(op, (help_expr expr), loc)
+    | EIf(cond, thn, els, loc) ->
+        EIf((help_expr cond), (help_expr thn), (help_expr els), loc)
+    | EScIf _ -> raise (InternalCompilerError "EScIf is not in the egg-eater syntax")
+    | EApp(fname, args, ct, loc) ->
         let rw_args = List.map help_expr args in
-        EApp(fname, rw_args, ())
-  and bind_helper (binds : 'a bind list) : sourcespan bind list =
-    match binds with
-    | [] -> []
-    | (sym, v, _) :: tail -> (sym, (help_expr v), ()) :: (bind_helper tail)
+        EApp(fname, rw_args, ct, loc)
+    | _ -> e
   in
   match p with
-  | Program(decls, body, _) ->
+  | Program(decls, body, loc) ->
       let rw_decls = List.map help_decl decls in
       let rw_body = help_expr body in
-      Program(rw_decls, rw_body, ())
-*)
-  p
+      Program(rw_decls, rw_body, loc)
 ;;
 
 let desugar_sequences (p : sourcespan program) : sourcespan program =
