@@ -243,6 +243,9 @@ let atag (p : 'a aprogram) : tag aprogram =
     | CIf(cond, thn, els, _) ->
        let if_tag = tag() in
        CIf(helpI cond, helpA thn, helpA els, if_tag)
+    | CScIf(cond, thn, els, _) ->
+       let scif_tag = tag() in
+       CScIf(helpI cond, helpA thn, helpA els, scif_tag)
     | CApp(name, args, native, _) ->
        let app_tag = tag() in
        CApp(name, List.map helpI args, native, app_tag)
