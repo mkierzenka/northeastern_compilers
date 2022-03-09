@@ -575,10 +575,75 @@ let desugar_decl_arg_tups (p : sourcespan program) : sourcespan program =
     let desugared_decls = List.map helpD decls in
     Program(desugared_decls, body, loc)
 
+let desugar_let_bind_tups (p : sourcespan program) : sourcespan program =
+  let gensym =
+    let next = ref 0 in
+    (fun name ->
+      next := !next + 1;
+      sprintf "%s_%d" name (!next)) in
+  let rec helpBind (bnd : sourcespan bind) (body : sourcespan expr) (idx_in_parent : int) (parent_name : string) : (sourcespan expr) =
+    match bnd with
+      | BBlank(loc) -> ELet([(bnd, EGetItem(EId(parent_name, loc), ENumber(Int64.of_int idx_in_parent, loc), loc), loc)], body, loc)
+      | BName(sym, bl, loc) -> ELet([(bnd, EGetItem(EId(parent_name, loc), ENumber(Int64.of_int idx_in_parent, loc), loc), loc)], body, loc)
+      | BTuple(bnds, loc) ->
+        let new_name = gensym "tup" in
+        let (new_body, _) = List.fold_left
+          (fun (body_acc, idx) bnd ->
+           let new_body = helpBind bnd body_acc idx new_name in (new_body, idx + 1))
+           (body, 0)
+           bnds in
+        let new_lhs = BName(new_name, false, loc) in
+        let new_rhs = EGetItem(EId(parent_name, loc), ENumber(Int64.of_int idx_in_parent, loc), loc) in
+        ELet([(new_lhs, new_rhs, loc)], new_body, loc)
+
+  and helpBindings (bindings : sourcespan binding list) (body : sourcespan expr) : sourcespan expr =
+    match bindings with
+    | [] -> body
+    | ((bnd, rhs, loc) as bnding)::rest ->
+      let rest_expr = helpBindings rest body in
+      begin
+      match bnd with
+      (* todo (investigate)- I think we are splitting up lists of bindings into nested lets here *)
+      | BBlank(loc) -> ELet([bnding], rest_expr, loc)
+      | BName(_, _, _) -> ELet([bnding], rest_expr, loc)
+      | BTuple(bnds, loc) ->
+        let new_name = gensym "tup" in
+        let (new_body, _) = List.fold_left
+          (fun (body_acc, idx) bnd ->
+           let new_body = helpBind bnd body_acc idx new_name in (new_body, idx + 1))
+           (rest_expr, 0)
+           bnds in
+        let new_lhs = BName(new_name, false, loc) in
+        ELet([(new_lhs, rhs, loc)], new_body, loc)
+      end
+  and helpE (e : sourcespan expr) : sourcespan expr =
+    match e with
+    | ELet(bindings, body, loc) -> helpBindings bindings body
+    | ESeq(lhs, rhs, loc) -> ESeq(helpE lhs, helpE rhs, loc)
+    | ETuple(exprs, loc) -> ETuple(List.map helpE exprs, loc)
+    | EGetItem(tup, idx, loc) -> EGetItem(helpE tup, helpE idx, loc)
+    | ESetItem(tup, idx, newval, loc) -> ESetItem(helpE tup, helpE idx, helpE newval, loc)
+    | EPrim1(op, expr, loc) -> EPrim1(op, helpE expr, loc)
+    | EPrim2(op, lhs, rhs, loc) -> EPrim2(op, helpE lhs, helpE rhs, loc)
+    | EIf(cond, thn, els, loc) -> EIf(helpE cond, helpE thn, helpE els, loc)
+    | EApp(fname, args, ctype, loc) -> EApp(fname, List.map helpE args, ctype, loc)
+    | _ -> e
+  and helpD (d : sourcespan decl) : sourcespan decl =
+    match d with
+    | DFun(fname, args, body, loc) -> DFun(fname, args, helpE body, loc)
+  in
+  match p with
+  | Program(decls, body, loc) ->
+    let desugared_decls = List.map helpD decls in
+    let desugared_body = helpE body in
+    Program(desugared_decls, desugared_body, loc)
+
+
+
 (* TODO, implement all our desugarings:
  1. and/or rewrite
- 2. let bindings with tuple on the LHS
- 3. tuples as func args
+ X. let bindings with tuple on the LHS
+ X. tuples as func args
  4. add let binding for every func arg (to prevent tail-recursion overwrite)
  5. sequence -> let bindings with "_"
 *)
