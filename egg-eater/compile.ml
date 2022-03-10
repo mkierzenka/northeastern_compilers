@@ -564,20 +564,19 @@ let desugar_decl_arg_tups (p : sourcespan program) : sourcespan program =
     match d with
     | DFun(fname, args, body, loc) ->
         let (desugared_args, desugared_body) =
-          List.fold_left
-          (fun (args_acc, body_acc) arg ->
+          List.fold_right
+          (fun arg (args_acc, body_acc) ->
             begin
             match arg with
             | BBlank(_) -> (arg::args_acc, body_acc)
             | BName(_, _, _) -> (arg::args_acc, body_acc)
             | BTuple(binds, bloc) ->
-                let new_arg_sym = gensym "tup" in (* TODO better name? *)
+                let new_arg_sym = gensym "tup$" in (* TODO better name? *)
                 let new_body = ELet([(arg, EId(new_arg_sym,bloc), bloc)], body_acc, bloc) in
                 let new_bind = BName(new_arg_sym,false,bloc) in
                 (new_bind::args_acc, new_body)
             end)
-          ([], body)
-          args in
+          args ([], body) in
         DFun(fname, desugared_args, desugared_body, loc)
   in
   match p with
