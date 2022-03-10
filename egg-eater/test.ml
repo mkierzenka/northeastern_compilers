@@ -415,6 +415,7 @@ let tests_from_diamondback = [
 ]
 
 let tests_from_eggeater = [
+  (* Tuples (nested) and outputs *)
   t "0tup" "()" "" "()";
   t "1tup_1" "(6,)" "" "(6,)";
   t "1tup_2" "(false,)" "" "(false,)";
@@ -425,6 +426,50 @@ let tests_from_eggeater = [
   t "trip_3" "((16,),(),7)" "" "((16,),(),7)";
   t "trip_4" "((16,),(),(true,18,20))" "" "((16,),(),(true,18,20))";
 
+  (* Tuples in unary ops *)
+  terr "tup_add1" "let var=(1,) in add1(var)" "" "arithmetic expected a number";
+  terr "tup_sub1" "let var=(1,3) in sub1(var)" "" "arithmetic expected a number";
+  t "tup_print" "let var=print((1,)) in print(var)" "" "(1,)\n(1,)\n(1,)";
+  t "tup_type_checks"
+    "let var=(1,) in (if isbool(var): -9 else: (if isnum(var): -8 else: istuple(var)))"
+    "" "true";
+  terr "tup_not" "!(true,)" "" "logic expected a boolean";
+
+  (* Tuples in binary ops *)
+  terr "tup_plus_num" "let var=(1,2) in var + 3" "" "arithmetic expected a number";
+  terr "tup_plus_num2" "let var=(1,2) in 3 + var" "" "arithmetic expected a number";
+  terr "tup_plus_tup" "(1,) + (3,)" "" "arithmetic expected a number";
+  terr "tup_plus_tup2" "(1,3) + (3,1)" "" "arithmetic expected a number";
+  terr "tup_minus_num" "1 - (if true: (1,1) else: (2,2))" "" "arithmetic expected a number";
+  terr "tup_minus_tup" "(1,) - (3,)" "" "arithmetic expected a number";
+  terr "tup_times_num" "let var=(1,2) in var * 3" "" "arithmetic expected a number";
+  terr "tup_times_tup" "(1,34) * (3,2)" "" "arithmetic expected a number";
+
+  terr "tup_and_bool" "let var=(1,2) in var && true" "" "logic expected a boolean";
+  terr "tup_and_bool2" "let var=(1,2) in true && var" "" "logic expected a boolean";
+  terr "tup_and_bool3" "let var=(true,) in var && true" "" "logic expected a boolean";
+  terr "tup_and_bool_shortcircuit" "false && (true,)" "" "logic expected a boolean";
+  terr "tup_and_tup" "let var=(true,) in var && (true,)" "" "logic expected a boolean";
+
+  terr "tup_or_bool" "let var=(1,2) in var || true" "" "logic expected a boolean";
+  terr "tup_or_bool2" "let var=(1,2) in false || var" "" "logic expected a boolean";
+  terr "tup_or_bool3" "let var=(true,) in var || true" "" "logic expected a boolean";
+  terr "tup_or_bool_shortcircuit" "true || (false,)" "" "logic expected a boolean";
+  terr "tup_or_tup" "let var=(false,) in var || (false,)" "" "logic expected a boolean";
+
+  terr "tup_gt_tup" "(1,) > 2" "" "comparison expected a number";
+  terr "tup_ge_tup" "(1,2) >= 2" "" "comparison expected a number";
+  terr "tup_lt_tup" "(9,) < 2" "" "comparison expected a number";
+  terr "tup_le_tup" "9 < (1,2)" "" "comparison expected a number";
+
+  t "tup_eq_self" "let t=(1,2,true,(3,4)) in t == t" "" "true";
+  t "tup_eq_copy" "let t=(1,2,3,4), t2=t in t == t2" "" "true";
+  t "tup_eq_dupl" "(1,) == (1,)" "" "false";
+  t "tup_eq_dupl2" "let t=(1,2,3,4), t2=(1,2,3,4) in t == t2" "" "false";
+  t "tup_eq_num" "let t=5 in (t,) == t" "" "false";
+  t "tup_eq_bool" "let t=true in (t,) == t" "" "false";
+
+  (* GetItem *)
   t "get_item_1" "(1,2)[0]" "" "1";
   t "get_item_2" "(1,2)[1]" "" "2";
   t "get_item_3" "(1,2,3,4,5,6)[0]" "" "1";
@@ -432,14 +477,29 @@ let tests_from_eggeater = [
   t "get_item_5" "(1,2,3,4,5,6)[3]" "" "4";
   t "get_item_6" "(1,2,3,4,5,6)[5]" "" "6";
 
+  (* SetItem *)
   t "set_item_1" "(1,2)[1] := 6" "" "(1,6)";
   t "set_item_2" "(1,2)[1] := false" "" "(1,false)";
   t "set_item_3" "(1,2,true,false)[0] := false" "" "(false,2,true,false)";
   t "set_item_4" "(1,2,(8,7),false)[2] := (20,5,6)" "" "(1,2,(20,5,6),false)";
   t "set_item_5" "((true,9),2,(8,7),false)[2] := (20,5,6)" "" "((true,9),2,(20,5,6),false)";
 
+  (* Tuples and lets *)
   t "tup_let_1" "let (a,b) = (5,4) in a - b" "" "1";
-  t "tup_let_2" "let ((a,b),(x,y,z)) = ((5,4),(1,2,3)) in (a*b) - (x*y*z)" "" "14";
+  t "tup_let_2" "let ((a,b),_,(x,y,z)) = ((5,4),print(-99),(1,2,3)) in (a*b) - (x*y*z)" "" "-99\n14";
+  t "tup_let_3" "let t=(print(1),print((2,3))) in print(t)" "" "1\n(2,3)\n(1,(2,3))\n(1,(2,3))";
+  t "tup_let_4"
+    "let (i0, i1, _, i3) = ((let i0=false in !i0), (9,), 4, 3) in (if i0: i1[0] * 4 - 3 else: -99)"
+    "" "33";
+  
+  
+  (* Lets and blanks *)
+  t "lets_and_blanks" "let _=2 in 3" "" "3";
+  t "lets_and_blanks2" "let _=print(1) in 2" "" "1\n2";
+  t "lets_and_multiple_blanks"
+    "let _=print(1), _=print(false), _=((print(-3),), print(4)) in true"
+    "" "1\nfalse\n(-3,)\n4\ntrue";
+
 ]
 
 let diamondback_suite = "diamondback_suite">:::tests_from_diamondback
@@ -448,6 +508,6 @@ let eggeater_suite = "eggeater_suite">:::tests_from_eggeater
 
 
 let () =
-  run_test_tt_main ("all_tests">:::[cobra_suite; diamondback_suite; eggeater_suite (*suite; input_file_test_suite ()*)])
+  run_test_tt_main ("all_tests">:::[eggeater_suite (*suite; input_file_test_suite ()*)])
 ;;
 
