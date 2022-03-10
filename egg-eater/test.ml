@@ -433,7 +433,7 @@ let tests_from_eggeater = [
   t "tup_type_checks"
     "let var=(1,) in (if isbool(var): -9 else: (if isnum(var): -8 else: istuple(var)))"
     "" "true";
-  terr "tup_not" "!(true,)" "" "logic expected a boolean";
+  terr "tup_not" "!((true,))" "" "logic expected a boolean";
 
   (* Tuples in binary ops *)
   terr "tup_plus_num" "let var=(1,2) in var + 3" "" "arithmetic expected a number";
@@ -448,13 +448,13 @@ let tests_from_eggeater = [
   terr "tup_and_bool" "let var=(1,2) in var && true" "" "logic expected a boolean";
   terr "tup_and_bool2" "let var=(1,2) in true && var" "" "logic expected a boolean";
   terr "tup_and_bool3" "let var=(true,) in var && true" "" "logic expected a boolean";
-  terr "tup_and_bool_shortcircuit" "false && (true,)" "" "logic expected a boolean";
+  t "tup_and_bool_shortcircuit" "false && (true,)" "" "false";
   terr "tup_and_tup" "let var=(true,) in var && (true,)" "" "logic expected a boolean";
 
   terr "tup_or_bool" "let var=(1,2) in var || true" "" "logic expected a boolean";
   terr "tup_or_bool2" "let var=(1,2) in false || var" "" "logic expected a boolean";
   terr "tup_or_bool3" "let var=(true,) in var || true" "" "logic expected a boolean";
-  terr "tup_or_bool_shortcircuit" "true || (false,)" "" "logic expected a boolean";
+  t "tup_or_bool_shortcircuit" "true || (false,)" "" "true";
   terr "tup_or_tup" "let var=(false,) in var || (false,)" "" "logic expected a boolean";
 
   terr "tup_gt_tup" "(1,) > 2" "" "comparison expected a number";
@@ -489,15 +489,16 @@ let tests_from_eggeater = [
   t "tup_let_2" "let ((a,b),_,(x,y,z)) = ((5,4),print(-99),(1,2,3)) in (a*b) - (x*y*z)" "" "-99\n14";
   t "tup_let_3" "let t=(print(1),print((2,3))) in print(t)" "" "1\n(2,3)\n(1,(2,3))\n(1,(2,3))";
   t "tup_let_4"
-    "let (i0, i1, _, i3) = ((let i0=false in !i0), (9,), 4, 3) in (if i0: i1[0] * 4 - 3 else: -99)"
+    "let (i0, i1, _, i3) = ((let i0=false in !(i0)), (9,), 4, 3) in (if i0: i1[0] * 4 - 3 else: -99)"
     "" "33";
   
   
   (* Lets and blanks *)
   t "lets_and_blanks" "let _=2 in 3" "" "3";
   t "lets_and_blanks2" "let _=print(1) in 2" "" "1\n2";
+
   t "lets_and_multiple_blanks"
-    "let _=print(1), _=print(false), _=((print(-3),), print(4)) in true"
+    "let _=print(1), _=print(false), _=((print((-3,)),), print(4)) in true"
     "" "1\nfalse\n(-3,)\n4\ntrue";
 
 ]
@@ -508,6 +509,6 @@ let eggeater_suite = "eggeater_suite">:::tests_from_eggeater
 
 
 let () =
-  run_test_tt_main ("all_tests">:::[eggeater_suite (*suite; input_file_test_suite ()*)])
+  run_test_tt_main ("all_tests">:::[(*cobra_suite diamondback_suite *) eggeater_suite (*suite; input_file_test_suite ()*)])
 ;;
 

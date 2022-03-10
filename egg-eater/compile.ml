@@ -40,6 +40,8 @@ let bool_tag       = 0x0000000000000007L
 let bool_tag_mask  = 0x0000000000000007L
 let num_tag        = 0x0000000000000000L
 let num_tag_mask   = 0x0000000000000001L
+let tup_tag        = 0x0000000000000001L
+let tup_tag_mask   = 0x0000000000000007L
 
 let err_COMP_NOT_NUM   = 1L
 let err_ARITH_NOT_NUM  = 2L
@@ -991,7 +993,29 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
            @ [IXor(Reg(RAX), Reg(R8))]
         | PrintStack ->
             raise (NotYetImplemented "PrintStack not yet implemented")
-        | _ -> raise (NotYetImplemented "TODO inner compile_cexpr egg-eater features")
+        | IsTuple ->
+          let true_lbl = sprintf "is_tup_true_%d" tag in
+          let false_lbl = sprintf "is_tup_false_%d" tag in
+          let done_lbl = sprintf "is_tup_done_%d" tag in
+          [
+           IMov(Reg(RAX), body_imm);
+           (* Don't need to save RAX on the stack because we overwrite the
+            * value with true/false later. R8 used because And, Cmp don't support imm64 *)
+           IMov(Reg(R8), HexConst(tup_tag_mask));
+           IAnd(Reg(RAX), Reg(R8));
+           IMov(Reg(R8), HexConst(tup_tag));
+           ICmp(Reg(RAX), Reg(R8));
+           IJz(true_lbl);
+           (* case not tup *)
+           ILabel(false_lbl);
+           IMov(Reg(RAX), const_false);
+           IJmp(done_lbl);
+           (* case is a tup *)
+           ILabel(true_lbl);
+           IMov(Reg(RAX), const_true);
+           (* done *)
+           ILabel(done_lbl);
+          ]
      end
   | CPrim2(op, lhs, rhs, tag) ->
      let lhs_reg = compile_imm lhs env in
