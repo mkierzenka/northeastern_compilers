@@ -432,8 +432,14 @@ let tests_from_eggeater = [
   t "get_item_5" "(1,2,3,4,5,6)[3]" "" "4";
   t "get_item_6" "(1,2,3,4,5,6)[5]" "" "6";
 
-  (*t "tup_let_1" "let (a,b) = (5,4) in a - b" "" "1";
-  t "tup_let_2" "let ((a,b),(x,y,z)) = ((5,4),(1,2,3)) in (a*b) - (x*y*z)" "" "14";*)
+  t "set_item_1" "(1,2)[1] := 6" "" "(1,6)";
+  t "set_item_2" "(1,2)[1] := false" "" "(1,false)";
+  t "set_item_3" "(1,2,true,false)[0] := false" "" "(false,2,true,false)";
+  t "set_item_4" "(1,2,(8,7),false)[2] := (20,5,6)" "" "(1,2,(20,5,6),false)";
+  t "set_item_5" "((true,9),2,(8,7),false)[2] := (20,5,6)" "" "((true,9),2,(20,5,6),false)";
+
+  t "tup_let_1" "let (a,b) = (5,4) in a - b" "" "1";
+  t "tup_let_2" "let ((a,b),(x,y,z)) = ((5,4),(1,2,3)) in (a*b) - (x*y*z)" "" "14";
 ]
 
 let diamondback_suite = "diamondback_suite">:::tests_from_diamondback

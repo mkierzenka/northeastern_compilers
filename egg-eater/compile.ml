@@ -1214,7 +1214,19 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
       @ [IShr(Reg(R8), Const(1L))] (* convert from snake val -> int *)
       @ [IAdd(Reg(R8), Const(1L))] (* add 1 to the offset to bypass the tup size *)
       @ [IMov(Reg(RAX), RegOffsetReg(RAX,R8,word_size,0))]
-  | CSetItem(tup, idx, rhs, _) -> []
+  | CSetItem(tup, i, r, _) ->
+      let tup_address = compile_imm tup env in
+      let idx = compile_imm i env in
+      let rhs = compile_imm r env in
+      (* TODO dynamically check idx against the tuple size, throw an err if neg or larger than idx *)
+      [IMov(Reg(RAX), tup_address)] (* move tuple address (snakeval) into RAX *)
+      @ [ISub(Reg(RAX), Const(1L))] (* convert from snake val -> address *)
+      @ [IMov(Reg(R8), idx)] (* move the idx (* snakeval *) into R8 *)
+      @ [IShr(Reg(R8), Const(1L))] (* convert from snake val -> int *)
+      @ [IAdd(Reg(R8), Const(1L))] (* add 1 to the offset to bypass the tup size *)
+      @ [IMov(Reg(R11), rhs)]
+      @ [IMov(RegOffsetReg(RAX,R8,word_size,0), Reg(R11))]
+      @ [IAdd(Reg(RAX), Const(1L))] (* convert the tuple address back to a snakeval *)
 and compile_imm e (env : arg envt) : arg =
   match e with
   | ImmNum(n, _) -> Const(Int64.shift_left n 1)
