@@ -415,7 +415,15 @@ let tests_from_diamondback = [
 ]
 
 let tests_from_eggeater = [
-  t "tup1" "(1,2)" "" "(1,2)";
+  t "0tup" "()" "" "()";
+  t "1tup_1" "(6,)" "" "(6,)";
+  t "1tup_2" "(false,)" "" "(false,)";
+  t "pair_1" "(1,2)" "" "(1,2)";
+  t "pair_2" "(1,(true,8))" "" "(1,(true,8))";
+  t "trip_1" "(true,false,7)" "" "(true,false,7)";
+  t "trip_2" "(true,(),7)" "" "(true,(),7)";
+  t "trip_3" "((16,),(),7)" "" "((16,),(),7)";
+  t "trip_4" "((16,),(),(true,18,20))" "" "((16,),(),(true,18,20))";
 ]
 
 let diamondback_suite = "diamondback_suite">:::tests_from_diamondback

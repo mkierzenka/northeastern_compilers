@@ -1199,8 +1199,8 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
               [IMov(Reg(R8), arg); IMov(RegOffset(offs*word_size, R15), Reg(R8))])
             elems)
       @ padding
-      (* return the pointer to the tuple *)
-      @ [IMov(Reg(RAX), Reg(R15))]
+      (* return the pointer to the tuple, make it a snakeval *)
+      @ [IMov(Reg(RAX), Reg(R15)); IAdd(Reg(RAX), Const(1L))]
       (* increment the heap ptr *)
       @ [IMov(Reg(R8), Const(Int64.of_int (next_heap_loc * word_size))); IAdd(Reg(R15), Reg(R8))]
   | _ -> raise (NotYetImplemented "TODO compile_cexpr egg-eater features")

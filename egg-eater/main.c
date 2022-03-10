@@ -22,6 +22,8 @@ const uint64_t BOOL_TAG = 0x0000000000000007L;
 const uint64_t NUM_TAG_MASK = 0x0000000000000001L;
 const uint64_t NUM_TAG = 0x0000000000000000L;
 const uint64_t FIRST_BIT_MASK = 0x8000000000000000L;
+const uint64_t TUPLE_TAG_MASK = 0x0000000000000007L;
+const uint64_t TUPLE_TAG = 0x0000000000000001L;
 
 const uint64_t err_COMP_NOT_NUM   = 1L;
 const uint64_t err_ARITH_NOT_NUM  = 2L;
@@ -29,6 +31,7 @@ const uint64_t err_LOGIC_NOT_BOOL = 3L;
 const uint64_t err_IF_NOT_BOOL    = 4L;
 const uint64_t err_OVERFLOW       = 5L;
 
+void printHelp(FILE *out, SNAKEVAL val);
 
 
 void printAsBoolean(FILE *out, SNAKEVAL val) {
@@ -49,6 +52,24 @@ void printAsNumber(FILE *out, SNAKEVAL val) {
   fprintf(out, "%ld", signed_num);
 }
 
+void printAsTuple(FILE* out, SNAKEVAL val) {
+  int64_t* heap_address = val - 1L;
+  int64_t tup_size = heap_address[0];
+  int64_t* elems = heap_address + 1;
+  //fprintf(out, "tuple @ %p. size: %ld. value: (", heap_address, tup_size);
+  fprintf(out, "(", heap_address, tup_size);
+  for (int i = 0; i < tup_size; ++i) {
+    printHelp(out, elems[i]);
+    if (i+1 < tup_size) {
+      fprintf(out, ",");
+    }
+  }
+  if (tup_size == 1) {
+    fprintf(out, ",");
+  }
+  fprintf(out, ")");
+}
+
 
 void printHelp(FILE *out, SNAKEVAL val) {
   // COPY YOUR IMPLEMENTATION FROM DIAMONDBACK
@@ -57,6 +78,8 @@ void printHelp(FILE *out, SNAKEVAL val) {
     printAsBoolean(out, val);
   } else if ((val & NUM_TAG_MASK) == NUM_TAG) {
     printAsNumber(out, val);
+  } else if ((val & TUPLE_TAG_MASK) == TUPLE_TAG) {
+    printAsTuple(out, val);
   } else {
     fprintf(out, "Unknown value: %#018lx", val);
   }
