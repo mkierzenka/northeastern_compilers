@@ -800,6 +800,7 @@ let naive_stack_allocation (prog: tag aprogram) : tag aprogram * arg envt =
     | CPrim2 _ -> (env, si)
     | CApp _ -> (env, si)
     | CImmExpr _ -> (env, si)
+    | CTuple(elems, _) -> (env, si)
     | _ -> raise (InternalCompilerError "TODO- finish naive_stack_allocation")
   in
   match prog with
@@ -1176,6 +1177,32 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
         IAdd(Reg(RSP), Const(Int64.of_int (word_size * f_num_args_passed)));
         ]
   | CImmExpr(expr) -> [IMov(Reg(RAX), (compile_imm expr env))]
+  | CTuple(elems, _) -> 
+      let tup_size = List.length elems in
+      let need_padding = tup_size mod 2 == 1 in
+      let padding_val = HexConst(0xF0F0F0F0L) in
+      let padding =
+        if need_padding then []
+        else
+          let offs = tup_size + 1 in
+          [IMov(Reg(R8), padding_val); IMov(RegOffset(offs*word_size, R15), Reg(R8))] in
+      let next_heap_loc = tup_size + 1 + ((1+tup_size) mod 2) in
+
+      (* store the tuple size on the heap *)
+      [IMov(Reg(R8), Const(Int64.of_int tup_size)); IMov(RegOffset(0, R15), Reg(R8))]
+      (* store each tuple element on the heap *)
+      @ List.flatten
+          (List.mapi
+            (fun i e ->
+              let arg = compile_imm e env in
+              let offs = i + 1 in
+              [IMov(Reg(R8), arg); IMov(RegOffset(offs*word_size, R15), Reg(R8))])
+            elems)
+      @ padding
+      (* return the pointer to the tuple *)
+      @ [IMov(Reg(RAX), Reg(R15))]
+      (* increment the heap ptr *)
+      @ [IMov(Reg(R8), Const(Int64.of_int (next_heap_loc * word_size))); IAdd(Reg(R15), Reg(R8))]
   | _ -> raise (NotYetImplemented "TODO compile_cexpr egg-eater features")
 and compile_imm e (env : arg envt) : arg =
   match e with
@@ -1220,6 +1247,12 @@ let compile_prog ((anfed : tag aprogram), (env: arg envt)) : string =
 let compile_prog ((anfed : tag aprogram), (env : arg envt)) : string =
   match anfed with
   | AProgram(decls, body, _) ->
+      let heap_start = [
+          ILineComment("heap start");
+          IInstrComment(IMov(Reg(heap_reg), Reg(List.nth first_six_args_registers 0)), "Load heap_reg with our argument, the heap pointer");
+          IInstrComment(IAdd(Reg(heap_reg), Const(15L)), "Align it to the nearest multiple of 16");
+          IInstrComment(IAnd(Reg(heap_reg), HexConst(0xFFFFFFFFFFFFFFF0L)), "by adding no more than 15 to it")
+        ] in
       let compiled_decls =
         List.fold_left
           (fun accum_instrs decl ->
@@ -1275,7 +1308,7 @@ global our_code_starts_here" in
           IJmp("program_done");
         ] in
       let decl_assembly_string = (to_asm compiled_decls) in
-      let body_assembly_string = (to_asm (stack_setup @ compiled_body @ postlude)) in
+      let body_assembly_string = (to_asm (stack_setup @ heap_start @ compiled_body @ postlude)) in
       sprintf "%s%s%s\n" prelude decl_assembly_string body_assembly_string 
 
 

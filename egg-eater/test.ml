@@ -414,11 +414,16 @@ let tests_from_diamondback = [
   terr "multi_errs_arity_mismatch_r" "def f(x, x): y  f(1)" ""  " expected an arity of 2, but received 1 arguments";
 ]
 
+let tests_from_eggeater = [
+  t "tup1" "(1,2)" "" "(1,2)";
+]
+
 let diamondback_suite = "diamondback_suite">:::tests_from_diamondback
 
+let eggeater_suite = "eggeater_suite">:::tests_from_eggeater
 
 
 let () =
-  run_test_tt_main ("all_tests">:::[cobra_suite; diamondback_suite; (*suite; input_file_test_suite ()*)])
+  run_test_tt_main ("all_tests">:::[cobra_suite; diamondback_suite; eggeater_suite (*suite; input_file_test_suite ()*)])
 ;;
 
