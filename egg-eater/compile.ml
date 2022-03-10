@@ -800,8 +800,9 @@ let naive_stack_allocation (prog: tag aprogram) : tag aprogram * arg envt =
     | CPrim2 _ -> (env, si)
     | CApp _ -> (env, si)
     | CImmExpr _ -> (env, si)
-    | CTuple(elems, _) -> (env, si)
-    | _ -> raise (InternalCompilerError "TODO- finish naive_stack_allocation")
+    | CTuple _ -> (env, si)
+    | CGetItem _ -> (env, si)
+    | CSetItem _ -> (env, si)
   in
   match prog with
   | AProgram(decls, body, _) ->
@@ -1203,7 +1204,17 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
       @ [IMov(Reg(RAX), Reg(R15)); IAdd(Reg(RAX), Const(1L))]
       (* increment the heap ptr *)
       @ [IMov(Reg(R8), Const(Int64.of_int (next_heap_loc * word_size))); IAdd(Reg(R15), Reg(R8))]
-  | _ -> raise (NotYetImplemented "TODO compile_cexpr egg-eater features")
+  | CGetItem(tup, i, _) ->
+      let tup_address = compile_imm tup env in
+      let idx = compile_imm i env in
+      (* TODO dynamically check idx against the tuple size, throw an err if neg or larger than idx *)
+      [IMov(Reg(RAX), tup_address)] (* move tuple address (snakeval) into RAX *)
+      @ [ISub(Reg(RAX), Const(1L))] (* convert from snake val -> address *)
+      @ [IMov(Reg(R8), idx)] (* move the idx (* snakeval *) into R8 *)
+      @ [IShr(Reg(R8), Const(1L))] (* convert from snake val -> int *)
+      @ [IAdd(Reg(R8), Const(1L))] (* add 1 to the offset to bypass the tup size *)
+      @ [IMov(Reg(RAX), RegOffsetReg(RAX,R8,word_size,0))]
+  | CSetItem(tup, idx, rhs, _) -> []
 and compile_imm e (env : arg envt) : arg =
   match e with
   | ImmNum(n, _) -> Const(Int64.shift_left n 1)
