@@ -595,7 +595,7 @@ let desugar_let_bind_tups (p : sourcespan program) : sourcespan program =
       | BBlank(loc) -> ELet([(bnd, EGetItem(EId(parent_name, loc), ENumber(Int64.of_int idx_in_parent, loc), loc), loc)], body, loc)
       | BName(sym, bl, loc) -> ELet([(bnd, EGetItem(EId(parent_name, loc), ENumber(Int64.of_int idx_in_parent, loc), loc), loc)], body, loc)
       | BTuple(bnds, loc) ->
-        let new_name = gensym "tup" in
+        let new_name = gensym "tup$" in
         let (new_body, _) = List.fold_left
           (fun (body_acc, idx) bnd ->
            let new_body = helpBind bnd body_acc idx new_name in (new_body, idx + 1))
@@ -616,7 +616,7 @@ let desugar_let_bind_tups (p : sourcespan program) : sourcespan program =
       | BBlank(loc) -> ELet([bnding], rest_expr, loc)
       | BName(_, _, _) -> ELet([bnding], rest_expr, loc)
       | BTuple(bnds, loc) ->
-        let new_name = gensym "tup" in
+        let new_name = gensym "tup$" in
         let (new_body, _) = List.fold_left
           (fun (body_acc, idx) bnd ->
            let new_body = helpBind bnd body_acc idx new_name in (new_body, idx + 1))
