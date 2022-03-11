@@ -480,6 +480,7 @@ let tests_from_eggeater = [
   t "get_item_7" "let t=5 in (t,)[0] == t" "" "true";
   terr "get_from_num" "7[0]" "" "expected tuple";
   terr "get_from_bool" "false[0]" "" "expected tuple";
+  terr "get_idx_bool" "(0,1)[false]" "" "tuple indices must be numeric";
   terr "get_neg_idx" "(1,2)[-1]" "" "index too small";
   terr "get_big_idx0" "()[0]" "" "index too big";
   terr "get_big_idx1" "(1,)[1]" "" "index too big";
@@ -494,6 +495,7 @@ let tests_from_eggeater = [
   t "set_item_5" "((true,9),2,(8,7),false)[2] := (20,5,6)" "" "((true,9),2,(20,5,6),false)";
   terr "set_from_num" "7[0]:=true" "" "expected tuple";
   terr "set_from_bool" "false[0]:=false" "" "expected tuple";
+  terr "set_idx_bool" "(0,1)[false] := true" "" "tuple indices must be numeric";
   terr "get_neg_idx" "(1,2)[-1]:=3" "" "index too small";
   terr "get_big_idx0" "()[0]:=2" "" "index too big";
   terr "get_big_idx1" "(1,)[1]:=2" "" "index too big";
@@ -521,6 +523,7 @@ let tests_from_eggeater = [
   (* nil tests *)
   t "print_nil" "let x=nil in print(x)" "" "nil\nnil";
   t "print_tip_of_nil" "let x=nil in print((x,))" "" "(nil,)\n(nil,)";
+  t "nill_not_unit" "nil == ()" "" "false";
   terr "get_nil" "nil[0]" "" "attempted to dereference a nil tuple";
   terr "set_nil_1" "nil[0]:=true" "" "attempted to dereference a nil tuple";
   terr "set_nil_2" "let x=nil in (x[0]:=true)" "" "attempted to dereference a nil tuple";

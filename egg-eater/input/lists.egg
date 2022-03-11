@@ -1,4 +1,79 @@
+# to run this file:
+# make output/lists.run && ./output/lists.run
+
 def link(first, rest):
   (first, rest)
 
-# This is an incomplete program, so it doesn't parse yet...
+def length(l):
+  if l == nil: 0
+  else:
+    1 + length(l[1])
+
+def sum(l):
+  if l == nil: 0
+  else:
+    let (h,t) = l in
+    h + sum(t)
+
+def append(l1, l2):
+  if l1 == nil: l2
+  else:
+    let (h,t) = l1 in
+    link(h, append(t,l2))
+
+def reverse(l):
+  if l == nil: l
+  else:
+    let (h,t) = l in
+    append(reverse(t), link(h,nil))
+
+def nth(l, n):
+  if n == 0: l[0]
+  else:
+    let (h,t) = l in
+    nth(t, sub1(n))
+ 
+
+# test program.  the output should be all "true" so it's easy to verify that
+# the behavior is correct.
+let a = link(1, link(2, link(3, link(4, nil)))) in
+let a_len = length(a) in
+print(a_len == 4);
+print(sum(a) == 10);
+print(nth(a,0) == 1);
+print(nth(a,2) == 3);
+
+let b = link(true, link(false, link(true, nil))) in
+print(3 == length(b));
+print(nth(b,0) == true);
+print(nth(b,2) == true);
+
+let ab = append(a,b) in
+print(length(ab) == 7);
+print(nth(ab,0) == 1);
+print(nth(ab,1) == 2);
+print(nth(ab,2) == 3);
+print(nth(ab,3) == 4);
+print(nth(ab,4) == true);
+print(nth(ab,5) == false);
+print(nth(ab,6) == true);
+
+print(nth(append(b,a), 4) == 2);
+print(nth(append(b,a), 1) == false);
+print(nth(append(b,a), 6) == 4);
+
+let a_rev = reverse(a) in
+print(length(a_rev) == a_len);
+print(nth(a_rev,0) == 4);
+print(nth(a_rev,3) == 1);
+
+let ba = append(b,reverse(a)) in
+let ba_rev = reverse(ba) in
+print(length(reverse(ab)) == 7);
+print(nth(ab,0) == nth(ba_rev,0));
+print(nth(ab,1) == nth(ba_rev,1));
+print(nth(ab,2) == nth(ba_rev,2));
+print(nth(ab,3) == nth(ba_rev,3));
+print(nth(ab,4) == nth(ba_rev,4));
+print(nth(ab,5) == nth(ba_rev,5));
+print(nth(ab,6) == nth(ba_rev,6))

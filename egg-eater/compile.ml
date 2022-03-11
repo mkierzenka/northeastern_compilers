@@ -44,15 +44,17 @@ let const_nil      = HexConst(0x0000000000000001L)
 let tup_tag        = 0x0000000000000001L
 let tup_tag_mask   = 0x0000000000000007L
 
-let err_COMP_NOT_NUM   = 1L
-let err_ARITH_NOT_NUM  = 2L
-let err_LOGIC_NOT_BOOL = 3L
-let err_IF_NOT_BOOL    = 4L
-let err_OVERFLOW       = 5L
-let err_GET_NOT_TUPLE  = 6L
-let err_GET_LOW_INDEX  = 7L
-let err_GET_HIGH_INDEX = 8L
-let err_NIL_DEREF      = 9L
+let err_COMP_NOT_NUM    = 1L
+let err_ARITH_NOT_NUM   = 2L
+let err_LOGIC_NOT_BOOL  = 3L
+let err_IF_NOT_BOOL     = 4L
+let err_OVERFLOW        = 5L
+let err_GET_NOT_TUPLE   = 6L
+let err_GET_LOW_INDEX   = 7L
+let err_GET_HIGH_INDEX  = 8L
+let err_NIL_DEREF       = 9L
+let err_BAD_INPUT       = 10L
+let err_TUP_IDX_NOT_NUM = 11L
 
 let first_six_args_registers = [RDI; RSI; RDX; RCX; R8; R9]
 let heap_reg = R15
@@ -1351,6 +1353,7 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
       @ (check_rax_for_tup "err_GET_NOT_TUPLE")
       @ (check_rax_for_nil "err_NIL_DEREF")
       @ [IMov(Reg(RAX), idx)] (* move the idx (snakeval) into RAX *)
+      @ (check_rax_for_num "err_TUP_IDX_NOT_NUM")
       @ [ISar(Reg(RAX), Const(1L))] (* convert from snakeval -> int *)
       @ (check_rax_for_tup_smaller "err_GET_LOW_INDEX")
       @ (check_rax_for_tup_bigger tup_address "err_GET_HIGH_INDEX")
@@ -1372,6 +1375,7 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
       @ (check_rax_for_tup "err_GET_NOT_TUPLE")
       @ (check_rax_for_nil "err_NIL_DEREF")
       @ [IMov(Reg(RAX), idx)] (* move the idx (snakeval) into RAX *)
+      @ (check_rax_for_num "err_TUP_IDX_NOT_NUM")
       @ [ISar(Reg(RAX), Const(1L))] (* convert from snakeval -> int *)
       @ (check_rax_for_tup_smaller "err_GET_LOW_INDEX")
       @ (check_rax_for_tup_bigger tup_address "err_GET_HIGH_INDEX")
@@ -1505,6 +1509,11 @@ global our_code_starts_here" in
 
           ILabel("err_NIL_DEREF");
           IMov(Reg(RDI), Const(err_NIL_DEREF));
+          ICall("error");
+          IJmp("program_done");
+
+          ILabel("err_TUP_IDX_NOT_NUM");
+          IMov(Reg(RDI), Const(err_TUP_IDX_NOT_NUM));
           ICall("error");
           IJmp("program_done");
         ] in

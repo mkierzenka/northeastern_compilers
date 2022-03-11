@@ -28,16 +28,17 @@ const uint64_t FIRST_BIT_MASK = 0x8000000000000000L;
 const uint64_t TUPLE_TAG_MASK = 0x0000000000000007L;
 const uint64_t TUPLE_TAG = 0x0000000000000001L;
 
-const uint64_t err_COMP_NOT_NUM   = 1L;
-const uint64_t err_ARITH_NOT_NUM  = 2L;
-const uint64_t err_LOGIC_NOT_BOOL = 3L;
-const uint64_t err_IF_NOT_BOOL    = 4L;
-const uint64_t err_OVERFLOW       = 5L;
-const uint64_t err_GET_NOT_TUPLE  = 6L;
-const uint64_t err_GET_LOW_INDEX  = 7L;
-const uint64_t err_GET_HIGH_INDEX = 8L;
-const uint64_t err_NIL_DEREF      = 9L;
-const uint64_t err_BAD_INPUT      = 10L;
+const uint64_t err_COMP_NOT_NUM    = 1L;
+const uint64_t err_ARITH_NOT_NUM   = 2L;
+const uint64_t err_LOGIC_NOT_BOOL  = 3L;
+const uint64_t err_IF_NOT_BOOL     = 4L;
+const uint64_t err_OVERFLOW        = 5L;
+const uint64_t err_GET_NOT_TUPLE   = 6L;
+const uint64_t err_GET_LOW_INDEX   = 7L;
+const uint64_t err_GET_HIGH_INDEX  = 8L;
+const uint64_t err_NIL_DEREF       = 9L;
+const uint64_t err_BAD_INPUT       = 10L;
+const uint64_t err_TUP_IDX_NOT_NUM = 11L;
 
 void printHelp(FILE *out, SNAKEVAL val);
 
@@ -61,7 +62,7 @@ void printAsNumber(FILE *out, SNAKEVAL val) {
 }
 
 void printAsTuple(FILE* out, SNAKEVAL val) {
-  int64_t* heap_address = val - 1L;
+  int64_t* heap_address = (int64_t*) (val - 1L);
 
   // handle the nil case
   if (heap_address == 0L) {
@@ -72,7 +73,7 @@ void printAsTuple(FILE* out, SNAKEVAL val) {
   int64_t tup_size = heap_address[0];
   int64_t* elems = heap_address + 1;
   //fprintf(out, "tuple @ %p. size: %ld. value: (", heap_address, tup_size);
-  fprintf(out, "(", heap_address, tup_size);
+  fprintf(out, "(");
   for (int i = 0; i < tup_size; ++i) {
     printHelp(out, elems[i]);
     if (i+1 < tup_size) {
@@ -138,6 +139,9 @@ void error(uint64_t errCode) {
       break;
     case err_NIL_DEREF:
       fprintf(stderr, "attempted to dereference a nil tuple");
+      break;
+    case err_TUP_IDX_NOT_NUM:
+      fprintf(stderr, "tuple indices must be numeric");
       break;
     default:
       fprintf(stderr, "unknown error code");  //exit() will print the errCode
