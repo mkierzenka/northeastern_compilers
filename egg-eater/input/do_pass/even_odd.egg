@@ -1,0 +1,15 @@
+# mutual recusion test
+
+def even(n):
+  if n == 0: true
+  else: odd(sub1(n))
+
+def odd(n):
+  if n == 0: false
+  else: even(sub1(n))
+
+even(100)
+&& odd(5)
+&& odd(51)
+&& !(odd(510))
+&& !(even(517))

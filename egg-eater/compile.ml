@@ -239,7 +239,7 @@ let anf (p : tag program) : unit aprogram =
        let args = List.map
          (fun a ->
            match a with
-           | BBlank(tag) -> "blank" (* TODO is this necessary? *)
+           | BBlank(tag) -> "blank$"
            | BName(a, _, _) -> a
            | BTuple(bindl, _) -> raise (InternalCompilerError "desugaring failed: tuples cannot be ANFed in function decl args"))
          args in
@@ -261,12 +261,11 @@ let anf (p : tag program) : unit aprogram =
        (CScIf(cond_imm, helpA _then, helpA _else, ()), cond_setup)
     | ELet([], body, _) -> helpC body
     | ELet((bind, expr, tag)::tail, body, _) ->
-       (* TODO make sure using same tag for all bindings is ok *)
        let (expr_ans, expr_setup) = helpC expr in
        let (body_ans, body_setup) = helpC (ELet(tail, body, tag)) in
        begin match bind with
        | BBlank(_) ->
-           let dummy_bind = "blank" in (* TODO better name? *)
+           let dummy_bind = "blank$" in
            (body_ans, expr_setup @ [(dummy_bind, expr_ans)] @ body_setup)
        | BName(sym, _, _) ->
            (body_ans, expr_setup @ [(sym, expr_ans)] @ body_setup)
@@ -277,7 +276,7 @@ let anf (p : tag program) : unit aprogram =
        (CApp(funname, new_args, ct, ()), List.concat new_setup)
     (* NOTE: You may need more cases here, for sequences and tuples *)
     | ESeq _ -> raise (InternalCompilerError "desugaring failed: sequences cannot be ANFed")
-    | ETuple([], tag) -> (CTuple([], ()), []) (* TODO is this nil? *)
+    | ETuple([], tag) -> (CTuple([], ()), [])
     | ETuple(elem::tail, tag) ->
        let (elem_ans, elem_setup) = helpI elem in
        let (tail_ans, tail_setup) = helpC (ETuple(tail, tag)) in
@@ -555,7 +554,6 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
   in
   match p with
   | Program(decls, body, fake_loc) ->
-      (* todo, clean this up. We should have an arg that includes the initial inv instead of defining it here directly *)
       let init_env = [("cinput",Func(0,fake_loc)); ("cequal",Func(2,fake_loc))] in
       (* gather all functions into the env *)
       let (env, init_errs) = setup_env decls init_env in
@@ -591,7 +589,7 @@ let desugar_decl_arg_tups (p : sourcespan program) : sourcespan program =
             | BBlank(_) -> (arg::args_acc, body_acc)
             | BName(_, _, _) -> (arg::args_acc, body_acc)
             | BTuple(binds, bloc) ->
-                let new_arg_sym = gensym "tup$" in (* TODO better name? *)
+                let new_arg_sym = gensym "tup$" in
                 let new_body = ELet([(arg, EId(new_arg_sym,bloc), bloc)], body_acc, bloc) in
                 let new_bind = BName(new_arg_sym,false,bloc) in
                 (new_bind::args_acc, new_body)

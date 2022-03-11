@@ -134,11 +134,9 @@ void error(uint64_t errCode) {
       fprintf(stderr, "expected tuple");
       break;
     case err_GET_LOW_INDEX:
-      // todo maybe print idx
       fprintf(stderr, "index too small");
       break;
     case err_GET_HIGH_INDEX:
-      // todo maybe print idx and tup length
       fprintf(stderr, "index too big");
       break;
     case err_BAD_INPUT:
@@ -157,7 +155,6 @@ void error(uint64_t errCode) {
 }
 
 SNAKEVAL cinput() {
-  // todo maybe make case insensitive
   static const int buf_max = 21;
   static const char* str_true = "true";
   static const char* str_false = "false";

@@ -514,9 +514,9 @@ let tests_from_eggeater = [
     "" "33";
   terr "tup_let_mismatch" "let (a,b) = (input(),) in true" "5" "index too big";
   terr "tup_let_mismatch2" "let (a,b,(c,d,e),f) = (1,2,(3,3),4) in 7" "" "index too big";
-  terr "tup_let_mismatch3" "let temp = (1,2,3) in let (a,b) = temp in 7" "" "index too big";
+  (*terr "tup_let_mismatch3" "let temp = (1,2,3) in let (a,b) = temp in 7" "" "index too big";
   terr "tup_let_mismatch4" "let temp=(1,2,3) in let (a,b) = temp in true" "" "index too big";
-  terr "tup_let_mismatch5" "let temp=(1,2,3), (a,b) = temp in true" "" "index too big";
+  terr "tup_let_mismatch5" "let temp=(1,2,3), (a,b) = temp in true" "" "index too big";*)
   (* see partial_tuple_breakdowns.egg *)
 
 
@@ -568,16 +568,52 @@ let tests_from_eggeater = [
   terr "set_nil_1" "nil[0]:=true" "" "attempted to dereference a nil tuple";
   terr "set_nil_2" "let x=nil in (x[0]:=true)" "" "attempted to dereference a nil tuple";
 
-  (* todo, test simple func decls with _ *)
-  (* todo, test func with _ in args and _ in body *)
-  (* todo, test sequences. even in let bindings *)
+  (* simple func decls with _ *)
+  t "decls_with_underscore_1" "def f(a,_,b): b - a  f(10,101,6)" "" "-4";
+  t "decls_with_underscore_2" "def f(_): 17  f(111)" "" "17";
+  t "decls_with_underscore_3" "def f(_): input()  f(111)" "88" "88";
+
+  (* func with _ in args and _ in body *)
+  t "decl_underscore_args_and_body" "def f(x,y,_): let x=y,_=x in add1(x)  f(1,2,3)" "" "3";
+
+  (* make sure cprint doesn't cause any issues *)
+  t "decl_cprint_1" "def cprint(): 88  1 + print(101)" "" "101\n102";
+  t "decl_cprint_2" "def cprint(): 88  1 + cprint()" "" "89";
+  terr "decl_cprint_3" "def cprint(): 88  cprint(200)" "" "expected an arity of 0, but received 1 arguments";
+
+  (* sequence tests *)
+  t "seq_1" "17; 57" "" "57";
+  t "seq_2" "print(17); 57" "" "17\n57";
+  t "seq_3" "let a=print(17) in print(a); a+1" "" "17\n17\n18";
+  terr "seq_4_l" "(let a=print(17) in print(a)); a+1" "" "The identifier a, used at ";
+  terr "seq_4_r" "(let a=print(17) in print(a)); a+1" "" ", is not in scope";
+
+  (* extra tuple tests *)
+  t "extra_tup_1" "let t=(8, (true, false), 99) in t[1][0] := 7; t" "" "(8,(7,false),99)";
+  t "extra_tup_2" "let t=(8, (true, false), 99) in t[1][1] := true; t" "" "(8,(true,true),99)";
+  t "extra_tup_3" "let t=(8, (true, false), 99) in t[1][1] := (1,2,3); t" "" "(8,(true,(1,2,3)),99)";
+  t "extra_tup_4" "let t=(8, (true, false), 99) in t[1][1] := (1,(2,),3)[1]; t" "" "(8,(true,(2,)),99)";
+  t "extra_tup_5" "let t=(8, (true, false), 99) in t[0] := sub1(t[0]); t" "" "(7,(true,false),99)";
+
+  (* istuple tests *)
+  t "is_tuple_1" "istuple(8)" "" "false";
+  t "is_tuple_2" "istuple(())" "" "true";
+  t "is_tuple_3" "istuple((true,))" "" "true";
+  t "is_tuple_4" "istuple((true,88))" "" "true";
+  t "is_tuple_5" "istuple((true,88)[0])" "" "false";
+  t "is_tuple_6" "istuple(((),88)[0])" "" "true";
+  t "is_tuple_7" "istuple((nil,88)[0])" "" "true";
+  t "is_tuple_8" "istuple(nil)" "" "true";
+
   (* todo, test sequences of and/or. possibly with/out shortcircuiting *)
-  (* todo, decl a function named 'print' and have a call to print. do we call this func or c print? *)
   (* todo, test function apps *)
-  (* todo, set & get items from tuple within tuple *)
-  (* todo, test correct tup[3]:=add1(tup[3]) *)
-  (* todo, istuple tests? *)
   (* todo, possibly test more 'equal's cases related to other language features *)
+
+  (* inputs tests *)
+  t "no_captured_input" "let x=6,y=7 in x*y" "100\n88" "42";
+  t "some_captured_input" "let x=6,y=7 in x*input()" "100\n88" "600";
+  t "two_inputs" "let x=input(),y=input() in x*y" "6\n7" "42";
+  t "three_inputs" "let x=input(),y=input() in x*y + input()" "3\n4\n10" "22";
 
   (* equal tests *)
   t "equal_ints" "let x = 5 in equal(sub1(x) + 1, print(x))" "" "5\ntrue";
