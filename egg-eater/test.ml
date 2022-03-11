@@ -496,6 +496,7 @@ let tests_from_eggeater = [
   terr "set_from_num" "7[0]:=true" "" "expected tuple";
   terr "set_from_bool" "false[0]:=false" "" "expected tuple";
   terr "set_idx_bool" "(0,1)[false] := true" "" "tuple indices must be numeric";
+  terr "set_idx_nil" "(0,1)[nil] := true" "" "tuple indices must be numeric";
   terr "get_neg_idx" "(1,2)[-1]:=3" "" "index too small";
   terr "get_big_idx0" "()[0]:=2" "" "index too big";
   terr "get_big_idx1" "(1,)[1]:=2" "" "index too big";
@@ -508,6 +509,9 @@ let tests_from_eggeater = [
   t "tup_let_4"
     "let (i0, i1, _, i3) = ((let i0=false in !(i0)), (9,), 4, 3) in (if i0: i1[0] * 4 - 3 else: -99)"
     "" "33";
+  terr "tup_let_mismatch" "let (a,b) = (input(),) in true" "5" "blue";
+  terr "tup_let_mismatch2" "let (a,b,(c,d,e),f) = (1,2,(3,3),4) in 7" "" "blue";
+
 
   (* Lets and blanks *)
   t "lets_and_blanks" "let _=2 in 3" "" "3";
@@ -515,21 +519,45 @@ let tests_from_eggeater = [
   t "lets_and_multiple_blanks"
     "let _=print(1), _=print(false), _=((print((-3,)),), print(4)) in true"
     "" "1\nfalse\n(-3,)\n4\ntrue";
+  t "lets_and_multiple_blanks2"
+    "let _=print(1) in
+    let _=print(false), _=((print((-3,)),), print(4)) in true"
+    "" "1\nfalse\n(-3,)\n4\ntrue";
 
   (* input tests *)
   t "input_1" "input()" "16" "16";
   t "input_2" "print(input())" "16" "16\n16";
+  t "input_3" "let inp=input() in 10 + 100 * inp" "-2" "-220";
+  t "input_4a" "let inp=input() in if isnum(inp): 2 * inp else: !(inp)" "33" "66";
+  t "input_4b" "let inp=input() in if isnum(inp): 2 * inp else: !(inp)" "false" "true";
+  t "input_5" "if isnum(input()): 2 else: false" "10" "2";
+  terr "input_err1" "if isnum(input()): 2 else: false" "(2,)" "bad input: input must be a number or a bool";
+  terr "input_err2" "if isnum(input()): 2 else: false" "()" "bad input: input must be a number or a bool";
+  terr "input_err3" "if isnum(input()): 2 else: false" "nil" "bad input: input must be a number or a bool";
+  terr "input_err4" "if isnum(input()): 2 else: false" "(-1,4)" "bad input: input must be a number or a bool";
+  terr "input_err5" "if isnum(input()): 2 else: false" "bogus_input" "bad input: input must be a number or a bool";
+  terr "input_multi_err" "let x=input() in x" "false 8" "bad input: input must be a number or a bool";
+
+  t "input_bool1" "print(input())" "true" "true\ntrue";
+  t "input_bool2" "print(input())" "false" "false\nfalse";
+  t "input_bool3" "let inp=input() in (if isnum(inp): -99 else: (if isbool(inp): inp else: -99))" "true" "true";
+  t "input_multi1" "let x=input() in x" "-444 555" "-444";
+  t "input_multi2" "let x=input() in x" "-444 false" "-444";
+
 
   (* nil tests *)
   t "print_nil" "let x=nil in print(x)" "" "nil\nnil";
-  t "print_tip_of_nil" "let x=nil in print((x,))" "" "(nil,)\n(nil,)";
-  t "nill_not_unit" "nil == ()" "" "false";
+  t "print_tup_of_nil" "let x=nil in print((x,))" "" "(nil,)\n(nil,)";
+  t "print_nil_tups" "let x=nil in print((((x,),),))" "" "(((nil,),),)\n(((nil,),),)";
+  t "print_tup_of_nil2"
+    "let x=4, y=1, z=45, w=nil in print((x,y,((x,nil),),(),(w,),(w),(x,x * z),(z,)))"
+    ""
+    "(4,1,((4,nil),),(),(nil,),nil,(4,180),(45,))\n(4,1,((4,nil),),(),(nil,),nil,(4,180),(45,))";
+  t "nil_not_unit" "nil == ()" "" "false";
+  t "nil_is_nil" "nil == nil" "" "true";
   terr "get_nil" "nil[0]" "" "attempted to dereference a nil tuple";
   terr "set_nil_1" "nil[0]:=true" "" "attempted to dereference a nil tuple";
   terr "set_nil_2" "let x=nil in (x[0]:=true)" "" "attempted to dereference a nil tuple";
-
-(* (a,b,(c,d,e),f) = (1,2,(3,3),4) should be error *)
-
 
 ]
 
