@@ -843,6 +843,45 @@ let check_rax_for_bool (err_lbl : string) : instruction list =
 let check_for_overflow = [IJo("err_OVERFLOW")]
 
 
+let check_rax_for_tup (err_lbl : string) : instruction list =
+  [
+   (* Operate on temp register R8 instead of RAX. This is because we call AND
+    * on the register, which will alter the value. We want to preserve the value
+    * in RAX, hence we operate on R8 instead. R9 is used as intermediate because
+      And, Cmp don't work on imm64s *)
+   ILineComment("check_rax_for_tup (" ^ err_lbl ^ ")");
+   IMov(Reg(R8), Reg(RAX));
+   IMov(Reg(R9), HexConst(tup_tag_mask));
+   IAnd(Reg(R8), Reg(R9));
+   IMov(Reg(R9), HexConst(tup_tag));
+   ICmp(Reg(R8), Reg(R9));
+   IJnz(err_lbl);
+  ]
+
+
+(* RAX should be the snakeval of the index (in a tuple)*)
+(* DO NOT MODIFY RAX *)
+let check_rax_for_tup_smaller (err_lbl : string) : instruction list =
+  [
+   ILineComment("check_rax_for_tup_smaller (" ^ err_lbl ^ ")");
+   ICmp(Reg(RAX), Const(0L));
+   (* no temp register because imm32 0 will be "sign-extended to imm64", which should still be 0 *)
+   IJl(err_lbl);
+  ]
+
+
+(* RAX should be the snakeval of the index (in a tuple)*)
+(* DO NOT MODIFY RAX *)
+let check_rax_for_tup_bigger (tup_length_expected : int) (err_lbl : string) : instruction list =
+  [
+   (* R8 is used as intermediate because Cmp don't work on imm64s *)
+   ILineComment("check_rax_for_tup_bigger (" ^ err_lbl ^ ")");
+   IMov(Reg(R8), Const(Int64.of_int tup_length_expected));
+   ICmp(Reg(RAX), Reg(R8));
+   IJge(err_lbl);
+  ]
+
+
 let compile_fun_prelude (fun_name : string) (args : string list) (env : arg envt) (num_local_vars : int): instruction list =
   [
     ILabel(fun_name);
@@ -1229,12 +1268,19 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
       (* increment the heap ptr *)
       @ [IMov(Reg(R8), Const(Int64.of_int (next_heap_loc * word_size))); IAdd(Reg(R15), Reg(R8))]
   | CGetItem(tup, i, _) ->
+      let tup_length_expected = List.length tup in
       let tup_address = compile_imm tup env in
       let idx = compile_imm i env in
-      (* TODO dynamically check idx against the tuple size, throw an err if neg or larger than idx *)
+      (* first, do runtime error checking *)
       [IMov(Reg(RAX), tup_address)] (* move tuple address (snakeval) into RAX *)
-      @ [ISub(Reg(RAX), Const(1L))] (* convert from snake val -> address *)
-      @ [IMov(Reg(R8), idx)] (* move the idx (* snakeval *) into R8 *)
+      @ (check_rax_for_tup "err_GET_NOT_TUPLE")
+      @ [IMov(Reg(RAX), idx)] (* move the idx (snakeval) into RAX *)
+      @ (check_rax_for_tup_smaller tup_length_expected "err_GET_LOW_INDEX")
+      @ (check_rax_for_tup_bigger tup_length_expected "err_GET_HIGH_INDEX")
+      (* passed checks, now do actual 'get' *)
+      @ [IMov(Reg(RAX), tup_address)] (* move tuple address back into RAX *)
+      @ [ISub(Reg(RAX), Const(1L))] (* convert from snake val address -> machine address *)
+      @ [IMov(Reg(R8), idx)] (* move the idx (snakeval) into R8 *)
       @ [IShr(Reg(R8), Const(1L))] (* convert from snake val -> int *)
       @ [IAdd(Reg(R8), Const(1L))] (* add 1 to the offset to bypass the tup size *)
       @ [IMov(Reg(RAX), RegOffsetReg(RAX,R8,word_size,0))]
@@ -1242,8 +1288,13 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
       let tup_address = compile_imm tup env in
       let idx = compile_imm i env in
       let rhs = compile_imm r env in
-      (* TODO dynamically check idx against the tuple size, throw an err if neg or larger than idx *)
+      (* first, do runtime error checking *)
       [IMov(Reg(RAX), tup_address)] (* move tuple address (snakeval) into RAX *)
+      @ (check_rax_for_tup "err_GET_NOT_TUPLE")
+      @ [IMov(Reg(RAX), idx)] (* move the idx (snakeval) into RAX *)
+      @ (check_rax_for_tup_smaller "err_GET_LOW_INDEX")
+      @ (check_rax_for_tup_bigger "err_GET_HIGH_INDEX")
+      (* passed checks, now do actual 'set' *)
       @ [ISub(Reg(RAX), Const(1L))] (* convert from snake val -> address *)
       @ [IMov(Reg(R8), idx)] (* move the idx (* snakeval *) into R8 *)
       @ [IShr(Reg(R8), Const(1L))] (* convert from snake val -> int *)
@@ -1351,6 +1402,26 @@ global our_code_starts_here" in
 
           ILabel("err_OVERFLOW");
           IMov(Reg(RDI), Const(err_OVERFLOW));
+          ICall("error");
+          IJmp("program_done");
+
+          ILabel("err_GET_NOT_TUPLE");
+          IMov(Reg(RDI), Const(err_GET_NOT_TUPLE));
+          ICall("error");
+          IJmp("program_done");
+
+          ILabel("err_GET_LOW_INDEX");
+          IMov(Reg(RDI), Const(err_GET_LOW_INDEX));
+          ICall("error");
+          IJmp("program_done");
+
+          ILabel("err_GET_HIGH_INDEX");
+          IMov(Reg(RDI), Const(err_GET_HIGH_INDEX));
+          ICall("error");
+          IJmp("program_done");
+
+          ILabel("err_NIL_DEREF");
+          IMov(Reg(RDI), Const(err_NIL_DEREF));
           ICall("error");
           IJmp("program_done");
         ] in

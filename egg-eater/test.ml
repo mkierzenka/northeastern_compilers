@@ -470,19 +470,34 @@ let tests_from_eggeater = [
   t "tup_eq_bool" "let t=true in (t,) == t" "" "false";
 
   (* GetItem *)
+  t "get_item_0" "(false,)[0]" "" "false";
   t "get_item_1" "(1,2)[0]" "" "1";
   t "get_item_2" "(1,2)[1]" "" "2";
   t "get_item_3" "(1,2,3,4,5,6)[0]" "" "1";
   t "get_item_4" "(1,2,3,4,5,6)[1]" "" "2";
   t "get_item_5" "(1,2,3,4,5,6)[3]" "" "4";
   t "get_item_6" "(1,2,3,4,5,6)[5]" "" "6";
+  t "get_item_7" "let t=5 in (t,)[0] == t" "" "true";
+  terr "get_from_num" "7[0]" "" "expected tuple";
+  terr "get_from_bool" "false[0]" "" "expected tuple";
+  terr "get_neg_idx" "(1,2)[-1]" "" "index too small";
+  terr "get_big_idx0" "()[0]" "" "index too big";
+  terr "get_big_idx1" "(1,)[1]" "" "index too big";
+  terr "get_big_idx1" "(1,2)[2]" "" "index too big";
 
   (* SetItem *)
+  t "set_item_0" "(1,)[0] := 6" "" "(6,)";
   t "set_item_1" "(1,2)[1] := 6" "" "(1,6)";
   t "set_item_2" "(1,2)[1] := false" "" "(1,false)";
   t "set_item_3" "(1,2,true,false)[0] := false" "" "(false,2,true,false)";
   t "set_item_4" "(1,2,(8,7),false)[2] := (20,5,6)" "" "(1,2,(20,5,6),false)";
   t "set_item_5" "((true,9),2,(8,7),false)[2] := (20,5,6)" "" "((true,9),2,(20,5,6),false)";
+  terr "set_from_num" "7[0]:=true" "" "expected tuple";
+  terr "set_from_bool" "false[0]:=false" "" "expected tuple";
+  terr "get_neg_idx" "(1,2)[-1]:=3" "" "index too small";
+  terr "get_big_idx0" "()[0]:=2" "" "index too big";
+  terr "get_big_idx1" "(1,)[1]:=2" "" "index too big";
+  terr "get_big_idx2" "(1,2)[2]:=9" "" "index too big";
 
   (* Tuples and lets *)
   t "tup_let_1" "let (a,b) = (5,4) in a - b" "" "1";
@@ -491,15 +506,23 @@ let tests_from_eggeater = [
   t "tup_let_4"
     "let (i0, i1, _, i3) = ((let i0=false in !(i0)), (9,), 4, 3) in (if i0: i1[0] * 4 - 3 else: -99)"
     "" "33";
-  
-  
+
   (* Lets and blanks *)
   t "lets_and_blanks" "let _=2 in 3" "" "3";
   t "lets_and_blanks2" "let _=print(1) in 2" "" "1\n2";
-
   t "lets_and_multiple_blanks"
     "let _=print(1), _=print(false), _=((print((-3,)),), print(4)) in true"
     "" "1\nfalse\n(-3,)\n4\ntrue";
+
+  (* nil tests *)
+  t "print_nil" "let x=nil in print(x)" "" "nil";
+  t "print_tip_of_nil" "let x=nil in print((x,))" "" "TODO?";
+  terr "get_nil" "nil[0]" "" "access component of nil";
+  terr "set_nil" "nil[0]:=true" "" "access component of nil";
+  terr "set_nil" "let x=nil in (x[0]:=true)" "" "access component of nil";
+
+(* (a,b,(c,d,e),f) = (1,2,(3,3),4) should be error *)
+
 
 ]
 

@@ -30,6 +30,10 @@ const uint64_t err_ARITH_NOT_NUM  = 2L;
 const uint64_t err_LOGIC_NOT_BOOL = 3L;
 const uint64_t err_IF_NOT_BOOL    = 4L;
 const uint64_t err_OVERFLOW       = 5L;
+const uint64_t err_GET_NOT_TUPLE  = 6L;
+const uint64_t err_GET_LOW_INDEX  = 7L;
+const uint64_t err_GET_HIGH_INDEX = 8L;
+const uint64_t err_NIL_DEREF      = 9L;
 
 void printHelp(FILE *out, SNAKEVAL val);
 
@@ -72,8 +76,6 @@ void printAsTuple(FILE* out, SNAKEVAL val) {
 
 
 void printHelp(FILE *out, SNAKEVAL val) {
-  // COPY YOUR IMPLEMENTATION FROM DIAMONDBACK
-  // and enhance it to handle tuples (TODO)
   if ((val & BOOL_TAG_MASK) == BOOL_TAG) {
     printAsBoolean(out, val);
   } else if ((val & NUM_TAG_MASK) == NUM_TAG) {
@@ -92,13 +94,6 @@ SNAKEVAL print(SNAKEVAL val) {
   return val;
 }
 
-/*
-
-COPY YOUR IMPLEMENTATION FROM DIAMONDBACK
-
-*/
-
-
 void error(uint64_t errCode) {
   switch (errCode) {
     case err_COMP_NOT_NUM:
@@ -115,6 +110,14 @@ void error(uint64_t errCode) {
       break;
     case err_OVERFLOW:
       fprintf(stderr, "overflow");
+      break;
+    case err_GET_NOT_TUPLE:
+      fprintf(stderr, "expected tuple");
+      break;
+    case err_GET_LOW_INDEX:
+    case err_GET_HIGH_INDEX:
+    case err_NIL_DEREF:
+      fprintf(stderr, "todo finish implementing error handling");
       break;
     default:
       fprintf(stderr, "unknown error code");  //exit() will print the errCode
