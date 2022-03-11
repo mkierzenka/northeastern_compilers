@@ -754,6 +754,42 @@ let desugar_sequences (p : sourcespan program) : sourcespan program =
       Program(rw_decls, rw_body, loc)
 ;;
 
+let desugar_print_to_app (p : sourcespan program) : sourcespan program =
+  let rec help_decl (d : sourcespan decl) : sourcespan decl =
+    match d with
+    | DFun(fname, args, body, loc) ->
+        DFun(fname, args, help_expr body, loc)
+  and help_expr (e : sourcespan expr) : sourcespan expr =
+    match e with
+    | EPrim1(Print, expr, loc) -> EApp("print", [help_expr expr], Native, loc)
+    | EPrim1(op, expr, loc) -> EPrim1(op, (help_expr expr), loc)
+    | ESeq(le, re, loc) -> ESeq(help_expr le, help_expr re, loc)
+    | ETuple(exprs, loc) -> ETuple(List.map help_expr exprs, loc)
+    | EGetItem(tup, idx, loc) -> EGetItem(help_expr tup, help_expr idx, loc)
+    | ESetItem(tup, idx, rhs, loc) -> ESetItem(help_expr tup, help_expr idx, help_expr rhs, loc)
+    | ELet(binds, body, loc) ->
+        let rw_binds = List.map
+          (fun (bind, rhs, loc) ->
+            (bind, help_expr rhs, loc))
+          binds in
+        ELet(rw_binds, help_expr body, loc)
+    | EPrim2(op, lhs, rhs, loc) -> EPrim2(op, help_expr lhs, help_expr rhs, loc)
+    | EIf(cond, thn, els, loc) ->
+        EIf((help_expr cond), (help_expr thn), (help_expr els), loc)
+    | EScIf(cond, thn, els, loc) ->
+        EScIf((help_expr cond), (help_expr thn), (help_expr els), loc)
+    | EApp(fname, args, ct, loc) ->
+        let rw_args = List.map help_expr args in
+        EApp(fname, rw_args, ct, loc)
+    | _ -> e
+  in
+  match p with
+  | Program(decls, body, loc) ->
+      let rw_decls = List.map help_decl decls in
+      let rw_body = help_expr body in
+      Program(rw_decls, rw_body, loc)
+;;
+
 
 
 (* Desugaring:
@@ -771,7 +807,8 @@ let desugar (p : sourcespan program) : sourcespan program =
    * don't unnecessarily duplicate the "tup" variable we use as a func arg during
    * the "desugar_decl_arg_tups" phase. *)
   (desugar_let_bind_tups
-  (desugar_decl_arg_tups p))))
+  (desugar_decl_arg_tups
+  (desugar_print_to_app p)))))
 ;;
 
 (* ASSUMES that the program has been alpha-renamed and all names are unique *)
@@ -979,10 +1016,7 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
            @ (check_rax_for_num "err_ARITH_NOT_NUM")
            @ [ISub(Reg(RAX), Const(2L))]
            @ check_for_overflow
-        | Print -> [
-            IMov(Reg(RDI), body_imm);
-            ICall("print");
-          ]
+        | Print -> raise (InternalCompilerError "Impossible: 'print' should be rewritten to a function application")
         | IsBool ->
           let true_lbl = sprintf "is_bool_true_%d" tag in
           let false_lbl = sprintf "is_bool_false_%d" tag in
@@ -1199,7 +1233,7 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
 
          @ [ILabel(lbl_done)]
      end
-  | CApp(fname, args,_ (* todo use this? *), _) ->
+  | CApp(fname, args, ct, _) ->
     let f_num_args = (List.length args) in
     let is_even_f_num_args = f_num_args mod 2 == 0 in
     let padding = (if is_even_f_num_args then [] else [IMov(Reg(R8), HexConst(0xF0F0F0F0L)); IPush(Reg(R8))]) in
@@ -1209,39 +1243,56 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
     let is_even_num_args = num_args mod 2 == 0 in
     let num_args_passed = num_args + (if is_even_num_args then 0 else 1) in
     (* Technically we allow tailcall optimization with 1 more arg if this function has odd num of args *)
-    if is_tail && (f_num_args <= num_args_passed) then
-        let (compiled_args, _) = List.fold_left
-                       (fun accum_instrs_idx arg ->
-                          let compiled_imm = (compile_imm arg env) in
-                          let (accum_instrs, i) = accum_instrs_idx in
-                          (* Use temp register because can't push imm64 directly *)
-                          (accum_instrs
-                            @ [IMov(Reg(R8), compiled_imm);
-                               IMov(RegOffset((i + 2) * word_size, RBP), Reg(R8))],
-                           i + 1))
-                       ([], 0)
-                       args
-                       in
-        let body_label = sprintf "%s_body" fname in
-        compiled_args @ [IJmp(body_label)]
-    else
-        let compiled_args = List.fold_left
-                       (fun accum_instrs arg ->
-                          let compiled_imm = (compile_imm arg env) in
-                          (* Use temp register because can't push imm64 directly *)
-                          accum_instrs @ [IMov(Reg(R8), compiled_imm);
-                                          IPush(Sized(QWORD_PTR, Reg(R8)))])
-                       []
-                       args_rev
-                       in
-        let padded_comp_args = padding @ compiled_args in
-        padded_comp_args
-        @
-        [
-        ICall(fname);
-        (* Don't use temp register here because we assume the RHS will never be very big *)
-        IAdd(Reg(RSP), Const(Int64.of_int (word_size * f_num_args_passed)));
-        ]
+    begin match ct with
+    | Native ->
+        if f_num_args > 1 then
+          raise (InternalCompilerError "Our compiler does not support native calls with more than 1 arg")
+        else
+          let add_arg =
+            if f_num_args = 1
+            then
+              let arg = List.hd args in
+              let compiled_arg = (compile_imm arg env) in
+              [IMov(Reg(RDI), compiled_arg)]
+            else [] in
+          add_arg
+          @ [ICall(fname)]
+    | Snake ->
+        if is_tail && (f_num_args <= num_args_passed) then
+            let (compiled_args, _) = List.fold_left
+                           (fun accum_instrs_idx arg ->
+                              let compiled_imm = (compile_imm arg env) in
+                              let (accum_instrs, i) = accum_instrs_idx in
+                              (* Use temp register because can't push imm64 directly *)
+                              (accum_instrs
+                                @ [IMov(Reg(R8), compiled_imm);
+                                   IMov(RegOffset((i + 2) * word_size, RBP), Reg(R8))],
+                               i + 1))
+                           ([], 0)
+                           args
+                           in
+            let body_label = sprintf "%s_body" fname in
+            compiled_args @ [IJmp(body_label)]
+        else
+            let compiled_args = List.fold_left
+                           (fun accum_instrs arg ->
+                              let compiled_imm = (compile_imm arg env) in
+                              (* Use temp register because can't push imm64 directly *)
+                              accum_instrs @ [IMov(Reg(R8), compiled_imm);
+                                              IPush(Sized(QWORD_PTR, Reg(R8)))])
+                           []
+                           args_rev
+                           in
+            let padded_comp_args = padding @ compiled_args in
+            padded_comp_args
+            @
+            [
+            ICall(fname);
+            (* Don't use temp register here because we assume the RHS will never be very big *)
+            IAdd(Reg(RSP), Const(Int64.of_int (word_size * f_num_args_passed)));
+            ]
+    | _ -> raise (InternalCompilerError "Invalid function application call type")
+    end
   | CImmExpr(expr) -> [IMov(Reg(RAX), (compile_imm expr env))]
   | CTuple(elems, _) -> 
       let tup_size = List.length elems in

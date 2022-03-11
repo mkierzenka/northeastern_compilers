@@ -534,6 +534,6 @@ let eggeater_suite = "eggeater_suite">:::tests_from_eggeater
 
 
 let () =
-  run_test_tt_main ("all_tests">:::[(*cobra_suite diamondback_suite *) eggeater_suite (*suite; input_file_test_suite ()*)])
+  run_test_tt_main ("all_tests">:::[cobra_suite; diamondback_suite; eggeater_suite; (*suite; input_file_test_suite ()*)])
 ;;
 
