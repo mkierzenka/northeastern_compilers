@@ -17,6 +17,7 @@ open Assembly
 type phase =
   | Source of string
   | Parsed of sourcespan program
+  | BuiltInLibrary of sourcespan program
   | WellFormed of sourcespan program
   | Renamed of tag program
   | Desugared of sourcespan program
@@ -29,6 +30,7 @@ type phase =
    doesn't allow you to pass data-constructors as first-class values *)
 let source s = Source s
 let parsed p = Parsed p
+let built_in_library p = BuiltInLibrary p
 let well_formed p = WellFormed p
 let renamed p = Renamed p
 let desugared p = Desugared p
@@ -101,6 +103,7 @@ let print_trace (trace : phase list) : string list =
   let phase_name p = match p with
     | Source _ -> "Source"
     | Parsed _ -> "Parsed"
+    | BuiltInLibrary _ -> "BuiltInLibrary"
     | WellFormed _ -> "Well-formed"
     | Renamed  _ -> "Renamed"
     | Desugared _ -> "Desugared"
@@ -111,6 +114,7 @@ let print_trace (trace : phase list) : string list =
   let string_of_phase p = match p with
     | Source s -> s
     | Parsed p
+    | BuiltInLibrary p -> string_of_program p
     | WellFormed p -> string_of_program p
     | Renamed p -> string_of_program p
     | Desugared p -> string_of_program p

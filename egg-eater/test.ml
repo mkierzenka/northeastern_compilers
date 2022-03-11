@@ -514,6 +514,10 @@ let tests_from_eggeater = [
     "let _=print(1), _=print(false), _=((print((-3,)),), print(4)) in true"
     "" "1\nfalse\n(-3,)\n4\ntrue";
 
+  (* input tests *)
+  t "input_1" "input()" "16" "16";
+  t "input_2" "print(input())" "16" "16\n16";
+
   (*
   (* nil tests *)
   t "print_nil" "let x=nil in print(x)" "" "nil";

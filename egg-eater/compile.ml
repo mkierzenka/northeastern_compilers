@@ -213,6 +213,18 @@ let deepest_stack e env =
 (* IMPLEMENT EVERYTHING BELOW *)
 
 
+let add_built_in_library (p : sourcespan program) : sourcespan program =
+  let helpD (decls : sourcespan decl list) (fake_loc : sourcespan) : sourcespan decl list =
+    let func_body = EApp("cinput", [], Native, fake_loc) in
+    [DFun("input", [], func_body, fake_loc)]
+    @ decls
+  in
+  match p with
+  | Program(decls, body, loc) ->
+    let new_decls = helpD decls loc in
+    Program(new_decls, body, loc)
+;;
+
 let anf (p : tag program) : unit aprogram =
   let rec helpP (p : tag program) : unit aprogram =
     match p with
@@ -459,11 +471,11 @@ let dup_decl_args_exns (args : sourcespan bind list) : exn list =
 let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
   (* Goes through the list of function decls and adds them all to our env.  We also
    * gather any errors along the way. *)
-  let rec setup_env (d : sourcespan decl list) : (env_entry envt) * (exn list) =
+  let rec setup_env (d : sourcespan decl list) (init_env : env_entry envt) : (env_entry envt) * (exn list) =
     match d with
-    | [] -> ([], [])
+    | [] -> (init_env, [])
     | DFun(fname, args, body, loc) :: tail ->
-        let (tail_env, tail_errs) = (setup_env tail) in
+        let (tail_env, tail_errs) = (setup_env tail init_env) in
         let new_errs = (check_duplicate_decl fname tail loc) @ tail_errs in
         let new_env = (fname, Func(List.length args, loc)) :: tail_env in
         (new_env, new_errs)
@@ -538,9 +550,10 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
       binds
   in
   match p with
-  | Program(decls, body, _) ->
+  | Program(decls, body, fake_loc) ->
+      let init_env = [("cinput",Func(0,fake_loc))] in
       (* gather all functions into the env *)
-      let (env, init_errs) = setup_env decls in
+      let (env, init_errs) = setup_env decls init_env in
       (* check decls *)
       let decl_errs =
         List.fold_left
@@ -1424,7 +1437,7 @@ let compile_prog ((anfed : tag aprogram), (env : arg envt)) : string =
         "section .text
 extern error
 extern print
-extern error
+extern cinput
 global our_code_starts_here" in
       let stack_setup = [
           ILabel("our_code_starts_here");
@@ -1503,6 +1516,7 @@ let run_if should_run f =
  * *)
 let compile_to_string (prog : sourcespan program pipeline) : string pipeline =
   prog
+  |> (add_phase built_in_library add_built_in_library)
   |> (add_err_phase well_formed is_well_formed)
   (* Invariant: EScIf is not part of the AST *)
   |> (add_phase desugared desugar)

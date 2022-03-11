@@ -9,13 +9,16 @@ extern SNAKEVAL our_code_starts_here(uint64_t* HEAP, int size) asm("our_code_sta
 //extern void error(uint64_t code, SNAKEVAL val) asm("error");
 //TODO this should be uncommented
 extern SNAKEVAL print(SNAKEVAL val) asm("print");
-extern SNAKEVAL input() asm("input");
+//extern SNAKEVAL input() asm("input"); //TODO delete
+extern SNAKEVAL input() asm("cinput");
 extern SNAKEVAL printStack(SNAKEVAL val, uint64_t* esp, uint64_t* ebp, int args) asm("print_stack");
 extern uint64_t* STACK_BOTTOM asm("STACK_BOTTOM");
 
 uint64_t* HEAP;
 
 
+const uint64_t const_true = 0xFFFFFFFFFFFFFFFFL;
+const uint64_t const_false = 0x7FFFFFFFFFFFFFFFL;
 
 const uint64_t BOOL_TAG_MASK = 0x0000000000000007L;
 const uint64_t BOOL_TAG = 0x0000000000000007L;
@@ -34,6 +37,7 @@ const uint64_t err_GET_NOT_TUPLE  = 6L;
 const uint64_t err_GET_LOW_INDEX  = 7L;
 const uint64_t err_GET_HIGH_INDEX = 8L;
 const uint64_t err_NIL_DEREF      = 9L;
+const uint64_t err_BAD_INPUT      = 10L;
 
 void printHelp(FILE *out, SNAKEVAL val);
 
@@ -122,6 +126,9 @@ void error(uint64_t errCode) {
       // todo maybe print idx and tup length
       fprintf(stderr, "index too big");
       break;
+    case err_BAD_INPUT:
+      fprintf(stderr, "bad input: input must be a number or a bool");
+      break;
     case err_NIL_DEREF:
       fprintf(stderr, "todo finish implementing error handling");
       break;
@@ -129,6 +136,39 @@ void error(uint64_t errCode) {
       fprintf(stderr, "unknown error code");  //exit() will print the errCode
   }
   exit(errCode);
+}
+
+SNAKEVAL cinput() {
+  // todo maybe make case insensitive
+  static const int buf_max = 21;
+  static const char* str_true = "true";
+  static const char* str_false = "false";
+  char inp[buf_max];
+  fgets(inp, buf_max, stdin);
+
+  if (strcmp(inp, str_true) == 0) {
+    return const_true;
+  }
+  if (strcmp(inp, str_false) == 0) {
+    return const_false;
+  }
+
+  const uint64_t as_uint = strtoull(inp, NULL, 10);
+  if (as_uint == 0L) {
+    // check '0' first
+    if (strcmp(inp, "0") == 0) {
+      return 0L;
+    }
+    else {
+      // error exits
+      error(err_BAD_INPUT);
+      return 0L; // defensive coding
+    }
+  }
+  else {
+    // TODO check for overflow
+    return 2L * as_uint;
+  }
 }
 
 
