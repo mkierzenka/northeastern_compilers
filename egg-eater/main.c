@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdbool.h>
 
 typedef uint64_t SNAKEVAL;
 
@@ -12,6 +13,7 @@ extern SNAKEVAL print(SNAKEVAL val) asm("print");
 //extern SNAKEVAL input() asm("input"); //TODO delete
 extern SNAKEVAL input() asm("cinput");
 extern SNAKEVAL printStack(SNAKEVAL val, uint64_t* esp, uint64_t* ebp, int args) asm("print_stack");
+extern SNAKEVAL equal(SNAKEVAL e1, SNAKEVAL e2) asm("cequal");
 extern uint64_t* STACK_BOTTOM asm("STACK_BOTTOM");
 
 uint64_t* HEAP;
@@ -41,6 +43,11 @@ const uint64_t err_BAD_INPUT       = 10L;
 const uint64_t err_TUP_IDX_NOT_NUM = 11L;
 
 void printHelp(FILE *out, SNAKEVAL val);
+bool cequalToBoolean(SNAKEVAL e1, SNAKEVAL e2);
+bool cequalToNumber(SNAKEVAL e1, SNAKEVAL e2);
+bool cequalToTuple(SNAKEVAL e1, SNAKEVAL e2);
+bool cequalInner(SNAKEVAL e1, SNAKEVAL e2);
+
 
 
 void printAsBoolean(FILE *out, SNAKEVAL val) {
@@ -183,6 +190,99 @@ SNAKEVAL cinput() {
 }
 
 
+// ASSUME: e1 is a snake boolean
+bool cequalToBoolean(SNAKEVAL e1, SNAKEVAL e2) {
+  if ((e2 & BOOL_TAG_MASK) != BOOL_TAG) {
+    // TODO- This will trigger for garbage inputs too, is that ok? Should we throw error?
+    return false;
+  }
+
+  // e2 is a snake boolean
+  return (e1 == e2);
+}
+
+// ASSUME: e1 is a snake number
+bool cequalToNumber(SNAKEVAL e1, SNAKEVAL e2) {
+  if ((e2 & NUM_TAG_MASK) != NUM_TAG) {
+    // TODO- This will trigger for garbage inputs too, is that ok? Should we throw error?
+    return false;
+  }
+
+  // e2 is a snake number
+  return (e1 == e2);
+}
+
+// ASSUME: e1 is a snake tuple and that we have already checked e1 != e2
+bool cequalToTuple(SNAKEVAL e1, SNAKEVAL e2) {
+  if ((e2 & TUPLE_TAG_MASK) != TUPLE_TAG) {
+    // TODO- This will trigger for garbage inputs too, is that ok? Should we throw error?
+    return false;
+  }
+  // e2 is a snake tuple
+  // Convert to machine addresses
+  e1 = e1 - 1L;
+  e2 = e2 - 1L;
+
+  // Handle nil cases
+  if (e1 == 0L && e2 == 0L) {
+    // both nil
+    return true;
+  } else if (e1 == 0L || e2 == 0L) {
+    // exactly 1 is nil
+    return false;
+  }
+
+  // e1 and e2 are tuples (with dif mem locations) and neither are nil
+  // Now need to check structural equality
+  int64_t* e1_heap_address = (int64_t*) e1;
+  int64_t* e2_heap_address = (int64_t*) e2;
+
+  int64_t e1_tup_size = e1_heap_address[0];
+  int64_t* e1_elems = e1_heap_address + 1;
+  int64_t e2_tup_size = e2_heap_address[0];
+  int64_t* e2_elems = e2_heap_address + 1;
+
+  // Different sizes means unequal for sure
+  if (e1_tup_size != e2_tup_size) {
+    return false;
+  }
+
+  // e1 and e2 have same size
+  for (int i = 0; i < e1_tup_size; ++i) {
+    if (!cequalInner(e1_elems[i], e2_elems[i])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool cequalInner(SNAKEVAL e1, SNAKEVAL e2) {
+  if (e1 == e2) {
+    // shortcircuit
+    // TODO, this will pass for garbage inputs -> should we move into the helpers?
+    return true;
+  }
+
+  if ((e1 & BOOL_TAG_MASK) == BOOL_TAG) {
+    return cequalToBoolean(e1, e2);
+  } else if ((e1 & NUM_TAG_MASK) == NUM_TAG) {
+    return cequalToNumber(e1, e2);
+  } else if ((e1 & TUPLE_TAG_MASK) == TUPLE_TAG) {
+    return cequalToTuple(e1, e2);
+  } else {
+    // e1 is an unknown type
+    error(err_BAD_INPUT);  // should exit
+    return false;  // defensive coding
+  }
+}
+
+SNAKEVAL cequal(SNAKEVAL e1, SNAKEVAL e2) {
+  if (cequalInner(e1, e2)) {
+    return const_true;
+  } else {
+    return const_false;
+  }
+}
 
 // main should remain unchanged
 // You can pass in a numeric argument to your program when you run it,

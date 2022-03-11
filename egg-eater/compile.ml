@@ -213,14 +213,15 @@ let deepest_stack e env =
 ;;
 
 
-(* IMPLEMENT EVERYTHING BELOW *)
-
-
 let add_built_in_library (p : sourcespan program) : sourcespan program =
   let helpD (decls : sourcespan decl list) (fake_loc : sourcespan) : sourcespan decl list =
-    let func_body = EApp("cinput", [], Native, fake_loc) in
-    [DFun("input", [], func_body, fake_loc)]
-    @ decls
+    let input_func = DFun("input", [], EApp("cinput", [], Native, fake_loc), fake_loc) in
+    let equal_func =
+      DFun("equal",
+           [BName("e1", false, fake_loc); BName("e2", false, fake_loc)],
+           EApp("cequal", [EId("e1", fake_loc); EId("e2", fake_loc)], Native, fake_loc),
+           fake_loc) in
+    [input_func ; equal_func] @ decls
   in
   match p with
   | Program(decls, body, loc) ->
@@ -554,7 +555,8 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
   in
   match p with
   | Program(decls, body, fake_loc) ->
-      let init_env = [("cinput",Func(0,fake_loc))] in
+      (* todo, clean this up. We should have an arg that includes the initial inv instead of defining it here directly *)
+      let init_env = [("cinput",Func(0,fake_loc)); ("cequal",Func(2,fake_loc))] in
       (* gather all functions into the env *)
       let (env, init_errs) = setup_env decls init_env in
       (* check decls *)
@@ -1269,17 +1271,26 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
     (* Technically we allow tailcall optimization with 1 more arg if this function has odd num of args *)
     begin match ct with
     | Native ->
-        if f_num_args > 1 then
-          raise (InternalCompilerError "Our compiler does not support native calls with more than 1 arg")
+        if f_num_args > 6 then
+          raise (InternalCompilerError "Our compiler does not support native calls with more than 6 arg")
         else
+          let move_args_to_input_registers =
+            List.mapi
+             (fun idx arg ->
+               let reg = List.nth first_six_args_registers idx in
+               let compiled_imm = (compile_imm arg env) in
+                 IMov(Reg(reg), compiled_imm))
+             args
+          in
+(*
           let add_arg =
             if f_num_args = 1
             then
               let arg = List.hd args in
               let compiled_arg = (compile_imm arg env) in
               [IMov(Reg(RDI), compiled_arg)]
-            else [] in
-          add_arg
+            else [] in*)
+          move_args_to_input_registers
           @ [ICall(fname)]
     | Snake ->
         if is_tail && (f_num_args <= num_args_passed) then
@@ -1453,6 +1464,7 @@ let compile_prog ((anfed : tag aprogram), (env : arg envt)) : string =
 extern error
 extern print
 extern cinput
+extern cequal
 global our_code_starts_here" in
       let stack_setup = [
           ILabel("our_code_starts_here");

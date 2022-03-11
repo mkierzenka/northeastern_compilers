@@ -563,6 +563,7 @@ let tests_from_eggeater = [
     "(4,1,((4,nil),),(),(nil,),nil,(4,180),(45,))\n(4,1,((4,nil),),(),(nil,),nil,(4,180),(45,))";
   t "nil_not_unit" "nil == ()" "" "false";
   t "nil_is_nil" "nil == nil" "" "true";
+  t "nil_is_tup" "istuple(nil)" "" "true";
   terr "get_nil" "nil[0]" "" "attempted to dereference a nil tuple";
   terr "set_nil_1" "nil[0]:=true" "" "attempted to dereference a nil tuple";
   terr "set_nil_2" "let x=nil in (x[0]:=true)" "" "attempted to dereference a nil tuple";
@@ -573,6 +574,39 @@ let tests_from_eggeater = [
   (* todo, test sequences of and/or. possibly with/out shortcircuiting *)
   (* todo, decl a function named 'print' and have a call to print. do we call this func or c print? *)
   (* todo, test function apps *)
+  (* todo, set & get items from tuple within tuple *)
+  (* todo, test correct tup[3]:=add1(tup[3]) *)
+  (* todo, istuple tests? *)
+  (* todo, possibly test more 'equal's cases related to other language features *)
+
+  (* equal tests *)
+  t "equal_ints" "let x = 5 in equal(sub1(x) + 1, print(x))" "" "5\ntrue";
+  t "equal_neg_ints" "let x = -999 in equal(sub1(x) + 1, print(x))" "" "-999\ntrue";
+  t "equal_bools" "let x = false, y = !(x) in equal(true && !(y), x)" "" "true";
+  t "unequal_ints" "let x = 5 in equal(add1(x), x)" "" "false";
+  t "unequal_bools" "let x = true in equal(x, false)" "" "false";
+  t "unequal_bool_int" "let x = true, y = if x: 7 else: true in equal(x, y)" "" "false";
+  t "unequal_int_bool" "let x = true, y = if x: 7 else: true in equal(y, x)" "" "false";
+  t "equal_nil" "equal(nil, nil)" "" "true";
+  t "equal_tups_empty" "equal((), ())" "" "true";
+  t "equal_tups_literal" "let tup=(1,false) in equal(tup, tup)" "" "true";
+  t "equal_tups_literal2" "let tup=(1,false), tup2 = tup in equal(tup, tup2)" "" "true";
+  t "equal_tups_struct" "let tup=(1,false) in equal((1,false), tup)" "" "true";
+  t "equal_tups"
+    "let tup=(true, (), (nil,), 8, (false, false, 4)),
+         tup2=(true, (), (nil,), add1(tup[3]), (false, false, 4))
+     in equal(tup, tup2[3]:=8)"
+    "" "true";
+  t "equal_tups2" "let tup=(true, (), (nil,), (false, false, 4)) in equal(tup, tup[1]:=(1,2))" "" "true";
+  t "unequal_tups" "equal((), (1,))" "" "false";
+  t "unequal_tups0a" "equal((), nil)" "" "false";
+  t "unequal_tups0b" "equal(nil, ())" "" "false";
+  t "unequal_tups0c" "equal((nil,), nil)" "" "false";
+  t "unequal_tups1" "equal((1,), ())" "" "false";
+  t "unequal_tups2" "equal((1,2), (1,))" "" "false";
+  t "unequal_tups3" "equal((true,false, 1, nil), (true, false, 2, nil))" "" "false";
+  t "unequal_tups_literal" "let tup=(1,false) in equal(tup, tup[0]:=2)" "" "true";
+  t "unequal_tups_literal2" "let tup=(1,false) in equal(tup[0]:=2, tup)" "" "true";
 
 ]
 
