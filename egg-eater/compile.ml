@@ -630,7 +630,7 @@ let desugar_let_bind_tups (p : sourcespan program) : sourcespan program =
       let rest_expr = helpBindings rest body in
       begin
       match bnd with
-      (* todo (investigate)- I think we are splitting up lists of bindings into nested lets here *)
+      (* (Pretty sure) this splits up lists of bindings into nested lets here *)
       | BBlank(loc) -> ELet([bnding], rest_expr, loc)
       | BName(_, _, _) -> ELet([bnding], rest_expr, loc)
       | BTuple(bnds, loc) ->
@@ -645,7 +645,7 @@ let desugar_let_bind_tups (p : sourcespan program) : sourcespan program =
       end
   and helpE (e : sourcespan expr) : sourcespan expr =
     match e with
-    | ELet(bindings, body, loc) -> helpBindings bindings body
+    | ELet(bindings, body, loc) -> helpBindings bindings (helpE body)
     | ESeq(lhs, rhs, loc) -> ESeq(helpE lhs, helpE rhs, loc)
     | ETuple(exprs, loc) -> ETuple(List.map helpE exprs, loc)
     | EGetItem(tup, idx, loc) -> EGetItem(helpE tup, helpE idx, loc)

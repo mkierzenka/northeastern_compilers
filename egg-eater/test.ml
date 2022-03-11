@@ -503,14 +503,16 @@ let tests_from_eggeater = [
   terr "get_big_idx2" "(1,2)[2]:=9" "" "index too big";
 
   (* Tuples and lets *)
+  t "tup_let_0" "let (z) = (false,) in z" "" "false";
   t "tup_let_1" "let (a,b) = (5,4) in a - b" "" "1";
   t "tup_let_2" "let ((a,b),_,(x,y,z)) = ((5,4),print(-99),(1,2,3)) in (a*b) - (x*y*z)" "" "-99\n14";
   t "tup_let_3" "let t=(print(1),print((2,3))) in print(t)" "" "1\n(2,3)\n(1,(2,3))\n(1,(2,3))";
   t "tup_let_4"
     "let (i0, i1, _, i3) = ((let i0=false in !(i0)), (9,), 4, 3) in (if i0: i1[0] * 4 - 3 else: -99)"
     "" "33";
-  terr "tup_let_mismatch" "let (a,b) = (input(),) in true" "5" "blue";
-  terr "tup_let_mismatch2" "let (a,b,(c,d,e),f) = (1,2,(3,3),4) in 7" "" "blue";
+  terr "tup_let_mismatch" "let (a,b) = (input(),) in true" "5" "index too big";
+  terr "tup_let_mismatch2" "let (a,b,(c,d,e),f) = (1,2,(3,3),4) in 7" "" "index too big";
+  (* see partial_tuple_breakdowns.egg *)
 
 
   (* Lets and blanks *)
@@ -523,6 +525,8 @@ let tests_from_eggeater = [
     "let _=print(1) in
     let _=print(false), _=((print((-3,)),), print(4)) in true"
     "" "1\nfalse\n(-3,)\n4\ntrue";
+  (* see partial_tuple_breakdowns.egg *)
+
 
   (* input tests *)
   t "input_1" "input()" "16" "16";
@@ -537,7 +541,6 @@ let tests_from_eggeater = [
   terr "input_err4" "if isnum(input()): 2 else: false" "(-1,4)" "bad input: input must be a number or a bool";
   terr "input_err5" "if isnum(input()): 2 else: false" "bogus_input" "bad input: input must be a number or a bool";
   terr "input_multi_err" "let x=input() in x" "false 8" "bad input: input must be a number or a bool";
-
   t "input_bool1" "print(input())" "true" "true\ntrue";
   t "input_bool2" "print(input())" "false" "false\nfalse";
   t "input_bool3" "let inp=input() in (if isnum(inp): -99 else: (if isbool(inp): inp else: -99))" "true" "true";
@@ -567,6 +570,6 @@ let eggeater_suite = "eggeater_suite">:::tests_from_eggeater
 
 
 let () =
-  run_test_tt_main ("all_tests">:::[cobra_suite; diamondback_suite; eggeater_suite; (*suite; input_file_test_suite ()*)])
+  run_test_tt_main ("all_tests">:::[cobra_suite; diamondback_suite; eggeater_suite; (*suite;*) input_file_test_suite ()])
 ;;
 
