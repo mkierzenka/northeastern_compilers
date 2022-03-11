@@ -40,6 +40,7 @@ let bool_tag       = 0x0000000000000007L
 let bool_tag_mask  = 0x0000000000000007L
 let num_tag        = 0x0000000000000000L
 let num_tag_mask   = 0x0000000000000001L
+let const_nil      = HexConst(0x0000000000000001L)
 let tup_tag        = 0x0000000000000001L
 let tup_tag_mask   = 0x0000000000000007L
 
@@ -908,6 +909,14 @@ let check_rax_for_tup (err_lbl : string) : instruction list =
    IJne(err_lbl);
   ]
 
+let check_rax_for_nil (err_lbl : string) : instruction list =
+  [
+   ILineComment("check_rax_for_nil (" ^ err_lbl ^ ")");
+   IMov(Reg(R8), const_nil);
+   ICmp(Reg(RAX), Reg(R8));
+   IJe(err_lbl);
+  ]
+
 
 (* RAX should be the snakeval of the index (in a tuple)*)
 (* DO NOT MODIFY RAX *)
@@ -1340,6 +1349,7 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
       (* first, do runtime error checking *)
       [IMov(Reg(RAX), tup_address)] (* move tuple address (snakeval) into RAX *)
       @ (check_rax_for_tup "err_GET_NOT_TUPLE")
+      @ (check_rax_for_nil "err_NIL_DEREF")
       @ [IMov(Reg(RAX), idx)] (* move the idx (snakeval) into RAX *)
       @ [ISar(Reg(RAX), Const(1L))] (* convert from snakeval -> int *)
       @ (check_rax_for_tup_smaller "err_GET_LOW_INDEX")
@@ -1360,6 +1370,7 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
       (* first, do runtime error checking *)
       [IMov(Reg(RAX), tup_address)] (* move tuple address (snakeval) into RAX *)
       @ (check_rax_for_tup "err_GET_NOT_TUPLE")
+      @ (check_rax_for_nil "err_NIL_DEREF")
       @ [IMov(Reg(RAX), idx)] (* move the idx (snakeval) into RAX *)
       @ [ISar(Reg(RAX), Const(1L))] (* convert from snakeval -> int *)
       @ (check_rax_for_tup_smaller "err_GET_LOW_INDEX")
@@ -1380,7 +1391,7 @@ and compile_imm e (env : arg envt) : arg =
   | ImmBool(true, _) -> const_true
   | ImmBool(false, _) -> const_false
   | ImmId(x, _) -> (find env x)
-  | ImmNil(_) -> raise (NotYetImplemented "Finish this")
+  | ImmNil(_) -> const_nil
 
 
 let compile_decl (d : tag adecl) (env : arg envt): instruction list =

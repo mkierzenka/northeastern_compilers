@@ -518,14 +518,12 @@ let tests_from_eggeater = [
   t "input_1" "input()" "16" "16";
   t "input_2" "print(input())" "16" "16\n16";
 
-  (*
   (* nil tests *)
-  t "print_nil" "let x=nil in print(x)" "" "nil";
-  t "print_tip_of_nil" "let x=nil in print((x,))" "" "TODO?";
-  terr "get_nil" "nil[0]" "" "access component of nil";
-  terr "set_nil" "nil[0]:=true" "" "access component of nil";
-  terr "set_nil" "let x=nil in (x[0]:=true)" "" "access component of nil";
-  *)
+  t "print_nil" "let x=nil in print(x)" "" "nil\nnil";
+  t "print_tip_of_nil" "let x=nil in print((x,))" "" "(nil,)\n(nil,)";
+  terr "get_nil" "nil[0]" "" "attempted to dereference a nil tuple";
+  terr "set_nil_1" "nil[0]:=true" "" "attempted to dereference a nil tuple";
+  terr "set_nil_2" "let x=nil in (x[0]:=true)" "" "attempted to dereference a nil tuple";
 
 (* (a,b,(c,d,e),f) = (1,2,(3,3),4) should be error *)
 

@@ -62,6 +62,13 @@ void printAsNumber(FILE *out, SNAKEVAL val) {
 
 void printAsTuple(FILE* out, SNAKEVAL val) {
   int64_t* heap_address = val - 1L;
+
+  // handle the nil case
+  if (heap_address == 0L) {
+    fprintf(out, "nil");
+    return;
+  }
+
   int64_t tup_size = heap_address[0];
   int64_t* elems = heap_address + 1;
   //fprintf(out, "tuple @ %p. size: %ld. value: (", heap_address, tup_size);
@@ -130,7 +137,7 @@ void error(uint64_t errCode) {
       fprintf(stderr, "bad input: input must be a number or a bool");
       break;
     case err_NIL_DEREF:
-      fprintf(stderr, "todo finish implementing error handling");
+      fprintf(stderr, "attempted to dereference a nil tuple");
       break;
     default:
       fprintf(stderr, "unknown error code");  //exit() will print the errCode
