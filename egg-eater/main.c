@@ -115,7 +115,13 @@ void error(uint64_t errCode) {
       fprintf(stderr, "expected tuple");
       break;
     case err_GET_LOW_INDEX:
+      // todo maybe print idx
+      fprintf(stderr, "index too small");
+      break;
     case err_GET_HIGH_INDEX:
+      // todo maybe print idx and tup length
+      fprintf(stderr, "index too big");
+      break;
     case err_NIL_DEREF:
       fprintf(stderr, "todo finish implementing error handling");
       break;

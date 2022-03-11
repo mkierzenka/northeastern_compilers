@@ -483,7 +483,7 @@ let tests_from_eggeater = [
   terr "get_neg_idx" "(1,2)[-1]" "" "index too small";
   terr "get_big_idx0" "()[0]" "" "index too big";
   terr "get_big_idx1" "(1,)[1]" "" "index too big";
-  terr "get_big_idx1" "(1,2)[2]" "" "index too big";
+  terr "get_big_idx2" "(1,2)[2]" "" "index too big";
 
   (* SetItem *)
   t "set_item_0" "(1,)[0] := 6" "" "(6,)";
@@ -514,12 +514,14 @@ let tests_from_eggeater = [
     "let _=print(1), _=print(false), _=((print((-3,)),), print(4)) in true"
     "" "1\nfalse\n(-3,)\n4\ntrue";
 
+  (*
   (* nil tests *)
   t "print_nil" "let x=nil in print(x)" "" "nil";
   t "print_tip_of_nil" "let x=nil in print((x,))" "" "TODO?";
   terr "get_nil" "nil[0]" "" "access component of nil";
   terr "set_nil" "nil[0]:=true" "" "access component of nil";
   terr "set_nil" "let x=nil in (x[0]:=true)" "" "access component of nil";
+  *)
 
 (* (a,b,(c,d,e),f) = (1,2,(3,3),4) should be error *)
 

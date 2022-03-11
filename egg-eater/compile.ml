@@ -855,7 +855,7 @@ let check_rax_for_tup (err_lbl : string) : instruction list =
    IAnd(Reg(R8), Reg(R9));
    IMov(Reg(R9), HexConst(tup_tag));
    ICmp(Reg(R8), Reg(R9));
-   IJnz(err_lbl);
+   IJne(err_lbl);
   ]
 
 
@@ -872,11 +872,13 @@ let check_rax_for_tup_smaller (err_lbl : string) : instruction list =
 
 (* RAX should be the snakeval of the index (in a tuple)*)
 (* DO NOT MODIFY RAX *)
-let check_rax_for_tup_bigger (tup_length_expected : int) (err_lbl : string) : instruction list =
+let check_rax_for_tup_bigger (tup_address : arg) (err_lbl : string) : instruction list =
   [
    (* R8 is used as intermediate because Cmp don't work on imm64s *)
    ILineComment("check_rax_for_tup_bigger (" ^ err_lbl ^ ")");
-   IMov(Reg(R8), Const(Int64.of_int tup_length_expected));
+   IMov(Reg(R8), tup_address);
+   ISub(Reg(R8), Const(1L)); (* convert from snake val address -> machine address *)
+   IMov(Reg(R8), RegOffset(0, R8)); (* load the tup length into RAX *)
    ICmp(Reg(RAX), Reg(R8));
    IJge(err_lbl);
   ]
@@ -1268,36 +1270,42 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
       (* increment the heap ptr *)
       @ [IMov(Reg(R8), Const(Int64.of_int (next_heap_loc * word_size))); IAdd(Reg(R15), Reg(R8))]
   | CGetItem(tup, i, _) ->
-      let tup_length_expected = List.length tup in
       let tup_address = compile_imm tup env in
       let idx = compile_imm i env in
+
       (* first, do runtime error checking *)
       [IMov(Reg(RAX), tup_address)] (* move tuple address (snakeval) into RAX *)
       @ (check_rax_for_tup "err_GET_NOT_TUPLE")
       @ [IMov(Reg(RAX), idx)] (* move the idx (snakeval) into RAX *)
-      @ (check_rax_for_tup_smaller tup_length_expected "err_GET_LOW_INDEX")
-      @ (check_rax_for_tup_bigger tup_length_expected "err_GET_HIGH_INDEX")
+      @ [ISar(Reg(RAX), Const(1L))] (* convert from snakeval -> int *)
+      @ (check_rax_for_tup_smaller "err_GET_LOW_INDEX")
+      @ (check_rax_for_tup_bigger tup_address "err_GET_HIGH_INDEX")
+
       (* passed checks, now do actual 'get' *)
       @ [IMov(Reg(RAX), tup_address)] (* move tuple address back into RAX *)
       @ [ISub(Reg(RAX), Const(1L))] (* convert from snake val address -> machine address *)
       @ [IMov(Reg(R8), idx)] (* move the idx (snakeval) into R8 *)
-      @ [IShr(Reg(R8), Const(1L))] (* convert from snake val -> int *)
+      @ [ISar(Reg(R8), Const(1L))] (* convert from snake val -> int *)
       @ [IAdd(Reg(R8), Const(1L))] (* add 1 to the offset to bypass the tup size *)
       @ [IMov(Reg(RAX), RegOffsetReg(RAX,R8,word_size,0))]
   | CSetItem(tup, i, r, _) ->
       let tup_address = compile_imm tup env in
       let idx = compile_imm i env in
       let rhs = compile_imm r env in
+
       (* first, do runtime error checking *)
       [IMov(Reg(RAX), tup_address)] (* move tuple address (snakeval) into RAX *)
       @ (check_rax_for_tup "err_GET_NOT_TUPLE")
       @ [IMov(Reg(RAX), idx)] (* move the idx (snakeval) into RAX *)
+      @ [ISar(Reg(RAX), Const(1L))] (* convert from snakeval -> int *)
       @ (check_rax_for_tup_smaller "err_GET_LOW_INDEX")
-      @ (check_rax_for_tup_bigger "err_GET_HIGH_INDEX")
+      @ (check_rax_for_tup_bigger tup_address "err_GET_HIGH_INDEX")
+
       (* passed checks, now do actual 'set' *)
+      @ [IMov(Reg(RAX), tup_address)] (* move tuple address (snakeval) into RAX *)
       @ [ISub(Reg(RAX), Const(1L))] (* convert from snake val -> address *)
       @ [IMov(Reg(R8), idx)] (* move the idx (* snakeval *) into R8 *)
-      @ [IShr(Reg(R8), Const(1L))] (* convert from snake val -> int *)
+      @ [ISar(Reg(R8), Const(1L))] (* convert from snake val -> int *)
       @ [IAdd(Reg(R8), Const(1L))] (* add 1 to the offset to bypass the tup size *)
       @ [IMov(Reg(R11), rhs)]
       @ [IMov(RegOffsetReg(RAX,R8,word_size,0), Reg(R11))]
