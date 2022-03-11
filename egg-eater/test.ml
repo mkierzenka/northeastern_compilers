@@ -505,6 +505,8 @@ let tests_from_eggeater = [
   (* Tuples and lets *)
   t "tup_let_0" "let (z) = (false,) in z" "" "false";
   t "tup_let_1" "let (a,b) = (5,4) in a - b" "" "1";
+  t "tup_let_1b" "let tup = (5,4) in let (a,b) = tup in a - b" "" "1";
+  t "tup_let_1c" "let tup = (5,4), (a,b) = tup in a - b" "" "1";
   t "tup_let_2" "let ((a,b),_,(x,y,z)) = ((5,4),print(-99),(1,2,3)) in (a*b) - (x*y*z)" "" "-99\n14";
   t "tup_let_3" "let t=(print(1),print((2,3))) in print(t)" "" "1\n(2,3)\n(1,(2,3))\n(1,(2,3))";
   t "tup_let_4"
@@ -512,6 +514,9 @@ let tests_from_eggeater = [
     "" "33";
   terr "tup_let_mismatch" "let (a,b) = (input(),) in true" "5" "index too big";
   terr "tup_let_mismatch2" "let (a,b,(c,d,e),f) = (1,2,(3,3),4) in 7" "" "index too big";
+  terr "tup_let_mismatch3" "let temp = (1,2,3) in let (a,b) = temp in 7" "" "index too big";
+  terr "tup_let_mismatch4" "let temp=(1,2,3) in let (a,b) = temp in true" "" "index too big";
+  terr "tup_let_mismatch5" "let temp=(1,2,3), (a,b) = temp in true" "" "index too big";
   (* see partial_tuple_breakdowns.egg *)
 
 
@@ -561,6 +566,13 @@ let tests_from_eggeater = [
   terr "get_nil" "nil[0]" "" "attempted to dereference a nil tuple";
   terr "set_nil_1" "nil[0]:=true" "" "attempted to dereference a nil tuple";
   terr "set_nil_2" "let x=nil in (x[0]:=true)" "" "attempted to dereference a nil tuple";
+
+  (* todo, test simple func decls with _ *)
+  (* todo, test func with _ in args and _ in body *)
+  (* todo, test sequences. even in let bindings *)
+  (* todo, test sequences of and/or. possibly with/out shortcircuiting *)
+  (* todo, decl a function named 'print' and have a call to print. do we call this func or c print? *)
+  (* todo, test function apps *)
 
 ]
 
