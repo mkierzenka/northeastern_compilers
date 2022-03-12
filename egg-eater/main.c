@@ -4,13 +4,13 @@
 #include <string.h>
 #include <stdbool.h>
 
+// FYI there are several todos in this file that we did not have time to address.
+
 typedef uint64_t SNAKEVAL;
 
 extern SNAKEVAL our_code_starts_here(uint64_t* HEAP, int size) asm("our_code_starts_here");
-//extern void error(uint64_t code, SNAKEVAL val) asm("error");
-//TODO this should be uncommented
+extern void error(uint64_t code) asm("error");
 extern SNAKEVAL print(SNAKEVAL val) asm("print");
-//extern SNAKEVAL input() asm("input"); //TODO delete
 extern SNAKEVAL input() asm("cinput");
 extern SNAKEVAL printStack(SNAKEVAL val, uint64_t* esp, uint64_t* ebp, int args) asm("print_stack");
 extern SNAKEVAL equal(SNAKEVAL e1, SNAKEVAL e2) asm("cequal");
@@ -79,7 +79,6 @@ void printAsTuple(FILE* out, SNAKEVAL val) {
 
   int64_t tup_size = heap_address[0];
   int64_t* elems = heap_address + 1;
-  //fprintf(out, "tuple @ %p. size: %ld. value: (", heap_address, tup_size);
   fprintf(out, "(");
   for (int i = 0; i < tup_size; ++i) {
     printHelp(out, elems[i]);

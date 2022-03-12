@@ -14,25 +14,6 @@ type env_entry =
 ;;
 
 
-(* This is unused (should fix before ever using it, e.g. support Tuples)
-let rec is_anf (e : 'a expr) : bool =
-  match e with
-  | EPrim1(_, e, _) -> is_imm e
-  | EPrim2(_, e1, e2, _) -> is_imm e1 && is_imm e2
-  | ELet(binds, body, _) ->
-     List.for_all (fun (_, e, _) -> is_anf e) binds
-     && is_anf body
-  | EIf(cond, thn, els, _) -> is_imm cond && is_anf thn && is_anf els
-  | _ -> is_imm e
-and is_imm e =
-  match e with
-  | ENumber _ -> true
-  | EBool _ -> true
-  | EId _ -> true
-  | _ -> false
-;;*)
-
-
 let const_true     = HexConst(0xFFFFFFFFFFFFFFFFL)
 let const_false    = HexConst(0x7FFFFFFFFFFFFFFFL)
 let bool_mask      = HexConst(0x8000000000000000L)
@@ -358,19 +339,6 @@ let rec check_duplicate_decl (fname : string) (decls : sourcespan decl list) (lo
   | Some(DFun(_, _, _, existing_loc)) -> [DuplicateFun(fname, existing_loc, loc)]
 ;;
 
-(* Checks if a sym is already bound in a binds list, returns an exception if so otherwise empty list. Also takes in location where this symbol was just bound. *)
-(*
-let rec check_duplicate_var (sym : string) (binds : sourcespan binding list) (loc : sourcespan) : exn list =
-  match binds with
-  | [] -> [] (* no duplicates found -> no error *)
-  | (k, v, existing_loc) :: tail ->
-      if k = sym then
-        [DuplicateId(sym, existing_loc, loc)]
-      else
-        check_duplicate_var sym tail loc
-;;
-*)
-
 (* checks for duplicate variables inside a let binding.  we do this by looking through a flattened list of (string * sourcepan) to make our lives easier. *)
 let rec check_duplicate_binds (sym : string) (existing_loc : sourcespan) (binds : (string * sourcespan) list) : exn list =
   match binds with
@@ -463,12 +431,6 @@ let rec check_dups (binds : (string * sourcespan) list) : exn list =
 let dup_binding_exns (binds : sourcespan binding list) : exn list =
   check_dups (bind_list_pairs binds)
 ;;
-
-(*
-let dup_decl_args_exns (args : sourcespan bind list) : exn list =
-  check_dups (bind_pairs args)
-;;
-*)
 
 
 let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
@@ -1280,14 +1242,6 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
                  IMov(Reg(reg), compiled_imm))
              args
           in
-(*
-          let add_arg =
-            if f_num_args = 1
-            then
-              let arg = List.hd args in
-              let compiled_arg = (compile_imm arg env) in
-              [IMov(Reg(RDI), compiled_arg)]
-            else [] in*)
           move_args_to_input_registers
           @ [ICall(fname)]
     | Snake ->
@@ -1416,26 +1370,6 @@ let compile_decl (d : tag adecl) (env : arg envt): instruction list =
     let postlude = compile_fun_postlude num_body_vars in
     let body_label = sprintf "%s_body" fname in
     prelude @ [ILabel(body_label)] @ compiled_body @ postlude
-
-(*
-let compile_prog ((anfed : tag aprogram), (env: arg envt)) : string =
-  match anfed with
-  | AProgram(decls, body, _) ->
-     let comp_decls = raise (NotYetImplemented "... do stuff with decls ...") in
-     let (body_prologue, comp_body, body_epilogue) = raise (NotYetImplemented "... do stuff with body ...") in
-     
-     let heap_start = [
-         ILineComment("heap start");
-         IInstrComment(IMov(Reg(heap_reg), Reg(List.nth first_six_args_registers 0)), "Load heap_reg with our argument, the heap pointer");
-         IInstrComment(IAdd(Reg(heap_reg), Const(15L)), "Align it to the nearest multiple of 16");
-         IInstrComment(IAnd(Reg(heap_reg), HexConst(0xFFFFFFFFFFFFFFF0L)), "by adding no more than 15 to it")
-       ] in
-     let main = to_asm (body_prologue @ heap_start @ comp_body @ body_epilogue) in
-     
-     raise (NotYetImplemented "... combine comp_decls and main with any needed extra setup and error handling ...")
-
-;;*)
-
 
 
 let compile_prog ((anfed : tag aprogram), (env : arg envt)) : string =

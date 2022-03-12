@@ -20,45 +20,6 @@ let tanf name program input expected = name>::fun _ ->
 let teq name actual expected = name>::fun _ ->
   assert_equal expected actual ~printer:(fun s -> s);;
 
-let pair_tests = [
-  t "tup1" "let t = (4, (5, 6)) in
-            begin
-              t[0] := 7;
-              t
-            end" "" "(7, (5, 6))";
-  t "tup2" "let t = (4, (5, nil)) in
-            begin
-              t[1] := nil;
-              t
-            end" "" "(4, nil)";
-  t "tup3" "let t = (4, (5, nil)) in
-            begin
-              t[1] := t;
-              t
-            end" "" "(4, <cyclic tuple 1>)";
-  t "tup4" "let t = (4, 6) in
-            (t, t)"
-           ""
-           "((4, 6), (4, 6))"
-
-]
-
-(* let oom = [
- *   tgcerr "oomgc1" (7) "(1, (3, 4))" "" "Out of memory";
- *   tgc "oomgc2" (8) "(1, (3, 4))" "" "(1, (3, 4))";
- *   tvgc "oomgc3" (8) "(1, (3, 4))" "" "(1, (3, 4))";
- *   tgc "oomgc4" (4) "(3, 4)" "" "(3, 4)";
- * ] *)
-
-let input = [
-    t "input1" "let x = input() in x + 2" "123" "125"
-  ]
-
-
-let suite =
-"suite">:::
- pair_tests @ input
-
 
 
 let max_snake_num = (Int64.div Int64.max_int 2L)
@@ -514,6 +475,7 @@ let tests_from_eggeater = [
     "" "33";
   terr "tup_let_mismatch" "let (a,b) = (input(),) in true" "5" "index too big";
   terr "tup_let_mismatch2" "let (a,b,(c,d,e),f) = (1,2,(3,3),4) in 7" "" "index too big";
+  (* ran out of time, didn't get these cases to work (for both lets and functions) :( *)
   (*terr "tup_let_mismatch3" "let temp = (1,2,3) in let (a,b) = temp in 7" "" "index too big";
   terr "tup_let_mismatch4" "let temp=(1,2,3) in let (a,b) = temp in true" "" "index too big";
   terr "tup_let_mismatch5" "let temp=(1,2,3), (a,b) = temp in true" "" "index too big";*)
@@ -587,6 +549,9 @@ let tests_from_eggeater = [
   t "seq_3" "let a=print(17) in print(a); a+1" "" "17\n17\n18";
   terr "seq_4_l" "(let a=print(17) in print(a)); a+1" "" "The identifier a, used at ";
   terr "seq_4_r" "(let a=print(17) in print(a)); a+1" "" ", is not in scope";
+  t "seq_5" "true || print(false) ; print(6) ; 7" "" "6\n7";
+  t "seq_6" "true || (print(false) ; 200)" "" "true";
+  t "seq_7" "false || (100; true)" "" "true";
 
   (* extra tuple tests *)
   t "extra_tup_1" "let t=(8, (true, false), 99) in t[1][0] := 7; t" "" "(8,(7,false),99)";
@@ -604,10 +569,6 @@ let tests_from_eggeater = [
   t "is_tuple_6" "istuple(((),88)[0])" "" "true";
   t "is_tuple_7" "istuple((nil,88)[0])" "" "true";
   t "is_tuple_8" "istuple(nil)" "" "true";
-
-  (* todo, test sequences of and/or. possibly with/out shortcircuiting *)
-  (* todo, test function apps *)
-  (* todo, possibly test more 'equal's cases related to other language features *)
 
   (* inputs tests *)
   t "no_captured_input" "let x=6,y=7 in x*y" "100\n88" "42";
@@ -644,6 +605,11 @@ let tests_from_eggeater = [
   t "unequal_tups_literal" "let tup=(1,false) in equal(tup, tup[0]:=2)" "" "true";
   t "unequal_tups_literal2" "let tup=(1,false) in equal(tup[0]:=2, tup)" "" "true";
 
+  (* decl with tuple args *)
+  t "decl_tup_args_1" "def f((a,b), c): a+b+c  f((1,2),3)" "" "6";
+  t "decl_tup_args_2" "def f(z,(a,b), c): z*(a+b+c)  f(100,(1,2),3)" "" "600";
+  t "decl_tup_args_3" "def f(z,(a,_), c): z*(a+a+c)  f(100,(1,2),3)" "" "500";
+  terr "decl_tup_args_4" "def f(z,(a,_), c): z*(a+a+c)  f(100,9,3)" "" "expected tuple";
 ]
 
 let diamondback_suite = "diamondback_suite">:::tests_from_diamondback
@@ -652,6 +618,6 @@ let eggeater_suite = "eggeater_suite">:::tests_from_eggeater
 
 
 let () =
-  run_test_tt_main ("all_tests">:::[cobra_suite; diamondback_suite; eggeater_suite; (*suite;*) input_file_test_suite ()])
+  run_test_tt_main ("all_tests">:::[cobra_suite; diamondback_suite; eggeater_suite; input_file_test_suite ()])
 ;;
 
