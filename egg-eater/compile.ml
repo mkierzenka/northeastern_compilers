@@ -255,7 +255,6 @@ let anf (p : tag program) : unit aprogram =
     | EApp(funname, args, ct, _) ->
        let (new_args, new_setup) = List.split (List.map helpI args) in
        (CApp(funname, new_args, ct, ()), List.concat new_setup)
-    (* NOTE: You may need more cases here, for sequences and tuples *)
     | ESeq _ -> raise (InternalCompilerError "desugaring failed: sequences cannot be ANFed")
     | ETuple([], tag) -> (CTuple([], ()), [])
     | ETuple(elem::tail, tag) ->
@@ -1398,19 +1397,11 @@ extern print
 extern cinput
 extern cequal
 global our_code_starts_here" in
-      let stack_setup = [
-          ILabel("our_code_starts_here");
-          IPush(Reg(RBP));
-          IMov(Reg(RBP), Reg(RSP));
-          ISub(Reg(RSP), Const(Int64.of_int (word_size * num_prog_body_vars)))  (* allocates stack space for all local vars *)
-        ] in
-      let postlude = [
-          ILabel("program_done");
-          IAdd(Reg(RSP), Const(Int64.of_int (word_size * num_prog_body_vars)));  (* Undoes the allocation *)
-          IPop(Reg(RBP));
-          IRet;
-
-          (* Error Labels *)
+      let stack_setup = (compile_fun_prelude "our_code_starts_here" [] env num_prog_body_vars) in
+      let postlude =
+      [ILabel("program_done");]
+      @ compile_fun_postlude num_prog_body_vars
+      @ [ (* Error Labels *)
           ILabel("err_COMP_NOT_NUM");
           IMov(Reg(RDI), Const(err_COMP_NOT_NUM));
           ICall("error");
