@@ -277,8 +277,10 @@ let anf (p : tag program) : unit aprogram =
        let (e1_ans, e1_setup) = helpC e1 in
        let (e2_ans, e2_setup) = helpC e2 in
        (e2_ans, e1_setup @ [BSeq e1_ans] @ e2_setup)
-    | EApp(func, args, _, _) ->
-       raise (NotYetImplemented("Revise this case"))
+    | EApp(func, args, ct, _) ->
+       let (func_new, func_setup) = helpI func in
+       let (args_new, args_setup) = List.split (List.map helpI args) in
+       (CApp(func_new, args_new, ct, ()), func_setup @ (List.concat args_setup))
     | ETuple(args, _) ->
        raise (NotYetImplemented("Finish this case"))
     | EGetItem(tup, idx, _) ->
@@ -1378,8 +1380,8 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
 
          @ [ILabel(lbl_done)]
      end
-  | CApp(fname, args, ct, _) -> raise (InternalCompilerError "can't compile func apps yet")
-    (*let f_num_args = (List.length args) in
+  | CApp(func, args, ct, _) ->
+    let f_num_args = (List.length args) in
     let is_even_f_num_args = f_num_args mod 2 == 0 in
     let padding = (if is_even_f_num_args then [] else [IMov(Reg(R8), HexConst(0xF0F0F0F0L)); IPush(Reg(R8))]) in
     (* Push the args onto stack in reverse order *)
@@ -1401,9 +1403,13 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
                  IMov(Reg(reg), compiled_imm))
              args
           in
-          move_args_to_input_registers
-          @ [ICall(fname)]
-    | Snake ->
+          begin
+          match func with
+          | ImmId(fname, _) -> move_args_to_input_registers @ [ICall(Label(fname))]
+          | _ -> raise (InternalCompilerError "TODO add errors here")
+          end
+    | _ -> raise (InternalCompilerError "TODO add back support for SNAKE func calls")
+(*    | Snake ->
         if is_tail && (f_num_args <= num_args_passed) then
             let (compiled_args, _) = List.fold_left
                            (fun accum_instrs_idx arg ->
@@ -1418,7 +1424,7 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
                            args
                            in
             let body_label = sprintf "%s_body" fname in
-            compiled_args @ [IJmp(body_label)]
+            compiled_args @ [IJmp(Label(body_label))]
         else
             let compiled_args = List.fold_left
                            (fun accum_instrs arg ->
@@ -1437,8 +1443,8 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
             (* Don't use temp register here because we assume the RHS will never be very big *)
             IAdd(Reg(RSP), Const(Int64.of_int (word_size * f_num_args_passed)));
             ]
-    | _ -> raise (InternalCompilerError "Invalid function application call type")
-    end*)
+    | _ -> raise (InternalCompilerError "Invalid function application call type")*)
+    end
   | CImmExpr(expr) -> [IMov(Reg(RAX), (compile_imm expr env))]
   | CTuple(elems, _) -> 
       let tup_size = List.length elems in
