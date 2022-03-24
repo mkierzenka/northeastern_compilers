@@ -62,6 +62,8 @@ let err_SET_NOT_NUM      = 14L
 let err_SET_HIGH_INDEX   = 15L
 let err_CALL_NOT_CLOSURE = 16L
 let err_CALL_ARITY_ERR   = 17L
+let err_BAD_INPUT        = 18L
+let err_TUP_IDX_NOT_NUM  = 19L
 
 
 let first_six_args_registers = [RDI; RSI; RDX; RCX; R8; R9]
@@ -510,7 +512,9 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
           else [UnboundId(id, loc)]
       | EApp(fname, args, _, loc) ->
         let arg_errs = List.fold_left (fun errs arg -> errs @ (wf_E arg env)) [] args in
-        if func_in_env fname env then
+        arg_errs
+        (* TODO- add back error checking for unbound funcs
+        if func_in_env fname env true then
           let id_t = find env fname in
           match id_t with
           | Func(arity, _) ->
@@ -521,7 +525,7 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
                 [Arity(arity, callsite_arity, loc)] @ arg_errs
           | Var(_) -> raise (InternalCompilerError (sprintf "Applying variable %s as a function" fname))
         else
-          [UnboundFun(fname,loc)] @ arg_errs
+          [UnboundFun(fname,loc)] @ arg_errs*)
   and wf_D (d : sourcespan decl) (env : env_entry envt) : exn list =
     match d with
     | DFun(fname, args, body, _) ->
@@ -556,13 +560,16 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
   | Program(decls, body, fake_loc) ->
       let init_env = [("cinput",Func(0,fake_loc)); ("cequal",Func(2,fake_loc))] in
       (* gather all functions into the env *)
+(* TODO- add back env checks for decls
       let (env, init_errs) = setup_env decls init_env in
       (* check decls *)
       let decl_errs =
         List.fold_left
           (fun (acc : (exn list)) decl -> ((wf_D decl env) @ acc))
           []
-          decls in
+          decls in*)
+      let (env, init_errs) = (init_env, []) in
+      let decl_errs = [] in
       (* check the body *)
       let body_errs = wf_E body env in
       let all_errs = init_errs @ decl_errs @ body_errs in
@@ -900,6 +907,7 @@ let naive_stack_allocation (prog: tag aprogram) : tag aprogram * arg envt =
       (prog, prog_env)
 ;;
 
+(*  TODO- Probably delete this at some point, copying in egg-eater for now 
 let rec compile_fun (fun_name : string) args body env : instruction list =
   raise (NotYetImplemented "Compile funs not yet implemented")
 and compile_aexpr (e : tag aexpr) (si : int) (env : arg envt) (num_args : int) (is_tail : bool) : instruction list =
@@ -929,10 +937,691 @@ let compile_prog ((anfed : tag aprogram), (env: arg envt)) : string =
      let main = to_asm (body_prologue @ heap_start @ comp_body @ body_epilogue) in
      
      raise (NotYetImplemented "... combine main with any needed extra setup and error handling ...")
-           
+*)
+
 (* Feel free to add additional phases to your pipeline.
    The final pipeline phase needs to return a string,
    but everything else is up to you. *)
+
+(* ---- egg eater *)
+
+(* ASSUMES that the program has been alpha-renamed and all names are unique *)
+let naive_stack_allocation (prog: tag aprogram) : tag aprogram * arg envt =
+  (*let rec help_decl (decl : tag adecl) (env : arg envt) : arg envt =
+    match decl with
+    | ADFun(fname, args, body, _) ->
+        let args_with_idx = List.mapi (fun i arg -> (arg, RegOffset((i + 2)*word_size, RBP))) args in
+        let new_env = List.fold_left (fun accum_env cell -> cell :: accum_env) env args_with_idx in
+        let (decl_env, _) = help_aexpr body 1 new_env in
+        decl_env*)
+  let rec help_aexpr (body : tag aexpr) (si : int) (env : arg envt) : arg envt * int =
+    match body with
+    | ALet(sym, bind, body, _) ->
+        let newenv = (sym, RegOffset(~-si*word_size, RBP)) :: env in
+        let (bindenv, newsi) = help_cexpr bind (si+1) newenv in
+        help_aexpr body newsi bindenv
+    | ACExpr(cexpr) -> help_cexpr cexpr si env
+  and help_cexpr (expr : tag cexpr) (si : int) (env : arg envt) : arg envt * int =
+    match expr with
+    | CIf(cond, lhs, rhs, _) ->
+        let (lhs_env, lhs_si) = help_aexpr lhs si env in
+        help_aexpr rhs lhs_si lhs_env
+    | CScIf(cond, lhs, rhs, _) ->
+        let (lhs_env, lhs_si) = help_aexpr lhs si env in
+        help_aexpr rhs lhs_si lhs_env
+    | CPrim1 _ -> (env, si)
+    | CPrim2 _ -> (env, si)
+    | CApp _ -> (env, si)
+    | CImmExpr _ -> (env, si)
+    | CTuple _ -> (env, si)
+    | CGetItem _ -> (env, si)
+    | CSetItem _ -> (env, si)
+  in
+  match prog with
+  | AProgram(body, _) ->
+      (* TODO- add back compiling decls into body
+      let decl_env =
+        List.fold_left (fun accum_env decl -> help_decl decl accum_env) [] decls in
+        *)
+        let (prog_env, _) = help_aexpr body 1 [] in
+        (prog, prog_env)
+;;
+
+
+(* Compiled Type Checking *)
+let check_rax_for_num (err_lbl : string) : instruction list =
+  [
+   (* This "test" trick depends on num_tag being 0. R8 used because Test doesn't support imm64 *)
+   ILineComment("check_rax_for_num (" ^ err_lbl ^ ")");
+   IMov(Reg(R8), HexConst(num_tag_mask));
+   ITest(Reg(RAX), Reg(R8));
+   IJnz(Label(err_lbl));
+  ]
+
+let check_rax_for_bool (err_lbl : string) : instruction list =
+  [
+   (* Operate on temp register R8 instead of RAX. This is because we call AND
+    * on the register, which will alter the value. We want to preserve the value
+    * in RAX, hence we operate on R8 instead. R9 is used as intermediate because
+      And, Cmp don't work on imm64s *)
+   ILineComment("check_rax_for_bool (" ^ err_lbl ^ ")");
+   IMov(Reg(R8), Reg(RAX));
+   IMov(Reg(R9), HexConst(bool_tag_mask));
+   IAnd(Reg(R8), Reg(R9));
+   IMov(Reg(R9), HexConst(bool_tag));
+   ICmp(Reg(R8), Reg(R9));
+   IJnz(Label(err_lbl));
+  ]
+
+let check_for_overflow = [IJo(Label("err_OVERFLOW"))]
+
+
+let check_rax_for_tup (err_lbl : string) : instruction list =
+  [
+   (* Operate on temp register R8 instead of RAX. This is because we call AND
+    * on the register, which will alter the value. We want to preserve the value
+    * in RAX, hence we operate on R8 instead. R9 is used as intermediate because
+      And, Cmp don't work on imm64s *)
+   ILineComment("check_rax_for_tup (" ^ err_lbl ^ ")");
+   IMov(Reg(R8), Reg(RAX));
+   IMov(Reg(R9), HexConst(tuple_tag_mask));
+   IAnd(Reg(R8), Reg(R9));
+   IMov(Reg(R9), HexConst(tuple_tag));
+   ICmp(Reg(R8), Reg(R9));
+   IJne(Label(err_lbl));
+  ]
+
+let check_rax_for_nil (err_lbl : string) : instruction list =
+  [
+   ILineComment("check_rax_for_nil (" ^ err_lbl ^ ")");
+   IMov(Reg(R8), const_nil);
+   ICmp(Reg(RAX), Reg(R8));
+   IJe(Label(err_lbl));
+  ]
+
+
+(* RAX should be the snakeval of the index (in a tuple)*)
+(* DO NOT MODIFY RAX *)
+let check_rax_for_tup_smaller (err_lbl : string) : instruction list =
+  [
+   ILineComment("check_rax_for_tup_smaller (" ^ err_lbl ^ ")");
+   ICmp(Reg(RAX), Const(0L));
+   (* no temp register because imm32 0 will be "sign-extended to imm64", which should still be 0 *)
+   IJl(Label(err_lbl));
+  ]
+
+
+(* RAX should be the snakeval of the index (in a tuple)*)
+(* DO NOT MODIFY RAX *)
+let check_rax_for_tup_bigger (tup_address : arg) (err_lbl : string) : instruction list =
+  [
+   (* R8 is used as intermediate because Cmp don't work on imm64s *)
+   ILineComment("check_rax_for_tup_bigger (" ^ err_lbl ^ ")");
+   IMov(Reg(R8), tup_address);
+   ISub(Reg(R8), Const(1L)); (* convert from snake val address -> machine address *)
+   IMov(Reg(R8), RegOffset(0, R8)); (* load the tup length into RAX *)
+   ICmp(Reg(RAX), Reg(R8));
+   IJge(Label(err_lbl));
+  ]
+
+
+let compile_fun_prelude (fun_name : string) (args : string list) (env : arg envt) (num_local_vars : int): instruction list =
+  [
+    ILabel(fun_name);
+    IPush(Reg(RBP));
+    IMov(Reg(RBP), Reg(RSP));
+    (* Don't use temp register here because we assume the RHS will never be very big *)
+    ISub(Reg(RSP), Const(Int64.of_int (word_size * num_local_vars)))  (* allocates stack space for all local vars *)
+  ]
+
+let compile_fun_postlude (num_local_vars : int) : instruction list =
+  [
+    IMov(Reg(RSP), Reg(RBP));  (* Move stack to how it was at start of this function *)
+    IPop(Reg(RBP));
+    IRet;
+  ]
+
+
+
+
+
+let rec compile_aexpr (e : tag aexpr) (env : arg envt) (num_args : int) (is_tail : bool) : instruction list =
+  match e with
+  | ALet(id, bind, body, _) ->
+    let compiled_bind = compile_cexpr bind env num_args false in
+    let dest = (find env id) in
+    let compiled_body = compile_aexpr body env num_args is_tail in
+    [ILineComment(sprintf "Let: %s" id)]
+    @ compiled_bind
+    @ [IMov(dest, Reg(RAX))]
+    @ compiled_body
+  | ACExpr(expr) -> (compile_cexpr expr env num_args is_tail)
+and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : bool) =
+  match e with
+  | CIf(cond, thn, els, tag) ->
+     let cond_reg = compile_imm cond env in
+     let lbl_comment = sprintf "if_%d" tag in
+     let lbl_thn = sprintf "if_then_%d" tag in
+     let lbl_els = sprintf "if_else_%d" tag in
+     let lbl_done = sprintf "if_done_%d" tag in
+     (* check cond for boolean val *)
+     [ILineComment(lbl_comment)]
+     @ [IMov(Reg(RAX), cond_reg)]
+     @ (check_rax_for_bool "err_IF_NOT_BOOL")
+     (* test for RAX == true *)
+     (* need to use temp register R8 because Test cannot accept imm64 *)
+     @ [IMov(Reg(R8), bool_mask)]
+     @ [ITest(Reg(RAX), Reg(R8))]
+     @ [IJz(Label(lbl_els))]
+
+     @ [ILabel(lbl_thn)]
+     @ (compile_aexpr thn env num_args is_tail)
+     @ [IJmp(Label(lbl_done))]
+
+     @ [ILabel(lbl_els)]
+     @ (compile_aexpr els env num_args is_tail)
+     @ [ILabel(lbl_done)]
+  | CScIf(cond, thn, els, tag) ->
+     let cond_reg = compile_imm cond env in
+     let lbl_comment = sprintf "scif_%d" tag in
+     let lbl_thn = sprintf "scif_then_%d" tag in
+     let lbl_els = sprintf "scif_else_%d" tag in
+     let lbl_done = sprintf "scif_done_%d" tag in
+     (* check cond for boolean val *)
+     [ILineComment(lbl_comment)]
+     @ [IMov(Reg(RAX), cond_reg)]
+     @ (check_rax_for_bool "err_LOGIC_NOT_BOOL")
+     (* test for RAX == true *)
+     (* need to use temp register R8 because Test cannot accept imm64 *)
+     @ [IMov(Reg(R8), bool_mask)]
+     @ [ITest(Reg(RAX), Reg(R8))]
+     @ [IJz(Label(lbl_els))]
+
+     @ [ILabel(lbl_thn)]
+     (* LHS is compiled before RHS, so definitely not tail position *)
+     @ (compile_aexpr thn env num_args false)
+     @ [IJmp(Label(lbl_done))]
+
+     @ [ILabel(lbl_els)]
+     (* Since we check that result is bool, RHS is also not in tail position *)
+     @ (compile_aexpr els env num_args false)
+     @ (check_rax_for_bool "err_LOGIC_NOT_BOOL")
+     @ [ILabel(lbl_done)]
+  | CPrim1(op, body, tag) -> 
+    let body_imm = compile_imm body env in
+     begin match op with
+       | Add1 ->
+           [IMov(Reg(RAX), body_imm)]
+           @ (check_rax_for_num "err_ARITH_NOT_NUM")
+           @ [IAdd(Reg(RAX), Const(2L))]
+           @ check_for_overflow
+       | Sub1 ->
+           [IMov(Reg(RAX), body_imm)]
+           @ (check_rax_for_num "err_ARITH_NOT_NUM")
+           @ [ISub(Reg(RAX), Const(2L))]
+           @ check_for_overflow
+        | Print -> raise (InternalCompilerError "Impossible: 'print' should be rewritten to a function application")
+        | IsBool ->
+          let true_lbl = sprintf "is_bool_true_%d" tag in
+          let false_lbl = sprintf "is_bool_false_%d" tag in
+          let done_lbl = sprintf "is_bool_done_%d" tag in
+          [
+           IMov(Reg(RAX), body_imm);
+           (* Don't need to save RAX on the stack because we overwrite the
+            * value with true/false later. R8 used because And, Cmp don't support imm64 *)
+           IMov(Reg(R8), HexConst(bool_tag_mask));
+           IAnd(Reg(RAX), Reg(R8));
+           IMov(Reg(R8), HexConst(bool_tag));
+           ICmp(Reg(RAX), Reg(R8));
+           IJz(Label(true_lbl));
+           (* case not bool *)
+           ILabel(false_lbl);
+           IMov(Reg(RAX), const_false);
+           IJmp(Label(done_lbl));
+           (* case is a bool *)
+           ILabel(true_lbl);
+           IMov(Reg(RAX), const_true);
+           (* done *)
+           ILabel(done_lbl);
+          ]
+        | IsNum ->
+          let true_lbl = sprintf "is_num_true_%d" tag in
+          let false_lbl = sprintf "is_num_false_%d" tag in
+          let done_lbl = sprintf "is_num_done_%d" tag in
+          [
+           IMov(Reg(RAX), body_imm);
+           (* This "test" trick depends on num_tag being 0. R8 used because Test doesn't support imm64 *)
+           IMov(Reg(R8), HexConst(num_tag_mask));
+           ITest(Reg(RAX), Reg(R8));
+           IJz(Label(true_lbl));
+           (* case not num *)
+           ILabel(false_lbl);
+           IMov(Reg(RAX), const_false);
+           IJmp(Label(done_lbl));
+           (* case is a num *)
+           ILabel(true_lbl);
+           IMov(Reg(RAX), const_true);
+           (* done *)
+           ILabel(done_lbl);
+          ]
+        | Not ->
+           [IMov(Reg(RAX), body_imm)]
+           @ (check_rax_for_bool "err_LOGIC_NOT_BOOL")
+           (* need to use temp register R8 because Xor cannot accept imm64 *)
+           @ [IMov(Reg(R8), bool_mask)]
+           @ [IXor(Reg(RAX), Reg(R8))]
+        | PrintStack ->
+            raise (NotYetImplemented "PrintStack not yet implemented")
+        | IsTuple ->
+          let true_lbl = sprintf "is_tup_true_%d" tag in
+          let false_lbl = sprintf "is_tup_false_%d" tag in
+          let done_lbl = sprintf "is_tup_done_%d" tag in
+          [
+           IMov(Reg(RAX), body_imm);
+           (* Don't need to save RAX on the stack because we overwrite the
+            * value with true/false later. R8 used because And, Cmp don't support imm64 *)
+           IMov(Reg(R8), HexConst(tuple_tag_mask));
+           IAnd(Reg(RAX), Reg(R8));
+           IMov(Reg(R8), HexConst(tuple_tag));
+           ICmp(Reg(RAX), Reg(R8));
+           IJz(Label(true_lbl));
+           (* case not tup *)
+           ILabel(false_lbl);
+           IMov(Reg(RAX), const_false);
+           IJmp(Label(done_lbl));
+           (* case is a tup *)
+           ILabel(true_lbl);
+           IMov(Reg(RAX), const_true);
+           (* done *)
+           ILabel(done_lbl);
+          ]
+     end
+  | CPrim2(op, lhs, rhs, tag) ->
+     let lhs_reg = compile_imm lhs env in
+     let rhs_reg = compile_imm rhs env in
+     begin match op with
+      | Plus ->
+         (* check rhs for numerical val *)
+         [IMov(Reg(RAX), rhs_reg)]
+         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         (* check lhs for numerical val *)
+         @ [IMov(Reg(RAX), lhs_reg)]
+         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         (* need to use a temp register because ADD does not properly handle imm64 (for overflow) *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [IAdd(Reg(RAX), Reg(R8))]
+         @ check_for_overflow
+      | Minus ->
+         (* check rhs for numerical val *)
+         [IMov(Reg(RAX), rhs_reg)]
+         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         (* check lhs for numerical val *)
+         @ [IMov(Reg(RAX), lhs_reg)]
+         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         (* need to use a temp register because SUB does not properly handle imm64 (for overflow) *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [ISub(Reg(RAX), Reg(R8))]
+         @ check_for_overflow
+      | Times ->
+         (* check rhs for numerical val *)
+         [IMov(Reg(RAX), rhs_reg)]
+         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         (* check lhs for numerical val *)
+         @ [IMov(Reg(RAX), lhs_reg)]
+         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         @ [ISar(Reg(RAX), Const(1L))]
+         (* need to use a temp register because IMUL does not properly handle imm64 (for overflow) *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [IMul(Reg(RAX), Reg(R8))]
+         @ check_for_overflow
+      | And -> raise (InternalCompilerError "Impossible: 'and' should be rewritten")
+      | Or -> raise (InternalCompilerError "Impossible: 'or' should be rewritten")
+      | Greater ->
+         let lbl_false = sprintf "greater_false_%d" tag in
+         let lbl_done = sprintf "greater_done_%d" tag in
+
+         (* check rhs for numerical val *)
+         [IMov(Reg(RAX), rhs_reg)]
+         @ (check_rax_for_num "err_COMP_NOT_NUM")
+         (* check lhs for numerical val *)
+         @ [IMov(Reg(RAX), lhs_reg)]
+         @ (check_rax_for_num "err_COMP_NOT_NUM")
+
+         (* need to use temp register R8 because Test cannot accept imm64 *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [ICmp(Reg(RAX), Reg(R8))]
+         @ [IMov(Reg(RAX), const_true)]
+         @ [IJg(Label(lbl_done))]
+
+         @ [ILabel(lbl_false)]
+         @ [IMov(Reg(RAX), const_false)]
+
+         @ [ILabel(lbl_done)]
+      | GreaterEq ->
+         let lbl_false = sprintf "greater_eq_false_%d" tag in
+         let lbl_done = sprintf "greater_eq_done_%d" tag in
+
+         (* check rhs for numerical val *)
+         [IMov(Reg(RAX), rhs_reg)]
+         @ (check_rax_for_num "err_COMP_NOT_NUM")
+         (* check lhs for numerical val *)
+         @ [IMov(Reg(RAX), lhs_reg)]
+         @ (check_rax_for_num "err_COMP_NOT_NUM")
+
+         (* need to use temp register R8 because Test cannot accept imm64 *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [ICmp(Reg(RAX), Reg(R8))]
+         @ [IMov(Reg(RAX), const_true)]
+         @ [IJge(Label(lbl_done))]
+
+         @ [ILabel(lbl_false)]
+         @ [IMov(Reg(RAX), const_false)]
+
+         @ [ILabel(lbl_done)]
+      | Less ->
+         let lbl_false = sprintf "less_false_%d" tag in
+         let lbl_done = sprintf "less_done_%d" tag in
+
+         (* check rhs for numerical val *)
+         [IMov(Reg(RAX), rhs_reg)]
+         @ (check_rax_for_num "err_COMP_NOT_NUM")
+         (* check lhs for numerical val *)
+         @ [IMov(Reg(RAX), lhs_reg)]
+         @ (check_rax_for_num "err_COMP_NOT_NUM")
+
+         (* need to use temp register R8 because Test cannot accept imm64 *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [ICmp(Reg(RAX), Reg(R8))]
+         @ [IMov(Reg(RAX), const_true)]
+         @ [IJl(Label(lbl_done))]
+
+         @ [ILabel(lbl_false)]
+         @ [IMov(Reg(RAX), const_false)]
+
+         @ [ILabel(lbl_done)]
+      | LessEq ->
+         let lbl_false = sprintf "less_eq_false_%d" tag in
+         let lbl_done = sprintf "less_eq_done_%d" tag in
+
+         (* check rhs for numerical val *)
+         [IMov(Reg(RAX), rhs_reg)]
+         @ (check_rax_for_num "err_COMP_NOT_NUM")
+         (* check lhs for numerical val *)
+         @ [IMov(Reg(RAX), lhs_reg)]
+         @ (check_rax_for_num "err_COMP_NOT_NUM")
+
+         (* need to use temp register R8 because Test cannot accept imm64 *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [ICmp(Reg(RAX), Reg(R8))]
+         @ [IMov(Reg(RAX), const_true)]
+         @ [IJle(Label(lbl_done))]
+
+         @ [ILabel(lbl_false)]
+         @ [IMov(Reg(RAX), const_false)]
+
+         @ [ILabel(lbl_done)]
+      | Eq ->
+         let lbl_false = sprintf "eq_false_%d" tag in
+         let lbl_done = sprintf "eq_done_%d" tag in
+
+         [IMov(Reg(RAX), lhs_reg)]
+
+         (* need to use temp register R8 because Test cannot accept imm64 *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [ICmp(Reg(RAX), Reg(R8))]
+         @ [IMov(Reg(RAX), const_true)]
+         @ [IJe(Label(lbl_done))]
+
+         @ [ILabel(lbl_false)]
+         @ [IMov(Reg(RAX), const_false)]
+
+         @ [ILabel(lbl_done)]
+     end
+  | CApp(fname, args, ct, _) -> raise (InternalCompilerError "can't compile func apps yet")
+    (*let f_num_args = (List.length args) in
+    let is_even_f_num_args = f_num_args mod 2 == 0 in
+    let padding = (if is_even_f_num_args then [] else [IMov(Reg(R8), HexConst(0xF0F0F0F0L)); IPush(Reg(R8))]) in
+    (* Push the args onto stack in reverse order *)
+    let args_rev = List.rev args in
+    let f_num_args_passed = f_num_args + (if is_even_f_num_args then 0 else 1) in
+    let is_even_num_args = num_args mod 2 == 0 in
+    let num_args_passed = num_args + (if is_even_num_args then 0 else 1) in
+    (* Technically we allow tailcall optimization with 1 more arg if this function has odd num of args *)
+    begin match ct with
+    | Native ->
+        if f_num_args > 6 then
+          raise (InternalCompilerError "Our compiler does not support native calls with more than 6 arg")
+        else
+          let move_args_to_input_registers =
+            List.mapi
+             (fun idx arg ->
+               let reg = List.nth first_six_args_registers idx in
+               let compiled_imm = (compile_imm arg env) in
+                 IMov(Reg(reg), compiled_imm))
+             args
+          in
+          move_args_to_input_registers
+          @ [ICall(fname)]
+    | Snake ->
+        if is_tail && (f_num_args <= num_args_passed) then
+            let (compiled_args, _) = List.fold_left
+                           (fun accum_instrs_idx arg ->
+                              let compiled_imm = (compile_imm arg env) in
+                              let (accum_instrs, i) = accum_instrs_idx in
+                              (* Use temp register because can't push imm64 directly *)
+                              (accum_instrs
+                                @ [IMov(Reg(R8), compiled_imm);
+                                   IMov(RegOffset((i + 2) * word_size, RBP), Reg(R8))],
+                               i + 1))
+                           ([], 0)
+                           args
+                           in
+            let body_label = sprintf "%s_body" fname in
+            compiled_args @ [IJmp(body_label)]
+        else
+            let compiled_args = List.fold_left
+                           (fun accum_instrs arg ->
+                              let compiled_imm = (compile_imm arg env) in
+                              (* Use temp register because can't push imm64 directly *)
+                              accum_instrs @ [IMov(Reg(R8), compiled_imm);
+                                              IPush(Sized(QWORD_PTR, Reg(R8)))])
+                           []
+                           args_rev
+                           in
+            let padded_comp_args = padding @ compiled_args in
+            padded_comp_args
+            @
+            [
+            ICall(fname);
+            (* Don't use temp register here because we assume the RHS will never be very big *)
+            IAdd(Reg(RSP), Const(Int64.of_int (word_size * f_num_args_passed)));
+            ]
+    | _ -> raise (InternalCompilerError "Invalid function application call type")
+    end*)
+  | CImmExpr(expr) -> [IMov(Reg(RAX), (compile_imm expr env))]
+  | CTuple(elems, _) -> 
+      let tup_size = List.length elems in
+      let need_padding = tup_size mod 2 == 1 in
+      let padding_val = HexConst(0xF0F0F0F0L) in
+      let padding =
+        if need_padding then []
+        else
+          let offs = tup_size + 1 in
+          [IMov(Reg(R8), padding_val); IMov(RegOffset(offs*word_size, R15), Reg(R8))] in
+      let next_heap_loc = tup_size + 1 + ((1+tup_size) mod 2) in
+
+      (* store the tuple size on the heap *)
+      [IMov(Reg(R8), Const(Int64.of_int tup_size)); IMov(RegOffset(0, R15), Reg(R8))]
+      (* store each tuple element on the heap *)
+      @ List.flatten
+          (List.mapi
+            (fun i e ->
+              let arg = compile_imm e env in
+              let offs = i + 1 in
+              [IMov(Reg(R8), arg); IMov(RegOffset(offs*word_size, R15), Reg(R8))])
+            elems)
+      @ padding
+      (* return the pointer to the tuple, make it a snakeval *)
+      @ [IMov(Reg(RAX), Reg(R15)); IAdd(Reg(RAX), Const(1L))]
+      (* increment the heap ptr *)
+      @ [IMov(Reg(R8), Const(Int64.of_int (next_heap_loc * word_size))); IAdd(Reg(R15), Reg(R8))]
+  | CGetItem(tup, i, _) ->
+      let tup_address = compile_imm tup env in
+      let idx = compile_imm i env in
+
+      (* first, do runtime error checking *)
+      [IMov(Reg(RAX), tup_address)] (* move tuple address (snakeval) into RAX *)
+      @ (check_rax_for_tup "err_GET_NOT_TUPLE")
+      @ (check_rax_for_nil "err_NIL_DEREF")
+      @ [IMov(Reg(RAX), idx)] (* move the idx (snakeval) into RAX *)
+      @ (check_rax_for_num "err_TUP_IDX_NOT_NUM")
+      @ [ISar(Reg(RAX), Const(1L))] (* convert from snakeval -> int *)
+      @ (check_rax_for_tup_smaller "err_GET_LOW_INDEX")
+      @ (check_rax_for_tup_bigger tup_address "err_GET_HIGH_INDEX")
+
+      (* passed checks, now do actual 'get' *)
+      @ [IMov(Reg(RAX), tup_address)] (* move tuple address back into RAX *)
+      @ [ISub(Reg(RAX), Const(1L))] (* convert from snake val address -> machine address *)
+      @ [IMov(Reg(R8), idx)] (* move the idx (snakeval) into R8 *)
+      @ [ISar(Reg(R8), Const(1L))] (* convert from snake val -> int *)
+      @ [IAdd(Reg(R8), Const(1L))] (* add 1 to the offset to bypass the tup size *)
+      @ [IMov(Reg(RAX), RegOffsetReg(RAX,R8,word_size,0))]
+  | CSetItem(tup, i, r, _) ->
+      let tup_address = compile_imm tup env in
+      let idx = compile_imm i env in
+      let rhs = compile_imm r env in
+
+      (* first, do runtime error checking *)
+      [IMov(Reg(RAX), tup_address)] (* move tuple address (snakeval) into RAX *)
+      @ (check_rax_for_tup "err_GET_NOT_TUPLE")
+      @ (check_rax_for_nil "err_NIL_DEREF")
+      @ [IMov(Reg(RAX), idx)] (* move the idx (snakeval) into RAX *)
+      @ (check_rax_for_num "err_TUP_IDX_NOT_NUM")
+      @ [ISar(Reg(RAX), Const(1L))] (* convert from snakeval -> int *)
+      @ (check_rax_for_tup_smaller "err_GET_LOW_INDEX")
+      @ (check_rax_for_tup_bigger tup_address "err_GET_HIGH_INDEX")
+
+      (* passed checks, now do actual 'set' *)
+      @ [IMov(Reg(RAX), tup_address)] (* move tuple address (snakeval) into RAX *)
+      @ [ISub(Reg(RAX), Const(1L))] (* convert from snake val -> address *)
+      @ [IMov(Reg(R8), idx)] (* move the idx (* snakeval *) into R8 *)
+      @ [ISar(Reg(R8), Const(1L))] (* convert from snake val -> int *)
+      @ [IAdd(Reg(R8), Const(1L))] (* add 1 to the offset to bypass the tup size *)
+      @ [IMov(Reg(R11), rhs)]
+      @ [IMov(RegOffsetReg(RAX,R8,word_size,0), Reg(R11))]
+      @ [IAdd(Reg(RAX), Const(1L))] (* convert the tuple address back to a snakeval *)
+and compile_imm e (env : arg envt) : arg =
+  match e with
+  | ImmNum(n, _) -> Const(Int64.shift_left n 1)
+  | ImmBool(true, _) -> const_true
+  | ImmBool(false, _) -> const_false
+  | ImmId(x, _) -> (find env x)
+  | ImmNil(_) -> const_nil
+
+(*
+let compile_decl (d : tag adecl) (env : arg envt): instruction list =
+  match d with
+  | ADFun(fname, args, body, _) ->
+    let num_body_vars = (deepest_stack body env) in
+    let prelude = compile_fun_prelude fname args env num_body_vars in
+    let compiled_body = compile_aexpr body env (List.length args) true in
+    let postlude = compile_fun_postlude num_body_vars in
+    let body_label = sprintf "%s_body" fname in
+    prelude @ [ILabel(body_label)] @ compiled_body @ postlude
+*)
+
+let compile_prog ((anfed : tag aprogram), (env : arg envt)) : string =
+  match anfed with
+  | AProgram(body, _) ->
+      let heap_start = [
+          ILineComment("heap start");
+          IInstrComment(IMov(Reg(heap_reg), Reg(List.nth first_six_args_registers 0)), "Load heap_reg with our argument, the heap pointer");
+          IInstrComment(IAdd(Reg(heap_reg), Const(15L)), "Align it to the nearest multiple of 16");
+          IInstrComment(IAnd(Reg(heap_reg), HexConst(0xFFFFFFFFFFFFFFF0L)), "by adding no more than 15 to it")
+        ] in
+      (*let compiled_decls =
+        List.fold_left
+          (fun accum_instrs decl ->
+            accum_instrs
+            (* basically a line of whitespace between function decls *)
+            @ [ILineComment("")]
+            @ (compile_decl decl env))
+          [] decls in*)
+      let num_prog_body_vars = (deepest_stack body env) in
+      let compiled_body = (compile_aexpr body env 0 false) in
+      let prelude =
+        "section .text
+extern error
+extern print
+extern cinput
+extern cequal
+global our_code_starts_here" in
+      let stack_setup = (compile_fun_prelude "our_code_starts_here" [] env num_prog_body_vars) in
+      let postlude =
+      [ILabel("program_done");]
+      @ compile_fun_postlude num_prog_body_vars
+      @ [ (* Error Labels *)
+          ILabel("err_COMP_NOT_NUM");
+          IMov(Reg(RDI), Const(err_COMP_NOT_NUM));
+          ICall(Label("error"));
+          IJmp(Label("program_done"));
+
+          ILabel("err_ARITH_NOT_NUM");
+          IMov(Reg(RDI), Const(err_ARITH_NOT_NUM));
+          ICall(Label("error"));
+          IJmp(Label("program_done"));
+
+          ILabel("err_LOGIC_NOT_BOOL");
+          IMov(Reg(RDI), Const(err_LOGIC_NOT_BOOL));
+          ICall(Label("error"));
+          IJmp(Label("program_done"));
+
+          ILabel("err_IF_NOT_BOOL");
+          IMov(Reg(RDI), Const(err_IF_NOT_BOOL));
+          ICall(Label("error"));
+          IJmp(Label("program_done"));
+
+          ILabel("err_OVERFLOW");
+          IMov(Reg(RDI), Const(err_OVERFLOW));
+          ICall(Label("error"));
+          IJmp(Label("program_done"));
+
+          ILabel("err_GET_NOT_TUPLE");
+          IMov(Reg(RDI), Const(err_GET_NOT_TUPLE));
+          ICall(Label("error"));
+          IJmp(Label("program_done"));
+
+          ILabel("err_GET_LOW_INDEX");
+          IMov(Reg(RDI), Const(err_GET_LOW_INDEX));
+          ICall(Label("error"));
+          IJmp(Label("program_done"));
+
+          ILabel("err_GET_HIGH_INDEX");
+          IMov(Reg(RDI), Const(err_GET_HIGH_INDEX));
+          ICall(Label("error"));
+          IJmp(Label("program_done"));
+
+          ILabel("err_NIL_DEREF");
+          IMov(Reg(RDI), Const(err_NIL_DEREF));
+          ICall(Label("error"));
+          IJmp(Label("program_done"));
+
+          ILabel("err_TUP_IDX_NOT_NUM");
+          IMov(Reg(RDI), Const(err_TUP_IDX_NOT_NUM));
+          ICall(Label("error"));
+          IJmp(Label("program_done"));
+        ] in
+      let decl_assembly_string = "" (*TODO figure out decls (to_asm compiled_decls)*) in
+      let body_assembly_string = (to_asm (stack_setup @ heap_start @ compiled_body @ postlude)) in
+      sprintf "%s%s%s\n" prelude decl_assembly_string body_assembly_string 
+
+
+
+
+(* end egg eater *)
+
+
+
 
 
 let run_if should_run f =
