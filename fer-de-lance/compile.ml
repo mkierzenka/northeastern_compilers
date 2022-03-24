@@ -267,6 +267,7 @@ let anf (p : tag program) : unit aprogram =
        let (body_ans, body_setup) = helpC (ELet(rest, body, pos)) in
        (body_ans, exp_setup @ [BSeq(exp_ans)] @ body_setup)
     | ELet((BName(bind, _, _), exp, _)::rest, body, pos) ->
+       (* TODO- Eggeater had more logic here *)
        let (exp_ans, exp_setup) = helpC exp in
        let (body_ans, body_setup) = helpC (ELet(rest, body, pos)) in
        (body_ans, exp_setup @ [BLet(bind, exp_ans)] @ body_setup)
