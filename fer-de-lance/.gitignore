@@ -1,0 +1,7 @@
+main
+test
+output/*
+*.sw*
+*~
+*.log
+_build/*
