@@ -583,23 +583,6 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
 ;;
 
 
-(*
-let desugar (p : sourcespan program) : sourcespan program =
-  let gensym =
-    let next = ref 0 in
-    (fun name ->
-      next := !next + 1;
-      sprintf "%s_%d" name (!next)) in
-  let rec helpE (e : sourcespan expr) (* other parameters may be needed here *) =
-    Error([NotYetImplemented "Implement desugaring for expressions"])
-  and helpD (d : sourcespan decl) (* other parameters may be needed here *) =
-    Error([NotYetImplemented "Implement desugaring for definitions"])
-  in
-  match p with
-  | Program(decls, body, _) ->
-      raise (NotYetImplemented "Implement desugaring for programs")
-;;
-*)
 let desugar_decl_arg_tups (p : sourcespan program) : sourcespan program =
   let gensym =
     let next = ref 0 in
@@ -840,9 +823,43 @@ let desugar_print_to_app (p : sourcespan program) : sourcespan program =
       Program(rw_decls, rw_body, loc)
 ;;
 
+(* Convert a function decl to a binding (lambda bound to name) *)
+let decl_to_binding (decl : sourcespan decl) : sourcespan binding =
+  match decl with
+  | DFun(fname, fargs, fbody, floc) ->
+    let bnd = BName(fname, false, floc) in
+    let expr = ELambda(fargs, fbody, floc) in
+    (bnd, expr, floc)
+;;
+
+(* Desugar single decl group into a let-rec expression, wrapping the body *)
+let desugar_decl_group (body : sourcespan expr) (decls : sourcespan decl list) : sourcespan expr =
+  match decls with
+  | [] -> body
+  | DFun(fname, fargs, fbody, floc)::rest ->
+    (* Still operate on whole list, we just split to check there is 1+ decl and get some loc info *)
+    let decls_as_bindings = List.map decl_to_binding decls in
+    ELetRec(decls_as_bindings, body, floc)
+;;
+
+(* Desugar declaration groups into explicit let-rec bindings *)
+let desugar_decl_groups_to_binds (p : sourcespan program) : sourcespan program =
+  match p with
+  | Program(decls, body, loc) ->
+      let new_body = List.fold_left desugar_decl_group body decls in
+      (* don't touch the body otherwise, just looking at decls *)
+      Program([], new_body, loc)
+;;
+
+(* TODO- invariant is that every desugar after desugar_decl_groups_to_binds should have 0 decls, 
+add InternalCompilerErrors for this and note at bottom of file *)
+
+(* TODO- every phase after desugar should have same invariant as comment above!! *)
 
 
 (* Desugaring:
+ * rewrite decl groups as bindings
+ * convert print() calls to func applications
  * and/or rewrite
  * let bindings with tuple on the LHS
  * tuples as func args
@@ -858,7 +875,8 @@ let desugar (p : sourcespan program) : sourcespan program =
    * the "desugar_decl_arg_tups" phase. *)
   (desugar_let_bind_tups
   (desugar_decl_arg_tups
-  (desugar_print_to_app p)))))
+  (desugar_print_to_app
+  (desugar_decl_groups_to_binds p))))))
 ;;
 
 let free_vars (e: 'a aexpr) : string list =
