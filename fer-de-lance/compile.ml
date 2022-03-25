@@ -851,10 +851,10 @@ let desugar_decl_groups_to_binds (p : sourcespan program) : sourcespan program =
       Program([], new_body, loc)
 ;;
 
-(* TODO- invariant is that every desugar after desugar_decl_groups_to_binds should have 0 decls, 
-add InternalCompilerErrors for this and note at bottom of file *)
+(* TODO- refactor so that desugar_decl_groups_to_binds is the first thing that happens in desugar, then rest of desugarings should throw error if they find any decls (simplifying them) *)
 
-(* TODO- every phase after desugar should have same invariant as comment above!! *)
+(* TODO- every phase after desugar should also have 0 decls,
+add InternalCompilerErrors for this and note at bottom of file *)
 
 
 (* Desugaring:
@@ -867,7 +867,8 @@ add InternalCompilerErrors for this and note at bottom of file *)
  * sequence -> let bindings with "_"
 *)
 let desugar (p : sourcespan program) : sourcespan program =
-  desugar_sequences
+  desugar_decl_groups_to_binds
+  (desugar_sequences
   (desugar_and_or
   (desugar_args_as_let_binds
   (* "desugar_decl_arg_tups" comes before "desugar_let_bind_tups" to make sure we
@@ -875,8 +876,7 @@ let desugar (p : sourcespan program) : sourcespan program =
    * the "desugar_decl_arg_tups" phase. *)
   (desugar_let_bind_tups
   (desugar_decl_arg_tups
-  (desugar_print_to_app
-  (desugar_decl_groups_to_binds p))))))
+  (desugar_print_to_app p))))))
 ;;
 
 let free_vars (e: 'a aexpr) : string list =
