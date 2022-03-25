@@ -793,43 +793,6 @@ let desugar_sequences (p : sourcespan program) : sourcespan program =
       Program(rw_decls, rw_body, loc)
 ;;
 
-let desugar_print_to_app (p : sourcespan program) : sourcespan program =
-  let rec help_decl (d : sourcespan decl) : sourcespan decl =
-    match d with
-    | DFun(fname, args, body, loc) ->
-        DFun(fname, args, help_expr body, loc)
-  and help_expr (e : sourcespan expr) : sourcespan expr =
-    match e with
-    | EPrim1(Print, expr, loc) -> EApp(EId("print", loc), [help_expr expr], Native, loc)
-    | EPrim1(op, expr, loc) -> EPrim1(op, (help_expr expr), loc)
-    | ESeq(le, re, loc) -> ESeq(help_expr le, help_expr re, loc)
-    | ETuple(exprs, loc) -> ETuple(List.map help_expr exprs, loc)
-    | EGetItem(tup, idx, loc) -> EGetItem(help_expr tup, help_expr idx, loc)
-    | ESetItem(tup, idx, rhs, loc) -> ESetItem(help_expr tup, help_expr idx, help_expr rhs, loc)
-    | ELet(binds, body, loc) ->
-        let rw_binds = List.map
-          (fun (bind, rhs, loc) ->
-            (bind, help_expr rhs, loc))
-          binds in
-        ELet(rw_binds, help_expr body, loc)
-    | EPrim2(op, lhs, rhs, loc) -> EPrim2(op, help_expr lhs, help_expr rhs, loc)
-    | EIf(cond, thn, els, loc) ->
-        EIf((help_expr cond), (help_expr thn), (help_expr els), loc)
-    | EScIf(cond, thn, els, loc) ->
-        EScIf((help_expr cond), (help_expr thn), (help_expr els), loc)
-    | EApp(fname, args, ct, loc) ->
-        let rw_args = List.map help_expr args in
-        EApp(fname, rw_args, ct, loc)
-    | _ -> e
-  in
-  match p with
-  | Program(decls, body, loc) ->
-      let innerHelpD = fun decls -> List.map help_decl decls in
-      let rw_decls = List.map innerHelpD decls in
-      let rw_body = help_expr body in
-      Program(rw_decls, rw_body, loc)
-;;
-
 (* Convert a function decl to a binding (lambda bound to name) *)
 let decl_to_binding (decl : sourcespan decl) : sourcespan binding =
   match decl with
@@ -882,8 +845,7 @@ let desugar (p : sourcespan program) : sourcespan program =
    * don't unnecessarily duplicate the "tup" variable we use as a func arg during
    * the "desugar_decl_arg_tups" phase. *)
   (desugar_let_bind_tups
-  (desugar_decl_arg_tups
-  (desugar_print_to_app p))))))
+  (desugar_decl_arg_tups p)))))
 ;;
 
 let free_vars (e: 'a aexpr) : string list =
@@ -1188,7 +1150,7 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
            @ (check_rax_for_num "err_ARITH_NOT_NUM")
            @ [ISub(Reg(RAX), Const(2L))]
            @ check_for_overflow
-        | Print -> raise (InternalCompilerError "Impossible: 'print' should be rewritten to a function application")
+        | Print -> [IMov(Reg(RDI), body_imm); ICall(Label("print"));]
         | IsBool ->
           let true_lbl = sprintf "is_bool_true_%d" tag in
           let false_lbl = sprintf "is_bool_false_%d" tag in
@@ -1239,6 +1201,7 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
            @ [IMov(Reg(R8), bool_mask)]
            @ [IXor(Reg(RAX), Reg(R8))]
         | PrintStack ->
+            (* TODO Lerner provided this *)
             raise (NotYetImplemented "PrintStack not yet implemented")
         | IsTuple ->
           let true_lbl = sprintf "is_tup_true_%d" tag in
@@ -1660,6 +1623,7 @@ let run_if should_run f =
   if should_run then f else no_op_phase
 ;;
 
+(*TODO- add comments to stages here from egg-eater *)
 (* Add at least one desugaring phase somewhere in here *)
 let compile_to_string (prog : sourcespan program pipeline) : string pipeline =
   prog
