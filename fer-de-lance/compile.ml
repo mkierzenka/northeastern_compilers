@@ -122,13 +122,8 @@ let rec find_dup (l : 'a list) : 'a option =
 let rename_and_tag (p : tag program) : tag program =
   let rec rename env p =
     match p with
-    | Program(decls, body, tag) ->
-       Program(List.map (fun group -> List.map (helpD env) group) decls, helpE env body, tag)
-  and helpD env decl =
-    match decl with
-    | DFun(name, args, body, tag) ->
-       let (newArgs, env') = helpBS env args in
-       DFun(name, newArgs, helpE env' body, tag)
+    | Program([], body, tag) -> Program([], helpE [] body, tag)
+    | _ -> raise (InternalCompilerError "(R&T) Top-level declarations should have been desugared away")
   and helpB env b =
     match b with
     | BBlank tag -> (b, env)
