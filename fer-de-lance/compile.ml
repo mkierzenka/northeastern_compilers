@@ -289,7 +289,14 @@ let anf (p : tag program) : unit aprogram =
        raise (NotYetImplemented("Finish this case"))
          
     | ELambda(binds, body, _) ->
-       raise (NotYetImplemented("Finish this case"))
+       let args = List.map
+                    (fun a ->
+                      match a with
+                      | BBlank(tag) -> sprintf "blank$%d" tag
+                      | BName(name, _, _) -> name
+                      | BTuple(_, _) -> raise (InternalCompilerError "desugaring failed: tuples cannot be ANFed in lambda args"))
+                    binds
+       in (CLambda(args, helpA body, ()), [])
     | ELetRec(binds, body, _) ->
        raise (NotYetImplemented("Finish this case"))
 
