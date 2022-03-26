@@ -541,7 +541,8 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
   | Program(decls, body, fake_loc) ->
       let init_env = [("cinput",Id(fake_loc)); ("cequal",Id(fake_loc))] in
       (* gather all functions into the env *)
-(* TODO- add back env checks for decls
+      (* TODO- check for duplicates within each group (but not between groups!) *)
+      (* TODO- add back env checks for decls
       let (env, init_errs) = setup_env decls init_env in
       (* check decls *)
       let decl_errs =
@@ -1002,19 +1003,27 @@ let compile_fun_postlude (num_local_vars : int) : instruction list =
 
 
 
-
-
 let rec compile_aexpr (e : tag aexpr) (env : arg envt) (num_args : int) (is_tail : bool) : instruction list =
   match e with
   | ALet(id, bind, body, _) ->
     let compiled_bind = compile_cexpr bind env num_args false in
     let dest = (find env id) in
     let compiled_body = compile_aexpr body env num_args is_tail in
-    [ILineComment(sprintf "Let: %s" id)]
+    [ILineComment(sprintf "Let_%s" id)]
     @ compiled_bind
     @ [IMov(dest, Reg(RAX))]
     @ compiled_body
   | ACExpr(expr) -> (compile_cexpr expr env num_args is_tail)
+  | ASeq(left, right, tag) ->
+    let seq_left_txt = sprintf "seq_left_%d" tag in
+    let seq_right_txt = sprintf "seq_right_%d" tag in
+    let compiled_left = (compile_cexpr left env num_args is_tail) in
+    let compiled_right = (compile_aexpr right env num_args is_tail) in
+    [ILineComment(seq_left_txt)]
+    @ compiled_left
+    @ [ILineComment(seq_right_txt)]
+    @ compiled_right
+  | ALetRec(bindings, body, _) -> raise (NotYetImplemented "LetRec codegen not yet implemented")
 and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : bool) =
   match e with
   | CIf(cond, thn, els, tag) ->
