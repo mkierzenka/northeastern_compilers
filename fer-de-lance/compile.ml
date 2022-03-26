@@ -824,6 +824,7 @@ let free_vars (e: 'a aexpr) : string list =
 ;;
 
 
+(* ASSUMES that the program has been alpha-renamed and all names are unique *)
 let naive_stack_allocation (prog: tag aprogram) : tag aprogram * arg envt =
   (*
    * TODO: delete this.
@@ -905,49 +906,6 @@ let compile_prog ((anfed : tag aprogram), (env: arg envt)) : string =
    but everything else is up to you. *)
 
 (* ---- egg eater *)
-
-(* ASSUMES that the program has been alpha-renamed and all names are unique *)
-let naive_stack_allocation (prog: tag aprogram) : tag aprogram * arg envt =
-  (*let rec help_decl (decl : tag adecl) (env : arg envt) : arg envt =
-    match decl with
-    | ADFun(fname, args, body, _) ->
-        let args_with_idx = List.mapi (fun i arg -> (arg, RegOffset((i + 2)*word_size, RBP))) args in
-        let new_env = List.fold_left (fun accum_env cell -> cell :: accum_env) env args_with_idx in
-        let (decl_env, _) = help_aexpr body 1 new_env in
-        decl_env*)
-  let rec help_aexpr (body : tag aexpr) (si : int) (env : arg envt) : arg envt * int =
-    match body with
-    | ALet(sym, bind, body, _) ->
-        let newenv = (sym, RegOffset(~-si*word_size, RBP)) :: env in
-        let (bindenv, newsi) = help_cexpr bind (si+1) newenv in
-        help_aexpr body newsi bindenv
-    | ACExpr(cexpr) -> help_cexpr cexpr si env
-  and help_cexpr (expr : tag cexpr) (si : int) (env : arg envt) : arg envt * int =
-    match expr with
-    | CIf(cond, lhs, rhs, _) ->
-        let (lhs_env, lhs_si) = help_aexpr lhs si env in
-        help_aexpr rhs lhs_si lhs_env
-    | CScIf(cond, lhs, rhs, _) ->
-        let (lhs_env, lhs_si) = help_aexpr lhs si env in
-        help_aexpr rhs lhs_si lhs_env
-    | CPrim1 _ -> (env, si)
-    | CPrim2 _ -> (env, si)
-    | CApp _ -> (env, si)
-    | CImmExpr _ -> (env, si)
-    | CTuple _ -> (env, si)
-    | CGetItem _ -> (env, si)
-    | CSetItem _ -> (env, si)
-  in
-  match prog with
-  | AProgram(body, _) ->
-      (* TODO- add back compiling decls into body
-      let decl_env =
-        List.fold_left (fun accum_env decl -> help_decl decl accum_env) [] decls in
-        *)
-        let (prog_env, _) = help_aexpr body 1 [] in
-        (prog, prog_env)
-;;
-
 
 (* Compiled Type Checking *)
 let check_rax_for_num (err_lbl : string) : instruction list =
