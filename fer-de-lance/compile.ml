@@ -1306,7 +1306,7 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
 
          @ [ILabel(lbl_done)]
      end
-  | CApp(func, args, ct, _) ->
+  | CApp(func, args, ct, tag) ->
     let f_num_args = (List.length args) in
     let is_even_f_num_args = f_num_args mod 2 == 0 in
     let padding = (if is_even_f_num_args then [] else [IMov(Reg(R8), HexConst(0xF0F0F0F0L)); IPush(Reg(R8))]) in
@@ -1316,8 +1316,9 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
     let is_even_num_args = num_args mod 2 == 0 in
     let num_args_passed = num_args + (if is_even_num_args then 0 else 1) in
     (* Technically we allow tailcall optimization with 1 more arg if this function has odd num of args *)
+    let compiled_func = compile_imm func env in
     begin match ct with
-    | Native ->
+    (*| Native ->
         if f_num_args > 6 then
           raise (InternalCompilerError "Our compiler does not support native calls with more than 6 arg")
         else
@@ -1333,10 +1334,10 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
           match func with
           | ImmId(fname, _) -> move_args_to_input_registers @ [ICall(Label(fname))]
           | _ -> raise (InternalCompilerError "TODO add errors here")
-          end
-    | _ -> raise (InternalCompilerError "TODO add back support for SNAKE func calls")
-(*    | Snake ->
-        if is_tail && (f_num_args <= num_args_passed) then
+          end*)
+    | Snake ->
+        (*TODO- have this actually check if is_tail and fix that case *)
+        if false && (f_num_args <= num_args_passed) then
             let (compiled_args, _) = List.fold_left
                            (fun accum_instrs_idx arg ->
                               let compiled_imm = (compile_imm arg env) in
@@ -1349,7 +1350,7 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
                            ([], 0)
                            args
                            in
-            let body_label = sprintf "%s_body" fname in
+            let body_label = sprintf "closure_body$%d" tag in
             compiled_args @ [IJmp(Label(body_label))]
         else
             let compiled_args = List.fold_left
@@ -1361,15 +1362,36 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
                            []
                            args_rev
                            in
+            let closure_check =
+            [ILineComment("check_rax_for_closure (err_CALL_NOT_CLOSURE)");
+             (*IMov(Reg(R8), Reg(RAX));*)
+             IMov(Reg(R9), HexConst(closure_tag_mask));
+             IAnd(Reg(RAX), Reg(R9));
+             IMov(Reg(R9), HexConst(closure_tag));
+             ICmp(Reg(RAX), Reg(R9));
+             IJne(Label("err_CALL_NOT_CLOSURE"));] in
+            let check_closure_for_arity =
+            [ILineComment("check_closure_for_arity (err_CALL_ARITY_ERR)");
+             (* RAX is untagged ptr to closure on heap *)
+             IMov(Reg(RAX), compiled_func);
+             ISub(Reg(RAX), HexConst(closure_tag)); (* now RAX is heap addr to closure *)
+             IMov(Reg(RAX), RegOffset(0,RAX)); (* get the arity (machine int) *)
+             ICmp(Reg(RAX), Const(Int64.of_int f_num_args)); (* no temp reg, assume won't have that many args *)
+             IJne(Label("err_CALL_ARITY_ERR"));] in
             let padded_comp_args = padding @ compiled_args in
-            padded_comp_args
-            @
-            [
-            ICall(fname);
-            (* Don't use temp register here because we assume the RHS will never be very big *)
-            IAdd(Reg(RSP), Const(Int64.of_int (word_size * f_num_args_passed)));
-            ]
-    | _ -> raise (InternalCompilerError "Invalid function application call type")*)
+            [IMov(Reg(RAX), compiled_func);]
+            @ closure_check
+            @ check_closure_for_arity
+            @ padded_comp_args
+            @ [
+              IMov(Reg(RAX), compiled_func);
+              ISub(Reg(RAX), HexConst(closure_tag)); (* now RAX is heap addr to closure *)
+              IMov(Reg(RAX), RegOffset(1*word_size,RAX)); (* get the code ptr (machine addr) *)
+              ICall(Reg(RAX));
+              (* Don't use temp register here because we assume the RHS will never be very big *)
+              IAdd(Reg(RSP), Const(Int64.of_int (word_size * f_num_args_passed)));
+              ]
+    | _ -> raise (InternalCompilerError "Invalid function application call type")
     end
   | CImmExpr(expr) -> [IMov(Reg(RAX), (compile_imm expr env))]
   | CTuple(elems, _) -> 
