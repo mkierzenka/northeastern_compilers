@@ -291,9 +291,21 @@ let anf (p : tag program) : unit aprogram =
                       | BTuple(_, _) -> raise (InternalCompilerError "desugaring failed: tuples cannot be ANFed in lambda args"))
                     binds
        in (CLambda(args, helpA body, ()), [])
-    | ELetRec(binds, body, _) ->
-       raise (NotYetImplemented("Finish this case4"))
-
+    | ELetRec(bindings, body, pos) ->
+      let (body_ans, body_setup) = helpC body in
+      let (new_bindings, bindings_setups) =
+        List.fold_left
+          (fun (acc_bindings, acc_setups) (bind, exp, _) ->
+               begin
+               match bind with
+               | BName(name, _, _) ->
+                 let (exp_ans, exp_setup) = helpC exp in
+                   ((name, exp_ans)::acc_bindings, exp_setup @ acc_setups)
+               | _ -> raise (InternalCompilerError "ANF-ing failed, letrec must only have BName bindings")
+               end)
+           ([], [])
+           bindings
+      in (body_ans, bindings_setups @ [BLetRec(new_bindings)] @ body_setup)
     | _ -> let (imm, setup) = helpI e in (CImmExpr imm, setup)
 
   and helpI (e : tag expr) : (unit immexpr * unit anf_bind list) =
@@ -827,16 +839,6 @@ let free_vars (e: 'a aexpr) : string list =
 
 (* ASSUMES that the program has been alpha-renamed and all names are unique *)
 let naive_stack_allocation (prog: tag aprogram) : tag aprogram * arg envt =
-  (*
-   * TODO: delete this.
-  let rec help_decl (decl : tag adecl) (env : arg envt) : arg envt =
-    match decl with
-    | ADFun(fname, args, body, _) ->
-        let args_with_idx = List.mapi (fun i arg -> (arg, RegOffset((i + 2)*word_size, RBP))) args in
-        let new_env = List.fold_left (fun accum_env cell -> cell :: accum_env) env args_with_idx in
-        let (decl_env, _) = help_aexpr body 1 new_env in
-        decl_env
-  *)
   (* TODO add in code for handing our new C*/A* items, such as ALetRec *)
   let rec help_aexpr (body : tag aexpr) (si : int) (env : arg envt) : arg envt * int =
     match body with
@@ -845,7 +847,14 @@ let naive_stack_allocation (prog: tag aprogram) : tag aprogram * arg envt =
         let newenv = (sym, RegOffset(~-si*word_size, RBP)) :: env in
         let (bindenv, newsi) = help_cexpr bind (si+1) newenv in
         help_aexpr body newsi bindenv
-    | ALetRec(binds, body, _) -> raise (NotYetImplemented "ALetRec stack allocation not yet implemented")
+    | ALetRec(bindings, body, _) ->
+      let (bindings_env, bindings_si) =
+        List.fold_left (fun (accum_env, accum_si) (_, exp) ->
+          (* TODO not a fan of using 'env' here, should somehow include all rest of bindings? *)
+          help_cexpr exp accum_si env)
+        ([], si)
+        bindings in
+      help_aexpr body bindings_si bindings_env
     | ACExpr(cexpr) -> help_cexpr cexpr si env
   and help_cexpr (expr : tag cexpr) (si : int) (env : arg envt) : arg envt * int =
     match expr with
@@ -865,7 +874,7 @@ let naive_stack_allocation (prog: tag aprogram) : tag aprogram * arg envt =
     | CLambda(args, body, _) ->
         let args_with_idx = List.mapi (fun i arg -> (arg, RegOffset((i + 2)*word_size, RBP))) args in
         let new_env = List.fold_left (fun accum_env cell -> cell :: accum_env) env args_with_idx in
-        help_aexpr body 1 new_env
+        help_aexpr body si new_env
   in
   match prog with
   | AProgram(body, _) ->
