@@ -862,7 +862,10 @@ let naive_stack_allocation (prog: tag aprogram) : tag aprogram * arg envt =
     | CTuple _ -> (env, si)
     | CGetItem _ -> (env, si)
     | CSetItem _ -> (env, si)
-    | CLambda(args, body, _) -> raise (NotYetImplemented "CLambda stack allocation not yet implemented")
+    | CLambda(args, body, _) ->
+        let args_with_idx = List.mapi (fun i arg -> (arg, RegOffset((i + 2)*word_size, RBP))) args in
+        let new_env = List.fold_left (fun accum_env cell -> cell :: accum_env) env args_with_idx in
+        help_aexpr body 1 new_env
   in
   match prog with
   | AProgram(body, _) ->
@@ -1306,6 +1309,25 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
 
          @ [ILabel(lbl_done)]
      end
+  | CLambda(params, body, tag) ->
+    let arity = List.length params in
+    let closure_lbl = sprintf "closure$%d" tag in
+    let closure_done_lbl = sprintf "closure_done$%d" tag in
+    let num_body_vars = (deepest_stack body env) in
+    let prelude = compile_fun_prelude closure_lbl params env num_body_vars in
+    let compiled_body = compile_aexpr body env (List.length params) true in
+    let postlude = compile_fun_postlude num_body_vars in
+    [IJmp(Label(closure_done_lbl))]
+    @ prelude
+    @ compiled_body
+    @ postlude
+    @ [
+      ILabel(closure_done_lbl);
+      IMov(Reg(RAX), Reg(heap_reg)); (* get next heap addr *)
+      IOr(Reg(RAX), HexConst(closure_tag));
+      IMov(Sized(QWORD_PTR, RegOffset(0, heap_reg)), Const(Int64.of_int arity));
+      IMov(Sized(QWORD_PTR, RegOffset(word_size, heap_reg)), Label(closure_lbl));
+      ]
   | CApp(func, args, ct, tag) ->
     let f_num_args = (List.length args) in
     let is_even_f_num_args = f_num_args mod 2 == 0 in
@@ -1556,8 +1578,53 @@ global our_code_starts_here" in
           ICall(Label("error"));
           IJmp(Label("program_done"));
 
+          ILabel("err_GET_NOT_NUM");
+          IMov(Reg(RDI), Const(err_GET_NOT_NUM));
+          ICall(Label("error"));
+          IJmp(Label("program_done"));
+
           ILabel("err_NIL_DEREF");
           IMov(Reg(RDI), Const(err_NIL_DEREF));
+          ICall(Label("error"));
+          IJmp(Label("program_done"));
+
+          ILabel("err_OUT_OF_MEMORY");
+          IMov(Reg(RDI), Const(err_OUT_OF_MEMORY));
+          ICall(Label("error"));
+          IJmp(Label("program_done"));
+
+          ILabel("err_SET_NOT_TUPLE");
+          IMov(Reg(RDI), Const(err_SET_NOT_TUPLE));
+          ICall(Label("error"));
+          IJmp(Label("program_done"));
+
+          ILabel("err_SET_LOW_INDEX");
+          IMov(Reg(RDI), Const(err_SET_LOW_INDEX));
+          ICall(Label("error"));
+          IJmp(Label("program_done"));
+
+          ILabel("err_SET_NOT_NUM");
+          IMov(Reg(RDI), Const(err_SET_NOT_NUM));
+          ICall(Label("error"));
+          IJmp(Label("program_done"));
+
+          ILabel("err_SET_HIGH_INDEX");
+          IMov(Reg(RDI), Const(err_SET_HIGH_INDEX));
+          ICall(Label("error"));
+          IJmp(Label("program_done"));
+
+          ILabel("err_CALL_NOT_CLOSURE");
+          IMov(Reg(RDI), Const(err_CALL_NOT_CLOSURE));
+          ICall(Label("error"));
+          IJmp(Label("program_done"));
+
+          ILabel("err_CALL_ARITY_ERR");
+          IMov(Reg(RDI), Const(err_CALL_ARITY_ERR));
+          ICall(Label("error"));
+          IJmp(Label("program_done"));
+
+          ILabel("err_BAD_INPUT");
+          IMov(Reg(RDI), Const(err_BAD_INPUT));
           ICall(Label("error"));
           IJmp(Label("program_done"));
 
