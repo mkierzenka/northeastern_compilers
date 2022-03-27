@@ -276,11 +276,11 @@ let anf (p : tag program) : unit aprogram =
        let (args_new, args_setup) = List.split (List.map helpI args) in
        (CApp(func_new, args_new, ct, ()), func_setup @ (List.concat args_setup))
     | ETuple(args, _) ->
-       raise (NotYetImplemented("Finish this case"))
+       raise (NotYetImplemented("Finish this case1"))
     | EGetItem(tup, idx, _) ->
-       raise (NotYetImplemented("Finish this case"))
+       raise (NotYetImplemented("Finish this case2"))
     | ESetItem(tup, idx, newval, _) ->
-       raise (NotYetImplemented("Finish this case"))
+       raise (NotYetImplemented("Finish this case3"))
          
     | ELambda(binds, body, _) ->
        let args = List.map
@@ -292,7 +292,7 @@ let anf (p : tag program) : unit aprogram =
                     binds
        in (CLambda(args, helpA body, ()), [])
     | ELetRec(binds, body, _) ->
-       raise (NotYetImplemented("Finish this case"))
+       raise (NotYetImplemented("Finish this case4"))
 
     | _ -> let (imm, setup) = helpI e in (CImmExpr imm, setup)
 
@@ -310,12 +310,12 @@ let anf (p : tag program) : unit aprogram =
 
 
     | ETuple(args, tag) ->
-       raise (NotYetImplemented("Finish this case"))
+       raise (NotYetImplemented("Finish this case5"))
        (* Hint: use BLet to bind the result *)
     | EGetItem(tup, idx, tag) ->
-       raise (NotYetImplemented("Finish this case"))
+       raise (NotYetImplemented("Finish this case6"))
     | ESetItem(tup, idx, newval, tag) ->
-       raise (NotYetImplemented("Finish this case"))
+       raise (NotYetImplemented("Finish this case7"))
 
     | EPrim1(op, arg, tag) ->
        let tmp = sprintf "unary_%d" tag in
@@ -342,7 +342,7 @@ let anf (p : tag program) : unit aprogram =
        let (body_ans, body_setup) = helpI (ELet(rest, body, pos)) in
        (body_ans, exp_setup @ body_setup)
     | ELambda(binds, body, tag) ->
-       raise (NotYetImplemented("Finish this case"))
+       raise (NotYetImplemented("Finish this case8"))
        (* Hint: use BLet to bind the answer *)
     | ELet((BName(bind, _, _), exp, _)::rest, body, pos) ->
        let (exp_ans, exp_setup) = helpC exp in
@@ -351,7 +351,7 @@ let anf (p : tag program) : unit aprogram =
     | ELet((BTuple(binds, _), exp, _)::rest, body, pos) ->
        raise (InternalCompilerError("Tuple bindings should have been desugared away"))
     | ELetRec(binds, body, tag) ->
-       raise (NotYetImplemented("Finish this case"))
+       raise (NotYetImplemented("Finish this case9"))
        (* Hint: use BLetRec for each of the binds, and BLet for the final answer *)
   and helpA e : unit aexpr = 
     let (ans, ans_setup) = helpC e in
