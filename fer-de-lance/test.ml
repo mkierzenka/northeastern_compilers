@@ -468,8 +468,9 @@ let tests_for_free_vars = [
   tfvs "tfvs_app_lambda" "let x=10 in (let f = (lambda(y): x + y) in f(10))" [];
   tfvs "tfvs_app_lambda2" "let x=10,y=11,z=12 in (let f = (lambda(a): x + y + z) in f(10))" [];
   tfvs "tfvs_letrec" "let rec f1 = (lambda(x): x * f2(x)), f2=(lambda(x): x + y) in f1(7)" ["y"];
-  tfvs "tfvs_letrec_flipped" "let rec f2=(lambda(x): x + y), f1 = (lambda(x): x * f2(x)) in f1(7)" ["y"];
-
+  tfvs "tfvs_letrec_flipped" "let rec f2=(lambda(x): x + y), f1 = (lambda(x): x * f2(a)) in f1(7)" ["y"; "a"];
+  (* Note, can't write tests here with decls because in the real compiler
+     those should have already been desugared into letrec *)
 ]
 
 let free_vars_suite = "free_vars_suite">:::tests_for_free_vars
