@@ -833,7 +833,48 @@ let desugar (p : sourcespan program) : sourcespan program =
 ;;
 
 let free_vars (e: 'a aexpr) : string list =
-  raise (NotYetImplemented "Implement free_vars for expressions")
+  let rec help_aexpr (expr : 'a aexpr) (seen : StringSet.t) : StringSet.t =
+    match expr with
+    | ASeq(lhs, rhs, _) -> StringSet.union (help_cexpr lhs seen) (help_aexpr rhs seen)
+    | ALet(bnd_name, bnd_exp, body, _) ->
+      StringSet.union (help_cexpr bnd_exp seen) (help_aexpr body (StringSet.add bnd_name seen))
+    | ALetRec(binds, body, _) ->
+      let names = List.map fst binds in
+      let names_set = StringSet.of_list names in
+      let seen_with_names = StringSet.union names_set seen in
+      (* TODO- should I remove this name from the names used in help_cexpr? *)
+      let new_free = List.fold_left (fun free_acc (name, expr) -> StringSet.union free_acc (help_cexpr expr seen_with_names)) StringSet.empty binds in
+      let body_free = help_aexpr body seen_with_names in
+      StringSet.union new_free body_free
+    | ACExpr(exp) -> help_cexpr exp seen
+  and help_cexpr (expr : 'a cexpr) (seen : StringSet.t) : StringSet.t =
+    match expr with
+    | CIf(cond, thn, els, _) ->
+      StringSet.union (StringSet.union (help_imm cond seen) (help_aexpr thn seen)) (help_aexpr els seen)
+    | CScIf(fst, snd, thd, _) ->
+      StringSet.union (StringSet.union (help_imm fst seen) (help_aexpr snd seen)) (help_aexpr thd seen)
+    | CPrim1(_, exp, _) -> help_imm exp seen
+    | CPrim2(_, lhs, rhs, _) -> StringSet.union (help_imm lhs seen) (help_imm rhs seen)
+    | CApp(func, args, _, _) ->
+      StringSet.union
+        (help_imm func seen)
+        (List.fold_left (fun free_acc arg -> StringSet.union free_acc (help_imm arg seen)) StringSet.empty args)
+    | CImmExpr(exp) -> help_imm exp seen
+    | CTuple(elems, _) -> List.fold_left (fun free_acc elem -> StringSet.union free_acc (help_imm elem seen)) StringSet.empty elems
+    | CGetItem(tup, idx, _) -> StringSet.union (help_imm tup seen) (help_imm idx seen)
+    | CSetItem(tup, idx, newval, _) -> StringSet.union (StringSet.union (help_imm tup seen) (help_imm tup seen)) (help_imm newval seen)
+    | CLambda(args, body, _) ->
+      let args_set = StringSet.of_list args in
+      let seen_with_args = StringSet.union args_set seen in
+      help_aexpr body seen_with_args
+  and help_imm (expr : 'a immexpr) (seen : StringSet.t) : StringSet.t =
+    match expr with
+    | ImmNum _ -> StringSet.empty
+    | ImmBool _ -> StringSet.empty
+    | ImmId(name, _) -> StringSet.of_list [name]
+    | ImmNil _ -> StringSet.empty
+  in
+  StringSet.elements (help_aexpr e StringSet.empty)
 ;;
 
 
