@@ -1376,19 +1376,32 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
     let closure_lbl = sprintf "closure$%d" tag in
     let closure_done_lbl = sprintf "closure_done$%d" tag in
     let num_body_vars = (deepest_stack body env) in
+    let free_vars_list = (free_vars body) in
+    let num_free_vars = List.length free_vars_list in
+    let free_vars_asm =
+      List.mapi (fun idx fv ->
+                 IMov(Sized(QWORD_PTR, RegOffset((3 + idx)*word_size, heap_reg)), (find env fv)))
+                free_vars_list in
     let prelude = compile_fun_prelude closure_lbl params env num_body_vars in
     let compiled_body = compile_aexpr body env (List.length params) true in
     let postlude = compile_fun_postlude num_body_vars in
+    let true_heap_size = 3 + num_free_vars in
+    let reserved_heap_size = true_heap_size + (true_heap_size mod 2) in
     [IJmp(Label(closure_done_lbl))]
     @ prelude
     @ compiled_body
     @ postlude
     @ [
       ILabel(closure_done_lbl);
-      IMov(Reg(RAX), Reg(heap_reg)); (* get next heap addr *)
-      IOr(Reg(RAX), HexConst(closure_tag));
-      IMov(Sized(QWORD_PTR, RegOffset(0, heap_reg)), Const(Int64.of_int arity));
-      IMov(Sized(QWORD_PTR, RegOffset(word_size, heap_reg)), Label(closure_lbl));
+      IMov(Sized(QWORD_PTR, RegOffset(0*word_size, heap_reg)), Const(Int64.of_int arity));
+      IMov(Sized(QWORD_PTR, RegOffset(1*word_size, heap_reg)), Label(closure_lbl));
+      IMov(Sized(QWORD_PTR, RegOffset(2*word_size, heap_reg)), Const(Int64.of_int num_free_vars));
+      ]
+    @ free_vars_asm
+    @ [
+      IMov(Reg(RAX), Reg(heap_reg));
+      IAdd(Reg(RAX), HexConst(closure_tag));
+      IAdd(Reg(heap_reg), Const(Int64.of_int reserved_heap_size));
       ]
   | CApp(func, args, ct, tag) ->
     let f_num_args = (List.length args) in
