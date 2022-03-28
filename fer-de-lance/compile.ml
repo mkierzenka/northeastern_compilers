@@ -871,7 +871,7 @@ let free_vars (e: 'a aexpr) : string list =
     match expr with
     | ImmNum _ -> StringSet.empty
     | ImmBool _ -> StringSet.empty
-    | ImmId(name, _) -> StringSet.of_list [name]
+    | ImmId(name, _) -> if StringSet.mem name seen then StringSet.empty else StringSet.singleton name
     | ImmNil _ -> StringSet.empty
   in
   StringSet.elements (help_aexpr e StringSet.empty)
