@@ -272,16 +272,21 @@ let anf (p : tag program) : unit aprogram =
        let (e2_ans, e2_setup) = helpC e2 in
        (e2_ans, e1_setup @ [BSeq e1_ans] @ e2_setup)
     | EApp(func, args, ct, _) ->
-       let (func_new, func_setup) = helpI func in
-       let (args_new, args_setup) = List.split (List.map helpI args) in
-       (CApp(func_new, args_new, ct, ()), func_setup @ (List.concat args_setup))
+       let (func_ans, func_setup) = helpI func in
+       let (args_ans, args_setup) = List.split (List.map helpI args) in
+       (CApp(func_ans, args_ans, ct, ()), func_setup @ (List.concat args_setup))
     | ETuple(args, _) ->
-       raise (NotYetImplemented("Finish this case1"))
+       let (args_ans, args_setup) = List.split (List.map helpI args) in
+       (CTuple(args_ans, ()), List.concat args_setup)
     | EGetItem(tup, idx, _) ->
-       raise (NotYetImplemented("Finish this case2"))
+       let (tup_ans, tup_setup) = helpI tup in
+       let (idx_ans, idx_setup) = helpI idx in
+       (CGetItem(tup_ans, idx_ans, ()), tup_setup @ idx_setup)
     | ESetItem(tup, idx, newval, _) ->
-       raise (NotYetImplemented("Finish this case3"))
-         
+       let (tup_ans, tup_setup) = helpI tup in
+       let (idx_ans, idx_setup) = helpI idx in
+       let (newval_ans, newval_setup) = helpI newval in
+       (CSetItem(tup_ans, idx_ans, newval_ans, ()), tup_setup @ idx_setup @ newval_setup)
     | ELambda(binds, body, _) ->
        let args = List.map
                     (fun a ->
@@ -314,21 +319,25 @@ let anf (p : tag program) : unit aprogram =
     | EBool(b, _) -> (ImmBool(b, ()), [])
     | EId(name, _) -> (ImmId(name, ()), [])
     | ENil _ -> (ImmNil(), [])
-
     | ESeq(e1, e2, _) ->
        let (e1_imm, e1_setup) = helpI e1 in
        let (e2_imm, e2_setup) = helpI e2 in
        (e2_imm, e1_setup @ e2_setup)
-
-
     | ETuple(args, tag) ->
-       raise (NotYetImplemented("Finish this case5"))
-       (* Hint: use BLet to bind the result *)
+       let tmp = sprintf "tuple_%d" tag in
+       let (args_imm, args_setup) = List.split (List.map helpI args) in
+       (ImmId(tmp, ()), (List.concat args_setup) @ [BLet(tmp, CTuple(args_imm, ()))])
     | EGetItem(tup, idx, tag) ->
-       raise (NotYetImplemented("Finish this case6"))
+       let tmp = sprintf "getitem_%d" tag in
+       let (tup_imm, tup_setup) = helpI tup in
+       let (idx_imm, idx_setup) = helpI idx in
+       (ImmId(tmp, ()), tup_setup @ idx_setup @ [BLet(tmp, CGetItem(tup_imm, idx_imm, ()))])
     | ESetItem(tup, idx, newval, tag) ->
-       raise (NotYetImplemented("Finish this case7"))
-
+       let tmp = sprintf "setitem_%d" tag in
+       let (tup_imm, tup_setup) = helpI tup in
+       let (idx_imm, idx_setup) = helpI idx in
+       let (newval_imm, newval_setup) = helpI newval in
+       (ImmId(tmp, ()), tup_setup @ idx_setup @ newval_setup @ [BLet(tmp, CSetItem(tup_imm, idx_imm, newval_imm, ()))])
     | EPrim1(op, arg, tag) ->
        let tmp = sprintf "unary_%d" tag in
        let (arg_imm, arg_setup) = helpI arg in
@@ -346,13 +355,16 @@ let anf (p : tag program) : unit aprogram =
        let tmp = sprintf "scif_%d" tag in
        let (cond_imm, cond_setup) = helpI cond in
        (ImmId(tmp, ()), cond_setup @ [BLet(tmp, CScIf(cond_imm, helpA _then, helpA _else, ()))])
-    | EApp(func, args, _, tag) ->
-       raise (NotYetImplemented("Revise this case"))
+    | EApp(func, args, ct, tag) ->
+      let tmp = sprintf "app_%d" tag in
+      let (func_imm, func_setup) = helpI func in
+      let (args_imm, args_setup) = List.split (List.map helpI args) in
+      (ImmId(tmp, ()), func_setup @ (List.concat args_setup) @ [BLet(tmp, CApp(func_imm, args_imm, ct, ()))])
     | ELet([], body, _) -> helpI body
     | ELet((BBlank _, exp, _)::rest, body, pos) ->
-       let (exp_ans, exp_setup) = helpI exp in (* MUST BE helpI, to avoid any missing final steps *)
-       let (body_ans, body_setup) = helpI (ELet(rest, body, pos)) in
-       (body_ans, exp_setup @ body_setup)
+       let (exp_imm, exp_setup) = helpI exp in (* MUST BE helpI, to avoid any missing final steps *)
+       let (body_imm, body_setup) = helpI (ELet(rest, body, pos)) in
+       (body_imm, exp_setup @ body_setup)
     | ELambda(binds, body, tag) ->
        raise (NotYetImplemented("Finish this case8"))
        (* Hint: use BLet to bind the answer *)
