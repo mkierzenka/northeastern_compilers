@@ -1055,8 +1055,7 @@ let compile_fun_prelude (fun_name : string) (args : string list) (env : arg envt
     ILabel(fun_name);
     IPush(Reg(RBP));
     IMov(Reg(RBP), Reg(RSP));
-    (* Don't use temp register here because we assume the RHS will never be very big *)
-    ISub(Reg(RSP), Const(Int64.of_int (word_size * num_local_vars)))  (* allocates stack space for all local vars *)
+
   ]
 
 let compile_fun_postlude (num_local_vars : int) : instruction list =
@@ -1389,6 +1388,15 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
     let reserved_heap_size = true_heap_size + (true_heap_size mod 2) in
     [IJmp(Label(closure_done_lbl))]
     @ prelude
+    @ [IMov(Reg(RAX), RegOffset(2*word_size, RBP))]
+    (* Now RAX has the (tagged) func value *)
+    @ [
+       ISub(Reg(RAX), HexConst(closure_tag)); (* now RAX is heap addr to closure *)
+      ]
+    @ snd (List.fold_left (fun (acc_idx, acc_out) param -> (acc_idx + 1, IPush(Sized(QWORD_PTR, RegOffset((3 + acc_idx) * word_size, RAX))) :: acc_out)) (0, []) params)
+    @ [    (* Don't use temp register here because we assume the RHS will never be very big *)
+    ISub(Reg(RSP), Const(Int64.of_int (word_size * num_body_vars)))  (* allocates stack space for all local vars *)]
+    (* TODO- do we need to alloc stack space before pushing all the closure contents to stack?? *)
     @ compiled_body
     @ postlude
     @ [
@@ -1405,7 +1413,7 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
       ]
   | CApp(func, args, ct, tag) ->
     let f_num_args = (List.length args) in
-    let is_even_f_num_args = f_num_args mod 2 == 0 in
+    let is_even_f_num_args = (f_num_args + 1) mod 2 == 0 in
     let padding = (if is_even_f_num_args then [] else [IMov(Reg(R8), HexConst(0xF0F0F0F0L)); IPush(Reg(R8))]) in
     (* Push the args onto stack in reverse order *)
     let args_rev = List.rev args in
@@ -1469,7 +1477,7 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
              IJne(Label("err_CALL_NOT_CLOSURE"));] in
             let check_closure_for_arity =
             [ILineComment("check_closure_for_arity (err_CALL_ARITY_ERR)");
-             (* RAX is untagged ptr to closure on heap *)
+             (* RAX is tagged ptr to closure on heap *)
              IMov(Reg(RAX), compiled_func);
              ISub(Reg(RAX), HexConst(closure_tag)); (* now RAX is heap addr to closure *)
              IMov(Reg(RAX), RegOffset(0,RAX)); (* get the arity (machine int) *)
@@ -1482,11 +1490,13 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
             @ padded_comp_args
             @ [
               IMov(Reg(RAX), compiled_func);
+              IPush(Reg(RAX)); (*Push the tagged func itself onto the stack*)
               ISub(Reg(RAX), HexConst(closure_tag)); (* now RAX is heap addr to closure *)
               IMov(Reg(RAX), RegOffset(1*word_size,RAX)); (* get the code ptr (machine addr) *)
               ICall(Reg(RAX));
               (* Don't use temp register here because we assume the RHS will never be very big *)
-              IAdd(Reg(RSP), Const(Int64.of_int (word_size * f_num_args_passed)));
+              IAdd(Reg(RSP), Const(Int64.of_int (word_size * (f_num_args_passed + 1))));
+              (* add 1 because we pushed the func value itself *)
               ]
     | _ -> raise (InternalCompilerError "Invalid function application call type")
     end
@@ -1709,7 +1719,11 @@ global our_code_starts_here" in
           IJmp(Label("program_done"));
         ] in
       let decl_assembly_string = "" (*TODO figure out decls (to_asm compiled_decls)*) in
-      let body_assembly_string = (to_asm (stack_setup @ heap_start @ compiled_body @ postlude)) in
+      let body_assembly_string =
+      (to_asm (stack_setup @
+      [(* Don't use temp register here because we assume the RHS will never be very big *)
+       ISub(Reg(RSP), Const(Int64.of_int (word_size * num_prog_body_vars)))  (* allocates stack space for all local vars *)]
+      @ heap_start @ compiled_body @ postlude)) in
       sprintf "%s%s%s\n" prelude decl_assembly_string body_assembly_string 
 
 
