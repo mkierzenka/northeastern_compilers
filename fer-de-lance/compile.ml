@@ -1101,38 +1101,37 @@ let rec push_free_vars_from_closure (cur_idx : int) (num_free_vars : int): instr
   else IPush(Sized(QWORD_PTR, RegOffset((3 + cur_idx) * word_size, RAX))) :: (push_free_vars_from_closure (cur_idx + 1) num_free_vars)
 
 
-let rec compile_aexpr (e : tag aexpr) (env : arg envt) (num_args : int) (is_tail : bool) : instruction list =
+let rec compile_aexpr (e : tag aexpr) (env : arg envt) : instruction list =
   match e with
   | ALet(id, bind, body, _) ->
-    let compiled_bind = compile_cexpr bind env num_args false in
+    let compiled_bind = compile_cexpr bind env in
     let dest = (find env id) in
-    let compiled_body = compile_aexpr body env num_args is_tail in
+    let compiled_body = compile_aexpr body env in
     [ILineComment(sprintf "Let_%s" id)]
     @ compiled_bind
     @ [IMov(dest, Reg(RAX))]
     @ compiled_body
-  | ACExpr(expr) -> (compile_cexpr expr env num_args is_tail)
+  | ACExpr(expr) -> (compile_cexpr expr env)
   | ASeq(left, right, tag) ->
     let seq_left_txt = sprintf "seq_left_%d" tag in
     let seq_right_txt = sprintf "seq_right_%d" tag in
-    let compiled_left = (compile_cexpr left env num_args is_tail) in
-    let compiled_right = (compile_aexpr right env num_args is_tail) in
+    let compiled_left = (compile_cexpr left env) in
+    let compiled_right = (compile_aexpr right env) in
     [ILineComment(seq_left_txt)]
     @ compiled_left
     @ [ILineComment(seq_right_txt)]
     @ compiled_right
   | ALetRec(bindings, body, tag) ->
-    (* TODO fix the 0 and false, they are placeholders for now but used for tailcall optimization *)
     let compiled_bindings =
       List.fold_left (fun cb_acc (name, bound_body) ->
                        let dest = (find env name) in
-                         (compile_cexpr bound_body env 0 false) @ [IMov(dest, Reg(RAX))] @ cb_acc)
+                         (compile_cexpr bound_body env) @ [IMov(dest, Reg(RAX))] @ cb_acc)
                        []
                        bindings in
     [ILineComment(sprintf "LetRec$%d" tag)]
     @ compiled_bindings
-    @ (compile_aexpr body env 0 false)
-and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : bool) =
+    @ (compile_aexpr body env)
+and compile_cexpr (e : tag cexpr) (env : arg envt) =
   match e with
   | CIf(cond, thn, els, tag) ->
      let cond_reg = compile_imm cond env in
@@ -1151,11 +1150,11 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
      @ [IJz(Label(lbl_els))]
 
      @ [ILabel(lbl_thn)]
-     @ (compile_aexpr thn env num_args is_tail)
+     @ (compile_aexpr thn env)
      @ [IJmp(Label(lbl_done))]
 
      @ [ILabel(lbl_els)]
-     @ (compile_aexpr els env num_args is_tail)
+     @ (compile_aexpr els env)
      @ [ILabel(lbl_done)]
   | CScIf(cond, thn, els, tag) ->
      let cond_reg = compile_imm cond env in
@@ -1175,12 +1174,12 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
 
      @ [ILabel(lbl_thn)]
      (* LHS is compiled before RHS, so definitely not tail position *)
-     @ (compile_aexpr thn env num_args false)
+     @ (compile_aexpr thn env)
      @ [IJmp(Label(lbl_done))]
 
      @ [ILabel(lbl_els)]
      (* Since we check that result is bool, RHS is also not in tail position *)
-     @ (compile_aexpr els env num_args false)
+     @ (compile_aexpr els env)
      @ (check_rax_for_bool "err_LOGIC_NOT_BOOL")
      @ [ILabel(lbl_done)]
   | CPrim1(op, body, tag) -> 
@@ -1432,12 +1431,11 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
     let free_vars_with_idx = List.mapi (fun idx fv -> (idx, fv)) (free_vars_list@local_vs_list) in
     let new_env = update_env_for_closure free_vars_with_idx env in
     let prelude = compile_fun_prelude closure_lbl params new_env num_body_vars in
-    let compiled_body = compile_aexpr body new_env (List.length params) true in
+    let compiled_body = compile_aexpr body new_env in
     let postlude = compile_fun_postlude num_body_vars in
     let true_heap_size = 3 + num_free_vars in
     let reserved_heap_size = true_heap_size + (true_heap_size mod 2) in
     [IJmp(Label(closure_done_lbl))]
-(*    @ [ILineComment(sprintf "numlocals%d" (List.length local_vs_list))]*)
     @ prelude
     @ [IMov(Reg(RAX), RegOffset(2*word_size, RBP))]
     (* Now RAX has the (tagged) func value *)
@@ -1468,86 +1466,49 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
     (* Push the args onto stack in reverse order *)
     let args_rev = List.rev args in
     let f_num_args_passed = f_num_args + (if is_even_f_num_args then 0 else 1) in
-    let is_even_num_args = num_args mod 2 == 0 in
-    let num_args_passed = num_args + (if is_even_num_args then 0 else 1) in
-    (* Technically we allow tailcall optimization with 1 more arg if this function has odd num of args *)
     let compiled_func = compile_imm func env in
     begin match ct with
-    (*| Native ->
-        if f_num_args > 6 then
-          raise (InternalCompilerError "Our compiler does not support native calls with more than 6 arg")
-        else
-          let move_args_to_input_registers =
-            List.mapi
-             (fun idx arg ->
-               let reg = List.nth first_six_args_registers idx in
-               let compiled_imm = (compile_imm arg env) in
-                 IMov(Reg(reg), compiled_imm))
-             args
-          in
-          begin
-          match func with
-          | ImmId(fname, _) -> move_args_to_input_registers @ [ICall(Label(fname))]
-          | _ -> raise (InternalCompilerError "TODO add errors here")
-          end*)
     | Snake ->
-        (*TODO- have this actually check if is_tail and fix that case *)
-        if false && (f_num_args <= num_args_passed) then
-            let (compiled_args, _) = List.fold_left
-                           (fun accum_instrs_idx arg ->
-                              let compiled_imm = (compile_imm arg env) in
-                              let (accum_instrs, i) = accum_instrs_idx in
-                              (* Use temp register because can't push imm64 directly *)
-                              (accum_instrs
-                                @ [IMov(Reg(R8), compiled_imm);
-                                   IMov(RegOffset((i + 2) * word_size, RBP), Reg(R8))],
-                               i + 1))
-                           ([], 0)
-                           args
-                           in
-            let body_label = sprintf "closure_body$%d" tag in
-            compiled_args @ [IJmp(Label(body_label))]
-        else
-            let compiled_args = List.fold_left
-                           (fun accum_instrs arg ->
-                              let compiled_imm = (compile_imm arg env) in
-                              (* Use temp register because can't push imm64 directly *)
-                              accum_instrs @ [IMov(Reg(R8), compiled_imm);
-                                              IPush(Sized(QWORD_PTR, Reg(R8)))])
-                           []
-                           args_rev
-                           in
-            let closure_check =
-            [ILineComment("check_rax_for_closure (err_CALL_NOT_CLOSURE)");
-             (*IMov(Reg(R8), Reg(RAX));*)
-             IMov(Reg(R9), HexConst(closure_tag_mask));
-             IAnd(Reg(RAX), Reg(R9));
-             IMov(Reg(R9), HexConst(closure_tag));
-             ICmp(Reg(RAX), Reg(R9));
-             IJne(Label("err_CALL_NOT_CLOSURE"));] in
-            let check_closure_for_arity =
-            [ILineComment("check_closure_for_arity (err_CALL_ARITY_ERR)");
-             (* RAX is tagged ptr to closure on heap *)
-             IMov(Reg(RAX), compiled_func);
-             ISub(Reg(RAX), HexConst(closure_tag)); (* now RAX is heap addr to closure *)
-             IMov(Reg(RAX), RegOffset(0,RAX)); (* get the arity (machine int) *)
-             ICmp(Reg(RAX), Const(Int64.of_int f_num_args)); (* no temp reg, assume won't have that many args *)
-             IJne(Label("err_CALL_ARITY_ERR"));] in
-            let padded_comp_args = padding @ compiled_args in
-            [IMov(Reg(RAX), compiled_func);]
-            @ closure_check
-            @ check_closure_for_arity
-            @ padded_comp_args
-            @ [
-              IMov(Reg(RAX), compiled_func);
-              IPush(Reg(RAX)); (*Push the tagged func itself onto the stack*)
-              ISub(Reg(RAX), HexConst(closure_tag)); (* now RAX is heap addr to closure *)
-              IMov(Reg(RAX), RegOffset(1*word_size,RAX)); (* get the code ptr (machine addr) *)
-              ICall(Reg(RAX));
-              (* Don't use temp register here because we assume the RHS will never be very big *)
-              IAdd(Reg(RSP), Const(Int64.of_int (word_size * (f_num_args_passed + 1))));
-              (* add 1 because we pushed the func value itself *)
-              ]
+        (* TODO- figure out how I will support equal(), print(), etc. *)
+        let compiled_args = List.fold_left
+                       (fun accum_instrs arg ->
+                          let compiled_imm = (compile_imm arg env) in
+                          (* Use temp register because can't push imm64 directly *)
+                          accum_instrs @ [IMov(Reg(R8), compiled_imm);
+                                          IPush(Sized(QWORD_PTR, Reg(R8)))])
+                       []
+                       args_rev
+                       in
+        let closure_check =
+        [ILineComment("check_rax_for_closure (err_CALL_NOT_CLOSURE)");
+         IMov(Reg(R9), HexConst(closure_tag_mask));
+         IAnd(Reg(RAX), Reg(R9));
+         IMov(Reg(R9), HexConst(closure_tag));
+         ICmp(Reg(RAX), Reg(R9));
+         IJne(Label("err_CALL_NOT_CLOSURE"));] in
+        let check_closure_for_arity =
+        [ILineComment("check_closure_for_arity (err_CALL_ARITY_ERR)");
+         (* RAX is tagged ptr to closure on heap *)
+         IMov(Reg(RAX), compiled_func);
+         ISub(Reg(RAX), HexConst(closure_tag)); (* now RAX is heap addr to closure *)
+         IMov(Reg(RAX), RegOffset(0,RAX)); (* get the arity (machine int) *)
+         ICmp(Reg(RAX), Const(Int64.of_int f_num_args)); (* no temp reg, assume won't have that many args *)
+         IJne(Label("err_CALL_ARITY_ERR"));] in
+        let padded_comp_args = padding @ compiled_args in
+        [IMov(Reg(RAX), compiled_func);]
+        @ closure_check
+        @ check_closure_for_arity
+        @ padded_comp_args
+        @ [
+          IMov(Reg(RAX), compiled_func);
+          IPush(Reg(RAX)); (*Push the tagged func itself onto the stack*)
+          ISub(Reg(RAX), HexConst(closure_tag)); (* now RAX is heap addr to closure *)
+          IMov(Reg(RAX), RegOffset(1*word_size,RAX)); (* get the code ptr (machine addr) *)
+          ICall(Reg(RAX));
+          (* Don't use temp register here because we assume the RHS will never be very big *)
+          IAdd(Reg(RSP), Const(Int64.of_int (word_size * (f_num_args_passed + 1))));
+          (* add 1 because we pushed the func value itself *)
+          ]
     | _ -> raise (InternalCompilerError "Invalid function application call type")
     end
   | CImmExpr(expr) -> [IMov(Reg(RAX), (compile_imm expr env))]
@@ -1641,7 +1602,7 @@ let compile_prog ((anfed : tag aprogram), (env : arg envt)) : string =
           IInstrComment(IAnd(Reg(heap_reg), HexConst(0xFFFFFFFFFFFFFFF0L)), "by adding no more than 15 to it")
         ] in
       let num_prog_body_vars = (deepest_stack body env) in
-      let compiled_body = (compile_aexpr body env 0 false) in
+      let compiled_body = (compile_aexpr body env) in
       let prelude =
         "section .text
 extern error
