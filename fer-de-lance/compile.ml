@@ -194,7 +194,7 @@ let rec deepest_stack e env =
   let rec helpA e =
     match e with
     | ALet(name, bind, body, _) -> List.fold_left max 0 [name_to_offset name; helpC bind; helpA body]
-    | ALetRec(binds, body, _) -> List.fold_left max (helpA body) (List.map (fun (_, bind) -> helpC bind) binds)
+    | ALetRec(binds, body, _) -> List.fold_left max (helpA body) (List.map (fun (name, bind) -> (max (helpC bind) (name_to_offset name))) binds)
     | ASeq(first, rest, _) -> max (helpC first) (helpA rest)
     | ACExpr e -> helpC e
   and helpC e =
@@ -261,7 +261,6 @@ let anf (p : tag program) : unit aprogram =
        let (body_ans, body_setup) = helpC (ELet(rest, body, pos)) in
        (body_ans, exp_setup @ [BSeq(exp_ans)] @ body_setup)
     | ELet((BName(bind, _, _), exp, _)::rest, body, pos) ->
-       (* TODO- Eggeater had more logic here *)
        let (exp_ans, exp_setup) = helpC exp in
        let (body_ans, body_setup) = helpC (ELet(rest, body, pos)) in
        (body_ans, exp_setup @ [BLet(bind, exp_ans)] @ body_setup)
@@ -844,6 +843,53 @@ let desugar (p : sourcespan program) : sourcespan program =
   (desugar_decl_arg_tups p)))))
 ;;
 
+(* Find all local variables *)
+let local_vars (e: 'a aexpr) : string list =
+  let rec help_aexpr (expr : 'a aexpr) (seen : StringSet.t) : StringSet.t =
+    match expr with
+    | ASeq(lhs, rhs, _) -> StringSet.union (help_cexpr lhs seen) (help_aexpr rhs seen)
+    | ALet(bnd_name, bnd_exp, body, _) ->
+      (StringSet.add bnd_name (StringSet.union (help_cexpr bnd_exp seen) (help_aexpr body (StringSet.add bnd_name seen))))
+    | ALetRec(binds, body, _) ->
+      let names = List.map fst binds in
+      let names_set = StringSet.of_list names in
+      let seen_with_names = StringSet.union names_set seen in
+      (* TODO- should I remove this name from the names used in help_cexpr? *)
+      let new_free = List.fold_left (fun free_acc (name, expr) -> StringSet.union free_acc (help_cexpr expr seen_with_names)) StringSet.empty binds in
+      let body_free = help_aexpr body seen_with_names in
+      (StringSet.union (StringSet.union names_set new_free) body_free)
+    | ACExpr(exp) -> help_cexpr exp seen
+  and help_cexpr (expr : 'a cexpr) (seen : StringSet.t) : StringSet.t =
+    match expr with
+    | CIf(cond, thn, els, _) ->
+      StringSet.union (StringSet.union (help_imm cond seen) (help_aexpr thn seen)) (help_aexpr els seen)
+    | CScIf(fst, snd, thd, _) ->
+      StringSet.union (StringSet.union (help_imm fst seen) (help_aexpr snd seen)) (help_aexpr thd seen)
+    | CPrim1(_, exp, _) -> help_imm exp seen
+    | CPrim2(_, lhs, rhs, _) -> StringSet.union (help_imm lhs seen) (help_imm rhs seen)
+    | CApp(func, args, _, _) ->
+      StringSet.union
+        (help_imm func seen)
+        (List.fold_left (fun free_acc arg -> StringSet.union free_acc (help_imm arg seen)) StringSet.empty args)
+    | CImmExpr(exp) -> help_imm exp seen
+    | CTuple(elems, _) -> List.fold_left (fun free_acc elem -> StringSet.union free_acc (help_imm elem seen)) StringSet.empty elems
+    | CGetItem(tup, idx, _) -> StringSet.union (help_imm tup seen) (help_imm idx seen)
+    | CSetItem(tup, idx, newval, _) -> StringSet.union (StringSet.union (help_imm tup seen) (help_imm tup seen)) (help_imm newval seen)
+    | CLambda(args, body, _) ->
+      let args_set = StringSet.of_list args in
+      let seen_with_args = StringSet.union args_set seen in
+      help_aexpr body seen_with_args
+  and help_imm (expr : 'a immexpr) (seen : StringSet.t) : StringSet.t =
+    match expr with
+    | ImmNum _ -> StringSet.empty
+    | ImmBool _ -> StringSet.empty
+    | ImmId(name, _) -> StringSet.empty
+    | ImmNil _ -> StringSet.empty
+  in
+  StringSet.elements (help_aexpr e StringSet.empty)
+;;
+
+(* Find all free variables *)
 let free_vars (e: 'a aexpr) : string list =
   let rec help_aexpr (expr : 'a aexpr) (seen : StringSet.t) : StringSet.t =
     match expr with
@@ -854,7 +900,6 @@ let free_vars (e: 'a aexpr) : string list =
       let names = List.map fst binds in
       let names_set = StringSet.of_list names in
       let seen_with_names = StringSet.union names_set seen in
-      (* TODO- should I remove this name from the names used in help_cexpr? *)
       let new_free = List.fold_left (fun free_acc (name, expr) -> StringSet.union free_acc (help_cexpr expr seen_with_names)) StringSet.empty binds in
       let body_free = help_aexpr body seen_with_names in
       StringSet.union new_free body_free
@@ -892,7 +937,6 @@ let free_vars (e: 'a aexpr) : string list =
 
 (* ASSUMES that the program has been alpha-renamed and all names are unique *)
 let naive_stack_allocation (prog: tag aprogram) : tag aprogram * arg envt =
-  (* TODO add in code for handing our new C*/A* items, such as ALetRec *)
   let rec help_aexpr (body : tag aexpr) (si : int) (env : arg envt) : arg envt * int =
     match body with
     | ASeq(cexp, aexp, _) -> raise (NotYetImplemented "ASeq stack allocation not yet implemented")
@@ -902,12 +946,16 @@ let naive_stack_allocation (prog: tag aprogram) : tag aprogram * arg envt =
         help_aexpr body newsi bindenv
     | ALetRec(bindings, body, _) ->
       let (bindings_env, bindings_si) =
-        List.fold_left (fun (accum_env, accum_si) (_, exp) ->
-          (* TODO not a fan of using 'env' here, should somehow include all rest of bindings? *)
-          help_cexpr exp accum_si env)
-        ([], si)
+        List.fold_left (fun (accum_env, accum_si) (name, _) ->
+          ((name, RegOffset(~-accum_si*word_size, RBP))::accum_env, accum_si + 1))
+        (env, si)
         bindings in
-      help_aexpr body bindings_si bindings_env
+      let (new_env, new_si) =
+        List.fold_left (fun (accum_env, accum_si) (_, exp) ->
+          help_cexpr exp accum_si accum_env)
+        (bindings_env, bindings_si)
+        bindings in
+      help_aexpr body new_si new_env
     | ACExpr(cexpr) -> help_cexpr cexpr si env
   and help_cexpr (expr : tag cexpr) (si : int) (env : arg envt) : arg envt * int =
     match expr with
@@ -924,10 +972,12 @@ let naive_stack_allocation (prog: tag aprogram) : tag aprogram * arg envt =
     | CTuple _ -> (env, si)
     | CGetItem _ -> (env, si)
     | CSetItem _ -> (env, si)
-    | CLambda(args, body, _) ->
-        let args_with_idx = List.mapi (fun i arg -> (arg, RegOffset((i + 2)*word_size, RBP))) args in
+    | CLambda(args, body, tag) ->
+        let args_with_idx = List.mapi (fun i arg -> (arg, RegOffset((i + 3)*word_size, RBP))) args in
         let new_env = List.fold_left (fun accum_env cell -> cell :: accum_env) env args_with_idx in
-        help_aexpr body si new_env
+        let self_name = sprintf "closure$%d" tag in
+        let new_env_with_self = (self_name, RegOffset(2*word_size, RBP)) :: new_env in
+        help_aexpr body si new_env_with_self
   in
   match prog with
   | AProgram(body, _) ->
@@ -935,43 +985,6 @@ let naive_stack_allocation (prog: tag aprogram) : tag aprogram * arg envt =
       (prog, prog_env)
 ;;
 
-(*  TODO- Probably delete this at some point, copying in egg-eater for now 
-let rec compile_fun (fun_name : string) args body env : instruction list =
-  raise (NotYetImplemented "Compile funs not yet implemented")
-and compile_aexpr (e : tag aexpr) (si : int) (env : arg envt) (num_args : int) (is_tail : bool) : instruction list =
-  raise (NotYetImplemented "Compile aexpr not yet implemented")
-and compile_cexpr (e : tag cexpr) si env num_args is_tail =
-  raise (NotYetImplemented "Compile cexpr not yet implemented")
-and compile_imm e env =
-  match e with
-  | ImmNum(n, _) -> Const(Int64.shift_left n 1)
-  | ImmBool(true, _) -> const_true
-  | ImmBool(false, _) -> const_false
-  | ImmId(x, _) -> (find env x)
-  | ImmNil(_) -> raise (NotYetImplemented "Finish this")
-
-let compile_prog ((anfed : tag aprogram), (env: arg envt)) : string =
-  match anfed with
-  | AProgram(body, _) ->
-     let (body_prologue, comp_body, body_epilogue) = raise (NotYetImplemented "... do stuff with body ...") in
-     
-     let heap_start = [
-         ILineComment("heap start");
-         IInstrComment(IMov(Sized(QWORD_PTR, Reg(heap_reg)), Reg(List.nth first_six_args_registers 0)), "Load heap_reg with our argument, the heap pointer");
-         IInstrComment(IAdd(Sized(QWORD_PTR, Reg(heap_reg)), Const(15L)), "Align it to the nearest multiple of 16");
-         IMov(Reg scratch_reg, HexConst(0xFFFFFFFFFFFFFFF0L));
-         IInstrComment(IAnd(Sized(QWORD_PTR, Reg(heap_reg)), Reg scratch_reg), "by adding no more than 15 to it")
-       ] in
-     let main = to_asm (body_prologue @ heap_start @ comp_body @ body_epilogue) in
-     
-     raise (NotYetImplemented "... combine main with any needed extra setup and error handling ...")
-*)
-
-(* Feel free to add additional phases to your pipeline.
-   The final pipeline phase needs to return a string,
-   but everything else is up to you. *)
-
-(* ---- egg eater *)
 
 (* Compiled Type Checking *)
 let check_rax_for_num (err_lbl : string) : instruction list =
@@ -1066,6 +1079,27 @@ let compile_fun_postlude (num_local_vars : int) : instruction list =
   ]
 
 
+let rec update_env_for_closure (free_vars_with_idx : (int * string) list) (env : arg envt) : (arg envt) =
+  match env with
+  | [] -> []
+  | fst :: rest ->
+    let new_env_var = (update_env_var_for_closure fst free_vars_with_idx) in
+    new_env_var :: (update_env_for_closure free_vars_with_idx rest)
+and update_env_var_for_closure (env_var : string * arg) (free_vars_with_idx : (int * string) list) : string * arg =
+  match free_vars_with_idx with
+  | [] -> env_var
+  | (fvidx, fvname) :: rest ->
+    if fvname = fst env_var
+    then (fvname, Sized(QWORD_PTR, RegOffset(~-1 * (1 + fvidx) * word_size, RBP)))
+    else update_env_var_for_closure env_var rest
+;;
+
+
+let rec push_free_vars_from_closure (cur_idx : int) (num_free_vars : int): instruction list =
+  if cur_idx >= (num_free_vars)
+  then []
+  else IPush(Sized(QWORD_PTR, RegOffset((3 + cur_idx) * word_size, RAX))) :: (push_free_vars_from_closure (cur_idx + 1) num_free_vars)
+
 
 let rec compile_aexpr (e : tag aexpr) (env : arg envt) (num_args : int) (is_tail : bool) : instruction list =
   match e with
@@ -1087,7 +1121,17 @@ let rec compile_aexpr (e : tag aexpr) (env : arg envt) (num_args : int) (is_tail
     @ compiled_left
     @ [ILineComment(seq_right_txt)]
     @ compiled_right
-  | ALetRec(bindings, body, _) -> raise (NotYetImplemented "LetRec codegen not yet implemented")
+  | ALetRec(bindings, body, tag) ->
+    (* TODO fix the 0 and false, they are placeholders for now but used for tailcall optimization *)
+    let compiled_bindings =
+      List.fold_left (fun cb_acc (name, bound_body) ->
+                       let dest = (find env name) in
+                         (compile_cexpr bound_body env 0 false) @ [IMov(dest, Reg(RAX))] @ cb_acc)
+                       []
+                       bindings in
+    [ILineComment(sprintf "LetRec$%d" tag)]
+    @ compiled_bindings
+    @ (compile_aexpr body env 0 false)
 and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : bool) =
   match e with
   | CIf(cond, thn, els, tag) ->
@@ -1375,28 +1419,34 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
     let closure_lbl = sprintf "closure$%d" tag in
     let closure_done_lbl = sprintf "closure_done$%d" tag in
     let num_body_vars = (deepest_stack body env) in
-    let free_vars_list = (free_vars body) in
+    let free_vars_list = List.sort String.compare (free_vars (ACExpr(e))) in
     let num_free_vars = List.length free_vars_list in
-    let free_vars_asm =
-      List.mapi (fun idx fv ->
-                 IMov(Sized(QWORD_PTR, RegOffset((3 + idx)*word_size, heap_reg)), (find env fv)))
-                free_vars_list in
-    let prelude = compile_fun_prelude closure_lbl params env num_body_vars in
-    let compiled_body = compile_aexpr body env (List.length params) true in
+    let add_free_vars_to_closure =
+      List.flatten (List.mapi (fun idx fv ->
+                 [
+                 IMov(Reg(scratch_reg), (find env fv));
+                 IMov(Sized(QWORD_PTR, RegOffset((3 + idx)*word_size, heap_reg)), Reg(scratch_reg));
+                 ])
+                free_vars_list) in
+    let local_vs_list = List.sort String.compare (local_vars (ACExpr(e))) in
+    let free_vars_with_idx = List.mapi (fun idx fv -> (idx, fv)) (free_vars_list@local_vs_list) in
+    let new_env = update_env_for_closure free_vars_with_idx env in
+    let prelude = compile_fun_prelude closure_lbl params new_env num_body_vars in
+    let compiled_body = compile_aexpr body new_env (List.length params) true in
     let postlude = compile_fun_postlude num_body_vars in
     let true_heap_size = 3 + num_free_vars in
     let reserved_heap_size = true_heap_size + (true_heap_size mod 2) in
     [IJmp(Label(closure_done_lbl))]
+(*    @ [ILineComment(sprintf "numlocals%d" (List.length local_vs_list))]*)
     @ prelude
     @ [IMov(Reg(RAX), RegOffset(2*word_size, RBP))]
     (* Now RAX has the (tagged) func value *)
     @ [
        ISub(Reg(RAX), HexConst(closure_tag)); (* now RAX is heap addr to closure *)
       ]
-    @ snd (List.fold_left (fun (acc_idx, acc_out) param -> (acc_idx + 1, IPush(Sized(QWORD_PTR, RegOffset((3 + acc_idx) * word_size, RAX))) :: acc_out)) (0, []) params)
+    @ (push_free_vars_from_closure 0 num_free_vars)
     @ [    (* Don't use temp register here because we assume the RHS will never be very big *)
     ISub(Reg(RSP), Const(Int64.of_int (word_size * num_body_vars)))  (* allocates stack space for all local vars *)]
-    (* TODO- do we need to alloc stack space before pushing all the closure contents to stack?? *)
     @ compiled_body
     @ postlude
     @ [
@@ -1405,11 +1455,11 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) (num_args : int) (is_tail : b
       IMov(Sized(QWORD_PTR, RegOffset(1*word_size, heap_reg)), Label(closure_lbl));
       IMov(Sized(QWORD_PTR, RegOffset(2*word_size, heap_reg)), Const(Int64.of_int num_free_vars));
       ]
-    @ free_vars_asm
+    @ add_free_vars_to_closure
     @ [
       IMov(Reg(RAX), Reg(heap_reg));
       IAdd(Reg(RAX), HexConst(closure_tag));
-      IAdd(Reg(heap_reg), Const(Int64.of_int reserved_heap_size));
+      IAdd(Reg(heap_reg), Const(Int64.of_int (reserved_heap_size*word_size)));
       ]
   | CApp(func, args, ct, tag) ->
     let f_num_args = (List.length args) in
@@ -1580,17 +1630,6 @@ and compile_imm e (env : arg envt) : arg =
   | ImmId(x, _) -> (find env x)
   | ImmNil(_) -> const_nil
 
-(*
-let compile_decl (d : tag adecl) (env : arg envt): instruction list =
-  match d with
-  | ADFun(fname, args, body, _) ->
-    let num_body_vars = (deepest_stack body env) in
-    let prelude = compile_fun_prelude fname args env num_body_vars in
-    let compiled_body = compile_aexpr body env (List.length args) true in
-    let postlude = compile_fun_postlude num_body_vars in
-    let body_label = sprintf "%s_body" fname in
-    prelude @ [ILabel(body_label)] @ compiled_body @ postlude
-*)
 
 let compile_prog ((anfed : tag aprogram), (env : arg envt)) : string =
   match anfed with
@@ -1601,14 +1640,6 @@ let compile_prog ((anfed : tag aprogram), (env : arg envt)) : string =
           IInstrComment(IAdd(Reg(heap_reg), Const(15L)), "Align it to the nearest multiple of 16");
           IInstrComment(IAnd(Reg(heap_reg), HexConst(0xFFFFFFFFFFFFFFF0L)), "by adding no more than 15 to it")
         ] in
-      (*let compiled_decls =
-        List.fold_left
-          (fun accum_instrs decl ->
-            accum_instrs
-            (* basically a line of whitespace between function decls *)
-            @ [ILineComment("")]
-            @ (compile_decl decl env))
-          [] decls in*)
       let num_prog_body_vars = (deepest_stack body env) in
       let compiled_body = (compile_aexpr body env 0 false) in
       let prelude =
@@ -1718,33 +1749,40 @@ global our_code_starts_here" in
           ICall(Label("error"));
           IJmp(Label("program_done"));
         ] in
-      let decl_assembly_string = "" (*TODO figure out decls (to_asm compiled_decls)*) in
       let body_assembly_string =
       (to_asm (stack_setup @
       [(* Don't use temp register here because we assume the RHS will never be very big *)
        ISub(Reg(RSP), Const(Int64.of_int (word_size * num_prog_body_vars)))  (* allocates stack space for all local vars *)]
       @ heap_start @ compiled_body @ postlude)) in
-      sprintf "%s%s%s\n" prelude decl_assembly_string body_assembly_string 
-
-
-
-
-(* end egg eater *)
-
-
-
+      sprintf "%s%s\n" prelude body_assembly_string
 
 
 let run_if should_run f =
   if should_run then f else no_op_phase
 ;;
 
-(*TODO- add comments to stages here from egg-eater *)
-(* Add at least one desugaring phase somewhere in here *)
+(* We chose to put the desugar phase after the well_formed check to make sure we spit
+ * out the correct error location for ill-formed programs.  We choose to desugar before
+ * ANFing because the desugar phase is not guaranteed to perform ANFing, therefore we
+ * would need to call ANF a second time if we desugared after ANFing.  Tagging and
+ * renaming needs to happen before ANFing, so we desugar before these two phases because
+ * desugaring would invalidate both tagging and renaming.  Note: tagging and renaming
+ * is not a prerequisite to desugaring.
+ * *)
 let compile_to_string (prog : sourcespan program pipeline) : string pipeline =
   prog
   |> (add_err_phase well_formed is_well_formed)
+  (* Invariant: EScIf is not part of the AST *)
   |> (add_phase desugared desugar)
+    (* Invariants:
+    * 1. EPrim2's should never have "and" or "or" operators
+    * 2. Every bind to a DFun will be shadowed in a ELet in the body.  This will
+    *     avoid the "min/max" tail-recursion problem; see the comment inside
+    *     desugar_args_as_let_binds for more details.
+    * 3. ELet's will never have BTuple's in the receiving position (the lhs).
+    * 4. The binds (arguments) to each DFun will never be an BTuple.
+    * 5. There will be no ESeq's in our AST.
+    * *)
   |> (add_phase tagged tag)
   |> (add_phase renamed rename_and_tag)
   |> (add_phase anfed (fun p -> atag (anf p)))
