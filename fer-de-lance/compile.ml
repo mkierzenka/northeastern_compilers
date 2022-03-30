@@ -365,8 +365,9 @@ let anf (p : tag program) : unit aprogram =
        let (body_imm, body_setup) = helpI (ELet(rest, body, pos)) in
        (body_imm, exp_setup @ body_setup)
     | ELambda(binds, body, tag) ->
-       raise (NotYetImplemented("Finish this case8"))
-       (* Hint: use BLet to bind the answer *)
+       let tmp = sprintf "lambda_%d" tag in
+       let (ans, setup) = helpC e in
+       (ImmId(tmp, ()), setup @ [BLet(tmp, ans)])
     | ELet((BName(bind, _, _), exp, _)::rest, body, pos) ->
        let (exp_ans, exp_setup) = helpC exp in
        let (body_ans, body_setup) = helpI (ELet(rest, body, pos)) in
@@ -374,8 +375,21 @@ let anf (p : tag program) : unit aprogram =
     | ELet((BTuple(binds, _), exp, _)::rest, body, pos) ->
        raise (InternalCompilerError("Tuple bindings should have been desugared away"))
     | ELetRec(binds, body, tag) ->
-       raise (NotYetImplemented("Finish this case9"))
-       (* Hint: use BLetRec for each of the binds, and BLet for the final answer *)
+       let (body_ans, body_setup) = helpI body in
+       let (new_bindings, bindings_setups) =
+         List.fold_left
+           (fun (acc_bindings, acc_setups) (bind, exp, _) ->
+               begin
+               match bind with
+               | BName(name, _, _) ->
+                 let (exp_ans, exp_setup) = helpC exp in
+                   ((name, exp_ans)::acc_bindings, exp_setup @ acc_setups)
+               | _ -> raise (InternalCompilerError "ANF-ing failed, letrec must only have BName bindings")
+               end)
+            ([], [])
+            binds in
+       (* TODO- how to convert ELetRec into a CExpr for binding...? *)
+       (body_ans, bindings_setups @ [BLetRec(new_bindings)] @ body_setup)
   and helpA e : unit aexpr = 
     let (ans, ans_setup) = helpC e in
     List.fold_right
@@ -559,22 +573,32 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
         let (benv, bexns) = (wf_Bind bnd env_acc) in (benv, bexns @ exns_acc))
       (env, [])
       binds
+  and wf_DGroup (group : sourcespan decl list) (env : env_entry envt) : exn list =
+    match group with
+    | [] -> []
+    | decl :: rest ->
+      let decl_exns = wf_D decl env in
+      decl_exns @ (wf_DGroup rest env)
   in
   match p with
   | Program(decls, body, fake_loc) ->
       let init_env = [("cinput",Id(fake_loc)); ("cequal",Id(fake_loc))] in
       (* gather all functions into the env *)
       (* TODO- check for duplicates within each group (but not between groups!) *)
-      (* TODO- add back env checks for decls
-      let (env, init_errs) = setup_env decls init_env in
+      (* TODO- add back env checks for decls*)
+      let (env, init_errs) = List.fold_left (fun (env_acc, errs_acc) decgrp ->
+                                              let (grp_env, grp_errs) = setup_env decgrp env_acc in
+                                              (grp_env, grp_errs @ errs_acc))
+                                            (init_env, [])
+                                            decls in
       (* check decls *)
+      (* TODO- this is wrong env for well-formedness, should use the one from just that decl group not all the groups *)
+      (* fix by making wf_DGroup handle setup_env and wf_D for one decl group at a time, together *)
       let decl_errs =
         List.fold_left
-          (fun (acc : (exn list)) decl -> ((wf_D decl env) @ acc))
+          (fun (acc : (exn list)) decgrp -> ((wf_DGroup decgrp env) @ acc))
           []
-          decls in*)
-      let (env, init_errs) = (init_env, []) in
-      let decl_errs = [] in
+          decls in
       (* check the body *)
       let body_errs = wf_E body env in
       let all_errs = init_errs @ decl_errs @ body_errs in
@@ -1737,9 +1761,7 @@ let compile_to_string (prog : sourcespan program pipeline) : string pipeline =
   |> (add_phase desugared desugar)
     (* Invariants:
     * 1. EPrim2's should never have "and" or "or" operators
-    * 2. Every bind to a DFun will be shadowed in a ELet in the body.  This will
-    *     avoid the "min/max" tail-recursion problem; see the comment inside
-    *     desugar_args_as_let_binds for more details.
+    * 2. Every decl should be desugared into ELetRecs - ie. no Decls left
     * 3. ELet's will never have BTuple's in the receiving position (the lhs).
     * 4. The binds (arguments) to each DFun will never be an BTuple.
     * 5. There will be no ESeq's in our AST.
