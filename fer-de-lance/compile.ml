@@ -963,7 +963,9 @@ let free_vars (e: 'a aexpr) : string list =
 let naive_stack_allocation (prog: tag aprogram) : tag aprogram * arg envt =
   let rec help_aexpr (body : tag aexpr) (si : int) (env : arg envt) : arg envt * int =
     match body with
-    | ASeq(cexp, aexp, _) -> raise (NotYetImplemented "ASeq stack allocation not yet implemented")
+    | ASeq(cexp, aexp, _) ->
+        let (lhs_env, lhs_si) = help_cexpr cexp si env in
+        help_aexpr aexp lhs_si lhs_env
     | ALet(sym, bind, body, _) ->
         let newenv = (sym, RegOffset(~-si*word_size, RBP)) :: env in
         let (bindenv, newsi) = help_cexpr bind (si+1) newenv in
