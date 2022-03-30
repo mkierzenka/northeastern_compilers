@@ -36,73 +36,6 @@ let tfvs name program expected = name>::
 ;;
 
 
-(* Provided with this assignment
-let forty_one = "41";;
-
-let forty_one_a = (AProgram(ACExpr(CImmExpr(ImmNum(41L, ()))), ()))
-
-let test_prog = "let x = if sub1(55) < 54: (if 1 > 0: add1(2) else: add1(3)) else: (if 0 == 0: sub1(4) else: sub1(5)) in x"
-let anf1 = (anf     (tag (parse_string "test" test_prog)))
-
-let suite =
-  "suite">:::
-    [
-
-      t "test_is_bool1" "isbool(true)" "" "true";
-      t "test_is_bool2" "isbool(false)" "" "true";
-      t "test_is_bool3" "isbool(0)" "" "false";
-      t "test_is_bool4" "isbool(123)" "" "false";
-      t "test_is_bool5" "isbool((0,123))" "" "false";
-      t "test_is_bool6" "isbool((true,123))" "" "false";
-      t "test_is_bool7" "isbool((123,123))" "" "false";
-      t "test_is_bool8" "isbool((false,123))" "" "false";
-
-      t "test_is_tuple1" "istuple(true)" "" "false";
-      t "test_is_tuple2" "istuple(false)" "" "false";
-      t "test_is_tuple3" "istuple(0)" "" "false";
-      t "test_is_tuple4" "istuple(123)" "" "false";
-      t "test_is_tuple5" "istuple((0,123))" "" "true";
-      t "test_is_tuple6" "istuple((true,123))" "" "true";
-      t "test_is_tuple7" "istuple((123,123))" "" "true";
-      t "test_is_tuple8" "istuple((false,123))" "" "true";
-
-      t "test_is_num1" "isnum(true)" "" "false";
-      t "test_is_num2" "isnum(false)" "" "false";
-      t "test_is_num3" "isnum(0)" "" "true";
-      t "test_is_num4" "isnum(123)" "" "true";
-      t "test_is_num5" "isnum((0,123))" "" "false";
-      t "test_is_num6" "isnum((true,123))" "" "false";
-      t "test_is_num7" "isnum((123,123))" "" "false";
-      t "test_is_num8" "isnum((false,123))" "" "false";
-
-      tanf "forty_one_anf"
-        (Program([], ENumber(41L, ()), ()))
-        "" 
-        forty_one_a;
-
-      terr "scope_err1" "let x = true in (let y = (let x = false in x) in y)" "" "shadows one defined";
-
-      ta "forty_one_run_anf" ((atag forty_one_a), []) "" "41";
-      
-      t "forty_one" forty_one "" "41";
-
-
-      t "test" test_prog "" "3";
-      
-      (* Some useful if tests to start you off *)
-
-      t "if1" "if 7 < 8: 5 else: 3" "" "5";
-      t "if2" "if 0 > 1: 4 else: 2" "" "2";
-
-      terr "overflow" "add1(5073741823000000000)" "" "overflow";
-
-      (* tvg "funcalls" "def fact(n): if n < 2: 1 else: n * fact(n - 1)\n\nfact(5)" "" "120" *)
-          
-    ]
-;;
-*)
-
-
 (* ### Regression test suite (from Cobra) ### *)
 let max_snake_num = (Int64.div Int64.max_int 2L)
 let max_snake_num_plus_one = Int64.add max_snake_num 1L
@@ -353,8 +286,9 @@ let tests_from_diamondback = [
   t "func_not_used_2a" "def id(x): x true"  "" "true";
   t "func_not_used_3a" "def func(x): add1(x) true"  "" "true";
   t "func_not_used_4a" "def func(x): (2 + x) true"  "" "true";
-  t "func_not_used_5a" "def func(x): if x<2: 0 else: 1 8"  "" "8";
+  t "func_not_used_5a" "def func(x): if x < 2: 0 else: 1 8"  "" "8";
   t "multiple_func_not_used" "def a(): 2 def ident(x): x def cat(x): print(x) 8"  "" "8";
+  t "func_group_not_used" "def a(): 2 and def ident(x): x and def cat(x): print(x) 8"  "" "8";
   t "func_unused_args" "def fun(x, y, z): print(y) 8"  "" "8";
 
   (* Calling funcs *)
@@ -371,8 +305,10 @@ let tests_from_diamondback = [
 
   t "fname_bind_in_body" "def fun(a,b,c): let fun=4 in add1(fun) \n fun(9,10,11)"  "" "5";
   t "func_split_env" "def f(x,y): let z = x * y in sub1(z)   let z = 9 in f(z, add1(z))" ""  "89";
-  t "func_from_func" "def f(x,y): let z = x * y in z + z  def g(x): if isbool(x): 0 else: f(x,x) g(4)"  "" "32";
-  t "func_from_func_backwards" "def f(): g()  def g(): sub1(2 * 8)  f()"  "" "15";
+  t "func_from_func" "def f(x,y): let z = x * y in z + z  and def g(x): if isbool(x): 0 else: f(x,x) g(4)"  "" "32";
+  terr "func_from_func_dif_grp" "def f(x,y): let z = x * y in z + z  def g(x): if isbool(x): 0 else: f(x,x) g(4)"  "" "Name f not found";
+  t "func_from_func_backwards" "def f(): g()  and def g(): sub1(2 * 8)  f()"  "" "15";
+  terr "func_from_func_backwards_dif_grp" "def f(): g()  def g(): sub1(2 * 8)  f()"  "" "Name g not found";
   t "max_tail_1" "def max(x,y): if x > y: x else: max(y,x) max(1,9)"  "" "9";
   t "max_tail_2" "def max(x,y): if x > y: x else: max(y,x) max(9,1)"  "" "9";
   t "rebind_arg" "def f(a,b): let a=b,b=8 in a+b f(4,10)"  "" "18";
@@ -399,18 +335,18 @@ let tests_from_diamondback = [
   terr "func_split_env_err4d" "def f(x,y): let z=99 in x+y  def g(w): print(x)   let one=f(1,2) in f(1,2)" ""  "is not in scope";
 
   (* Arity errors *)
-  terr "arity_l" "def f(x): 2 f(4,5)"  "" "The function called at";
-  terr "arity_r" "def f(x): 2 f(4,5)"  "" "expected an arity of 1, but received 2 arguments";
-  terr "arity_err0" "def f(): (if isnum(12): 7 else: false)  f(4)"  "" "expected an arity of 0, but received 1 arguments";
-  terr "arity_err1a" "def f(x): (if isnum(12): x else: false)  f()" ""  "expected an arity of 1, but received 0 arguments";
-  terr "arity_err1b" "def f(x): (if isnum(12): x else: false)  f(4,8)"  "" "expected an arity of 1, but received 2 arguments";
-  terr "arity_err2a" "def f(x,y): (if isnum(12): 7 else: false)  f(1)"  "" "expected an arity of 2, but received 1 arguments";
-  terr "arity_err2b" "def f(x,y): (if isnum(12): 7 else: false)  f(1,3,4)"  "" "expected an arity of 2, but received 3 arguments";
+  terr "arity_err0a" "def f(x): 2 f(4,5)"  "" "arity mismatch in call";
+  terr "arity_err0b" "def f(): (if isnum(12): 7 else: false)  f(4)"  "" "arity mismatch in call";
+  terr "arity_err1a" "def f(x): (if isnum(12): x else: false)  f()" ""  "arity mismatch in call";
+  terr "arity_err1b" "def f(x): (if isnum(12): x else: false)  f(4,8)"  "" "arity mismatch in call";
+  terr "arity_err2a" "def f(x,y): (if isnum(12): 7 else: false)  f(1)"  "" "arity mismatch in call";
+  terr "arity_err2b" "def f(x,y): (if isnum(12): 7 else: false)  f(1,3,4)"  "" "arity mismatch in call";
 
   (* Name resolution for vars vs. funcs (vars shadow function names) *)
   terr "func_let_name" "def f(x,y): (if isnum(12): 7 else: false)  let f=99 in f(1,3)"  "" "is not in scope";
   terr "func_let_name2" "def f(x,y): (if isnum(12): 7 else: false)  let f=99 in f(1,3,4)"  "" "is not in scope";
   t "func_let_name3" "def f(x,y): (if isnum(12): 7 else: false)  let f=99 in add1(f)" ""  "100";
+
 
   (* UnboundFun errors *)
   terr "unbound_fun_l" "f()"  "" "The function name f, used at";
@@ -450,14 +386,24 @@ let tests_from_diamondback = [
   terr "multi_errs_unbound_r" "def f(x, x): y  f(1)"  "" ", is not in scope";
   terr "multi_errs_duplicated_l" "def f(x, x): y  f(1)"  "" "The identifier x, redefined at ";
   terr "multi_errs_duplicated_r" "def f(x, x): y  f(1)"  "" ", duplicates one at ";
-  terr "multi_errs_arity_mismatch_l" "def f(x, x): y  f(1)"  "" "The function called at ";
-  terr "multi_errs_arity_mismatch_r" "def f(x, x): y  f(1)" ""  " expected an arity of 2, but received 1 arguments";
+  terr "multi_errs_arity_mismatch" "def f(x, x): y  f(1)" ""  "arity mismatch in call";
+
+
 ]
 
 let diamondback_suite = "diamondback_suite">:::tests_from_diamondback
 
 
 let tests_for_free_vars = [
+  t "new_func1" "def f(x): add1(x)  f(2)" "" "3";
+  tfvs "new_func1_fvs" "let rec f = (lambda(x): add1(x)) in  f(2)" [];
+  tfvs "in_lambda_fvs" "(lambda(x): add1(x))" [];
+
+  t "new_func2let" "let f = (lambda(x): add1(x)) in f(2)" "" "3";
+  t "new_func2letrec" "let rec f = (lambda(x): add1(x)) in f(2)" "" "3";
+  t "new_func2trick" "let f = (lambda(x): let y=1 in add1(x)) in f(2)" "" "3";
+  t "new_func3" "let f = (lambda(x,y): x+y) in f(2,3)" "" "5";
+
   tfvs "tfvs_imm" "true" [];
   tfvs "tfvs_prim2_1" "x + x" ["x"];
   tfvs "tfvs_prim2_2" "a * b" ["a";"b"];
@@ -475,7 +421,19 @@ let tests_for_free_vars = [
 
 let free_vars_suite = "free_vars_suite">:::tests_for_free_vars
 
+let tests_for_fdl = [
+  t "ex_from_notes" "def foo(w, x, y, z):
+  (lambda(a): a + x + z)
+    foo(1, 2, 3, 4)(5)" "" "11";
+
+  (* The following may or may not pass, but should
+  terr "letrec_non_lam" "letrec a=(lambda(x): x*x), (b,c)=(1,2) in 4" "" "err";
+  terr "call_num" "let f=7 in f()" "" "non-function";
+  terr "letrec_dups" "letrec a=(lambda(x): x*x), b=(lambda(x): 2*x), a=(lambda(x): 444) in 7" "" "duplicate";*)
+]
+
+let fdl_suite = "fdl_suite">:::tests_for_fdl
 
 let () =
-  run_test_tt_main ("all_tests">:::[cobra_suite; free_vars_suite; input_file_test_suite ()])
+  run_test_tt_main ("all_tests">:::[cobra_suite; diamondback_suite; free_vars_suite; fdl_suite; input_file_test_suite ()])
 ;;
