@@ -4,7 +4,6 @@ open Phases
 open Exprs
 open Assembly
 open Errors
-(* Add at least one of these two *)
        
 type 'a envt = (string * 'a) list
 
