@@ -1,0 +1,19 @@
+def extract3b(mytup):
+  let (_, _, _, (_, o), _) = mytup in
+  o
+
+def alsoextract3b((_, f, _, (_, o), _)):
+  o
+
+let maintup = ((1,), 2, true, (false, 4), (5, 6, 7)) in
+let (a0, a1, a2, a3, a4) = maintup,
+    ((b0a), b1, b2, b3, (b4a, b4b, b4c)) = maintup,
+    (_, _, _, (c3a, c3b), _) = maintup,
+    d3b = extract3b(maintup),
+    e3b = alsoextract3b(maintup) in
+
+
+(a0[0] == maintup[0][0]) && (a1 == maintup[1]) && (a2 == maintup[2]) && (a3 == maintup[3]) && (a3[0] == maintup[3][0]) && (a3[1] == maintup[3][1]) && (a4 == maintup[4]) && (a4[0] == maintup[4][0]) && (a4[1] == maintup[4][1]) && (a4[2] == maintup[4][2])
+&& !(b0a == a0) && !((b0a,) == a0) && (b0a == a0[0]) && (b1 == a1) && (b2 == a2) && (b3 == a3) && (b3[0] == a3[0]) && (b3[1] == a3[1]) && !(b4a == a4) && (b4a == a4[0]) && (b4b == a4[1]) && (b4c == a4[2])
+&& (c3a == b3[0]) && (c3b == b3[1]) && (d3b == c3b) && (e3b == d3b)
+
