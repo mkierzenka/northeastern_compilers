@@ -12,24 +12,6 @@ type env_entry =
   | Id of sourcespan
 ;;
 
-let rec is_anf (e : 'a expr) : bool =
-  match e with
-  | EPrim1(_, e, _) -> is_imm e
-  | EPrim2(_, e1, e2, _) -> is_imm e1 && is_imm e2
-  | ELet(binds, body, _) ->
-     List.for_all (fun (_, e, _) -> is_anf e) binds
-     && is_anf body
-  | EIf(cond, thn, els, _) -> is_imm cond && is_anf thn && is_anf els
-  | EScIf(cond, thn, els, _) -> is_imm cond && is_anf thn && is_anf els
-  | _ -> is_imm e
-and is_imm e =
-  match e with
-  | ENumber _ -> true
-  | EBool _ -> true
-  | EId _ -> true
-  | _ -> false
-;;
-
 let const_true       = HexConst(0xFFFFFFFFFFFFFFFFL)
 let const_false      = HexConst(0x7FFFFFFFFFFFFFFFL)
 let bool_mask        = HexConst(0x8000000000000000L)
@@ -271,11 +253,11 @@ let anf (p : tag program) : unit aprogram =
        (e2_ans, e1_setup @ [BSeq e1_ans] @ e2_setup)
     | EApp(func, args, ct, _) ->
        let (func_ans, func_setup) = helpI func in
-       let (args_ans, args_setup) = List.split (List.map helpI args) in
-       (CApp(func_ans, args_ans, ct, ()), func_setup @ (List.concat args_setup))
+       let (args_anses, args_setups) = List.split (List.map helpI args) in
+       (CApp(func_ans, args_anses, ct, ()), func_setup @ (List.concat args_setups))
     | ETuple(args, _) ->
-       let (args_ans, args_setup) = List.split (List.map helpI args) in
-       (CTuple(args_ans, ()), List.concat args_setup)
+       let (args_anses, args_setups) = List.split (List.map helpI args) in
+       (CTuple(args_anses, ()), List.concat args_setups)
     | EGetItem(tup, idx, _) ->
        let (tup_ans, tup_setup) = helpI tup in
        let (idx_ans, idx_setup) = helpI idx in
@@ -942,7 +924,7 @@ let free_vars (e: 'a aexpr) : string list =
     | CImmExpr(exp) -> help_imm exp seen
     | CTuple(elems, _) -> List.fold_left (fun free_acc elem -> StringSet.union free_acc (help_imm elem seen)) StringSet.empty elems
     | CGetItem(tup, idx, _) -> StringSet.union (help_imm tup seen) (help_imm idx seen)
-    | CSetItem(tup, idx, newval, _) -> StringSet.union (StringSet.union (help_imm tup seen) (help_imm tup seen)) (help_imm newval seen)
+    | CSetItem(tup, idx, newval, _) -> StringSet.union (StringSet.union (help_imm tup seen) (help_imm idx seen)) (help_imm newval seen)
     | CLambda(args, body, _) ->
       let args_set = StringSet.of_list args in
       let seen_with_args = StringSet.union args_set seen in
