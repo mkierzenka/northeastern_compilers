@@ -141,6 +141,21 @@ void printHelp(FILE *out, SNAKEVAL val) {
   }
   else if ((val & CLOSURE_TAG_MASK) == CLOSURE_TAG) {
     fprintf(out, "<function>");
+    uint64_t* addr = (uint64_t*)(val - CLOSURE_TAG);
+    uint64_t arity = addr[0];
+    fprintf(out, "(%lu, ", arity);
+    uint64_t code_ptr = addr[1];
+    fprintf(out, "%#018lx, ", code_ptr);
+    int num_free_vars = (int)addr[2];
+    fprintf(out, "%d, ", num_free_vars);
+    for (int i = 0; i < num_free_vars - 1; i++) {
+      printHelp(out, addr[3 + i]);
+      fprintf(out, ", ");
+    }
+    if (num_free_vars > 0) {
+      printHelp(out, addr[3 + num_free_vars - 1]);
+    }
+    fprintf(out, ")");
   }
   else if ((val & TUPLE_TAG_MASK) == TUPLE_TAG) {
     uint64_t* addr = (uint64_t*)(val - TUPLE_TAG);
