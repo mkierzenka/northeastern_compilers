@@ -1106,24 +1106,31 @@ let rec push_free_vars_from_closure (cur_idx : int) (num_free_vars : int): instr
   if cur_idx >= (num_free_vars)
   then []
   else IPush(Sized(QWORD_PTR, RegOffset((3 + cur_idx) * word_size, RAX))) :: (push_free_vars_from_closure (cur_idx + 1) num_free_vars)
+;;
 
+(* shift the RegOffset by "stack_idx_shift" SLOTS (ie. "stack_idx_shift * word_size" bytes) *)
+let add_stack_offset (stack_idx_shift : int) (orig : arg) : arg =
+  match orig with
+  | RegOffset(orig_offset, orig_reg) -> RegOffset(orig_offset + (stack_idx_shift * word_size), orig_reg)
+  | _ -> raise (InternalCompilerError "Unexpected env entry for stack offset adjustment")
+;;
 
-let rec compile_aexpr (e : tag aexpr) (env : arg envt) : instruction list =
+let rec compile_aexpr (e : tag aexpr) (stack_offset : int) (env : arg envt) : instruction list =
   match e with
   | ALet(id, bind, body, _) ->
-    let compiled_bind = compile_cexpr bind env in
-    let dest = (find env id) in
-    let compiled_body = compile_aexpr body env in
+    let compiled_bind = compile_cexpr bind stack_offset env in
+    let dest = add_stack_offset stack_offset (find env id) in
+    let compiled_body = compile_aexpr body stack_offset env in
     [ILineComment(sprintf "Let_%s" id)]
     @ compiled_bind
     @ [IMov(dest, Reg(RAX))]
     @ compiled_body
-  | ACExpr(expr) -> (compile_cexpr expr env)
+  | ACExpr(expr) -> (compile_cexpr expr stack_offset env)
   | ASeq(left, right, tag) ->
     let seq_left_txt = sprintf "seq_left_%d" tag in
     let seq_right_txt = sprintf "seq_right_%d" tag in
-    let compiled_left = (compile_cexpr left env) in
-    let compiled_right = (compile_aexpr right env) in
+    let compiled_left = (compile_cexpr left stack_offset env) in
+    let compiled_right = (compile_aexpr right stack_offset env) in
     [ILineComment(seq_left_txt)]
     @ compiled_left
     @ [ILineComment(seq_right_txt)]
@@ -1131,14 +1138,14 @@ let rec compile_aexpr (e : tag aexpr) (env : arg envt) : instruction list =
   | ALetRec(bindings, body, tag) ->
     let compiled_bindings =
       List.fold_left (fun cb_acc (name, bound_body) ->
-                       let dest = (find env name) in
-                         (compile_cexpr bound_body env) @ [IMov(dest, Reg(RAX))] @ cb_acc)
+                       let dest = add_stack_offset stack_offset (find env name) in
+                         (compile_cexpr bound_body stack_offset env) @ [IMov(dest, Reg(RAX))] @ cb_acc)
                        []
                        bindings in
     [ILineComment(sprintf "LetRec$%d" tag)]
     @ compiled_bindings
-    @ (compile_aexpr body env)
-and compile_cexpr (e : tag cexpr) (env : arg envt) =
+    @ (compile_aexpr body stack_offset env)
+and compile_cexpr (e : tag cexpr) (stack_offset : int) (env : arg envt) =
   match e with
   | CIf(cond, thn, els, tag) ->
      let cond_reg = compile_imm cond env in
@@ -1157,11 +1164,11 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) =
      @ [IJz(Label(lbl_els))]
 
      @ [ILabel(lbl_thn)]
-     @ (compile_aexpr thn env)
+     @ (compile_aexpr thn stack_offset env)
      @ [IJmp(Label(lbl_done))]
 
      @ [ILabel(lbl_els)]
-     @ (compile_aexpr els env)
+     @ (compile_aexpr els stack_offset env)
      @ [ILabel(lbl_done)]
   | CScIf(cond, thn, els, tag) ->
      let cond_reg = compile_imm cond env in
@@ -1181,12 +1188,12 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) =
 
      @ [ILabel(lbl_thn)]
      (* LHS is compiled before RHS, so definitely not tail position *)
-     @ (compile_aexpr thn env)
+     @ (compile_aexpr thn stack_offset env)
      @ [IJmp(Label(lbl_done))]
 
      @ [ILabel(lbl_els)]
      (* Since we check that result is bool, RHS is also not in tail position *)
-     @ (compile_aexpr els env)
+     @ (compile_aexpr els stack_offset env)
      @ (check_rax_for_bool "err_LOGIC_NOT_BOOL")
      @ [ILabel(lbl_done)]
   | CPrim1(op, body, tag) -> 
@@ -1430,15 +1437,17 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) =
     let add_free_vars_to_closure =
       List.flatten (List.mapi (fun idx fv ->
                  [
+                 (* Use incoming env here, because it is the env that the lambda is in *)
                  IMov(Reg(scratch_reg), (find env fv));
                  IMov(Sized(QWORD_PTR, RegOffset((3 + idx)*word_size, heap_reg)), Reg(scratch_reg));
                  ])
                 free_vars_list) in
     let local_vs_list = List.sort String.compare (local_vars (ACExpr(e))) in
-    let free_vars_with_idx = List.mapi (fun idx fv -> (idx, fv)) (free_vars_list@local_vs_list) in
-    let new_env = update_env_for_closure free_vars_with_idx env in
-    let prelude = compile_fun_prelude closure_lbl params new_env num_body_vars in
-    let compiled_body = compile_aexpr body new_env in
+    let prelude = compile_fun_prelude closure_lbl params env num_body_vars in
+    (* Trick, we know the env is a list and lookups will return 1st found, so just add the updated values to the front.
+       This new env assumes we have pushed all the closed over values to the stack in order.*)
+    let new_env = (List.mapi (fun idx fv -> (fv, RegOffset(~-1 * (1 + idx)*word_size, RBP))) free_vars_list) @ env in
+    let compiled_body = compile_aexpr body num_free_vars new_env in
     let postlude = compile_fun_postlude num_body_vars in
     let true_heap_size = 3 + num_free_vars in
     let reserved_heap_size = true_heap_size + (true_heap_size mod 2) in
@@ -1447,11 +1456,11 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) =
     @ [IMov(Reg(RAX), RegOffset(2*word_size, RBP))]
     (* Now RAX has the (tagged) func value *)
     @ [
-       ISub(Reg(RAX), HexConst(closure_tag)); (* now RAX is heap addr to closure *)
+      ISub(Reg(RAX), HexConst(closure_tag)); (* now RAX is heap addr to closure *)
       ]
     @ (push_free_vars_from_closure 0 num_free_vars)
     @ [    (* Don't use temp register here because we assume the RHS will never be very big *)
-    ISub(Reg(RSP), Const(Int64.of_int (word_size * num_body_vars)))  (* allocates stack space for all local vars *)]
+      ISub(Reg(RSP), Const(Int64.of_int (word_size * num_body_vars)))  (* allocates stack space for all local vars *)]
     @ compiled_body
     @ postlude
     @ [
@@ -1467,17 +1476,18 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) =
       IAdd(Reg(heap_reg), Const(Int64.of_int (reserved_heap_size*word_size)));
       ]
   | CApp(func, args, ct, tag) ->
-    let f_num_args = (List.length args) in
-    let is_even_f_num_args = (f_num_args + 1) mod 2 == 0 in
-    let padding = (if is_even_f_num_args then [] else [IMov(Reg(R8), HexConst(0xF0F0F0F0L)); IPush(Reg(R8))]) in
-    (* Push the args onto stack in reverse order *)
+    let num_args = (List.length args) in
+    (* we add 1 below because we will also push the closure itself before making the call *)
+    let needs_padding = (num_args + 1) mod 2 == 1 in
+    let padding = (if needs_padding then [IMov(Reg(R8), HexConst(0xF0F0F0F0L)); IPush(Reg(R8))] else []) in
+    let num_pushes = num_args + 1 (* the closure *) + (if needs_padding then 1 else 0) in
     let args_rev = List.rev args in
-    let f_num_args_passed = f_num_args + (if is_even_f_num_args then 0 else 1) in
     let compiled_func = compile_imm func env in
     begin match ct with
     | Snake ->
         (* TODO- figure out how I will support equal(), print(), etc. *)
-        let compiled_args = List.fold_left
+        (* Push the args onto stack in reverse order *)
+        let push_compiled_args = List.fold_left
                        (fun accum_instrs arg ->
                           let compiled_imm = (compile_imm arg env) in
                           (* Use temp register because can't push imm64 directly *)
@@ -1486,7 +1496,7 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) =
                        []
                        args_rev
                        in
-        let closure_check =
+        let check_rax_for_closure =
         [ILineComment("check_rax_for_closure (err_CALL_NOT_CLOSURE)");
          IMov(Reg(R9), HexConst(closure_tag_mask));
          IAnd(Reg(RAX), Reg(R9));
@@ -1499,11 +1509,11 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) =
          IMov(Reg(RAX), compiled_func);
          ISub(Reg(RAX), HexConst(closure_tag)); (* now RAX is heap addr to closure *)
          IMov(Reg(RAX), RegOffset(0,RAX)); (* get the arity (machine int) *)
-         ICmp(Reg(RAX), Const(Int64.of_int f_num_args)); (* no temp reg, assume won't have that many args *)
+         ICmp(Reg(RAX), Const(Int64.of_int num_args)); (* no temp reg, assume won't have that many args *)
          IJne(Label("err_CALL_ARITY_ERR"));] in
-        let padded_comp_args = padding @ compiled_args in
+        let padded_comp_args = padding @ push_compiled_args in
         [IMov(Reg(RAX), compiled_func);]
-        @ closure_check
+        @ check_rax_for_closure
         @ check_closure_for_arity
         @ padded_comp_args
         @ [
@@ -1513,10 +1523,9 @@ and compile_cexpr (e : tag cexpr) (env : arg envt) =
           IMov(Reg(RAX), RegOffset(1*word_size,RAX)); (* get the code ptr (machine addr) *)
           ICall(Reg(RAX));
           (* Don't use temp register here because we assume the RHS will never be very big *)
-          IAdd(Reg(RSP), Const(Int64.of_int (word_size * (f_num_args_passed + 1))));
-          (* add 1 because we pushed the func value itself *)
+          IAdd(Reg(RSP), Const(Int64.of_int (word_size * num_pushes)));
           ]
-    | _ -> raise (InternalCompilerError "Invalid function application call type")
+    | _ -> raise (InternalCompilerError "(code gen) Unsupported function application call type")
     end
   | CImmExpr(expr) -> [IMov(Reg(RAX), (compile_imm expr env))]
   | CTuple(elems, _) -> 
@@ -1609,7 +1618,7 @@ let compile_prog ((anfed : tag aprogram), (env : arg envt)) : string =
           IInstrComment(IAnd(Reg(heap_reg), HexConst(0xFFFFFFFFFFFFFFF0L)), "by adding no more than 15 to it")
         ] in
       let num_prog_body_vars = (deepest_stack body env) in
-      let compiled_body = (compile_aexpr body env) in
+      let compiled_body = (compile_aexpr body 0 env) in
       let prelude =
         "section .text
 extern error
