@@ -6,6 +6,7 @@ open Pretty
 open Exprs
 open Phases
 open Errors
+open Anf
 
 let t name program input expected = name>::test_run ~args:[] ~std_input:input program name expected;;
 let ta name program input expected = name>::test_run_anf ~args:[] ~std_input:input program name expected;;
@@ -422,9 +423,6 @@ let tests_for_free_vars = [
 let free_vars_suite = "free_vars_suite">:::tests_for_free_vars
 
 let tests_for_fdl = [
-  t "ex_from_notes" "def foo(w, x, y, z):
-  (lambda(a): a + x + z)
-    foo(1, 2, 3, 4)(5)" "" "11";
 
   (* The following may or may not pass, but should
   terr "letrec_non_lam" "letrec a=(lambda(x): x*x), (b,c)=(1,2) in 4" "" "err";
@@ -435,5 +433,5 @@ let tests_for_fdl = [
 let fdl_suite = "fdl_suite">:::tests_for_fdl
 
 let () =
-  run_test_tt_main ("all_tests">:::[cobra_suite; diamondback_suite; free_vars_suite; fdl_suite; input_file_test_suite ()])
+  run_test_tt_main ("all_tests">:::[(*cobra_suite; diamondback_suite;*) free_vars_suite; fdl_suite; input_file_test_suite ()])
 ;;
