@@ -299,23 +299,6 @@ let compile_fun_postlude : instruction list =
     IRet;
   ]
 
-
-let rec update_env_for_closure (free_vars_with_idx : (int * string) list) (env : arg envt) : (arg envt) =
-  match env with
-  | [] -> []
-  | fst :: rest ->
-    let new_env_var = (update_env_var_for_closure fst free_vars_with_idx) in
-    new_env_var :: (update_env_for_closure free_vars_with_idx rest)
-and update_env_var_for_closure (env_var : string * arg) (free_vars_with_idx : (int * string) list) : string * arg =
-  match free_vars_with_idx with
-  | [] -> env_var
-  | (fvidx, fvname) :: rest ->
-    if fvname = fst env_var
-    then (fvname, Sized(QWORD_PTR, RegOffset(~-1 * (1 + fvidx) * word_size, RBP)))
-    else update_env_var_for_closure env_var rest
-;;
-
-
 let rec push_free_vars_from_closure (cur_idx : int) (num_free_vars : int): instruction list =
   if cur_idx >= (num_free_vars)
   then []
