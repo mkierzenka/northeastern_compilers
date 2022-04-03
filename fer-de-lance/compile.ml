@@ -284,7 +284,7 @@ let check_rax_for_tup_bigger (tup_address : arg) (err_lbl : string) : instructio
   ]
 
 
-let compile_fun_prelude (fun_name : string) (args : string list) (env : arg envt) (num_local_vars : int): instruction list =
+let compile_fun_prelude (fun_name : string) : instruction list =
   [
     ILabel(fun_name);
     IPush(Reg(RBP));
@@ -292,7 +292,7 @@ let compile_fun_prelude (fun_name : string) (args : string list) (env : arg envt
 
   ]
 
-let compile_fun_postlude (num_local_vars : int) : instruction list =
+let compile_fun_postlude : instruction list =
   [
     IMov(Reg(RSP), Reg(RBP));  (* Move stack to how it was at start of this function *)
     IPop(Reg(RBP));
@@ -657,12 +657,12 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (env : arg envt) =
                  ])
                 free_vars_list) in
     let local_vs_list = List.sort String.compare (local_vars (ACExpr(e))) in
-    let prelude = compile_fun_prelude closure_lbl params env num_body_vars in
+    let prelude = compile_fun_prelude closure_lbl in
     (* Trick, we know the env is a list and lookups will return 1st found, so just add the updated values to the front.
        This new env assumes we have pushed all the closed over values to the stack in order.*)
     let new_env = (List.mapi (fun idx fv -> (fv, RegOffset(~-1 * (1 + idx)*word_size, RBP))) free_vars_list) @ env in
     let compiled_body = compile_aexpr body num_free_vars new_env in
-    let postlude = compile_fun_postlude num_body_vars in
+    let postlude = compile_fun_postlude in
     let true_heap_size = 3 + num_free_vars in
     let reserved_heap_size = true_heap_size + (true_heap_size mod 2) in
     [IJmp(Label(closure_done_lbl))]
@@ -840,10 +840,10 @@ extern print
 extern cinput
 extern cequal
 global our_code_starts_here" in
-      let stack_setup = (compile_fun_prelude "our_code_starts_here" [] env num_prog_body_vars) in
+      let stack_setup = (compile_fun_prelude "our_code_starts_here") in
       let postlude =
       [ILabel("program_done");]
-      @ compile_fun_postlude num_prog_body_vars
+      @ compile_fun_postlude
       @ [ (* Error Labels *)
           ILabel("err_COMP_NOT_NUM");
           IMov(Reg(RDI), Const(err_COMP_NOT_NUM));
