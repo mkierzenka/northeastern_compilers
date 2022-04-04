@@ -45,6 +45,14 @@ let rec id_in_env (id : string) (env : env_entry envt) : bool =
       if id = k then true
       else id_in_env id tail
 
+(* Get Some(loc) if id is in the env, else None *)
+let rec maybe_loc_from_env (id : string) (env : env_entry envt) : sourcespan option =
+  match env with
+  | [] -> None
+  | (k, Id(loc)) :: tail ->
+      if id = k then Some(loc)
+      else maybe_loc_from_env id tail
+
 (* Add a list of unique args to an env as Vars *)
 let rec add_args_to_env (args : (string * sourcespan) list) (env : env_entry envt) : env_entry envt =
   (* fold direction doesn't matter since arg names are required to be unique *)
@@ -89,6 +97,21 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
         let new_errs = (check_duplicate_decl fname tail loc) @ tail_errs in
         let new_env = (fname, Id(loc)) :: tail_env in
         (new_env, new_errs)
+  and add_group_to_env_check_errs (decgrp : sourcespan decl list) (env : env_entry envt) : (env_entry envt * exn list) =
+  List.fold_left (
+    fun (env_acc, errs_acc) decl ->
+      match decl with
+      | DFun(name, _, _, loc) ->
+        let dup_exns = 
+          begin
+          match (maybe_loc_from_env name env_acc) with
+          | None -> []
+          | Some(existing_loc) -> [DuplicateFun(name, loc, existing_loc)]
+          end in
+        let fbody_exns = wf_D decl env_acc in
+        ((name, Id(loc)) :: env_acc, fbody_exns @ dup_exns @ errs_acc))
+    (env, [])
+    decgrp
   (* checks an expr to see if it's well formed *)
   and wf_E (e : sourcespan expr) (env : env_entry envt) : (exn list) =
     match e with
@@ -169,25 +192,17 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
   match p with
   | Program(decls, body, fake_loc) ->
       let init_env = [("cinput",Id(fake_loc)); ("cequal",Id(fake_loc))] in
-      (* gather all functions into the env *)
-      (* TODO- check for duplicates within each group (but not between groups!) *)
-      (* TODO- add back env checks for decls*)
-      let (env, init_errs) = List.fold_left (fun (env_acc, errs_acc) decgrp ->
-                                              let (grp_env, grp_errs) = setup_env decgrp env_acc in
-                                              (grp_env, grp_errs @ errs_acc))
-                                            (init_env, [])
-                                            decls in
       (* check decls *)
-      (* TODO- this is wrong env for well-formedness, should use the one from just that decl group not all the groups *)
-      (* fix by making wf_DGroup handle setup_env and wf_D for one decl group at a time, together *)
-      let decl_errs =
+      let (decls_env, decl_errs) =
         List.fold_left
-          (fun (acc : (exn list)) decgrp -> ((wf_DGroup decgrp env) @ acc))
-          []
+          (fun ((env_acc, exns_acc) : (env_entry envt * exn list)) decgrp ->
+            let (new_env, new_exns) = add_group_to_env_check_errs decgrp env_acc in
+            (new_env, new_exns @ exns_acc))
+          (init_env, [])
           decls in
       (* check the body *)
-      let body_errs = wf_E body env in
-      let all_errs = init_errs @ decl_errs @ body_errs in
+      let body_errs = wf_E body decls_env in
+      let all_errs = decl_errs @ body_errs in
       if all_errs = [] then
         Ok(p)
       else

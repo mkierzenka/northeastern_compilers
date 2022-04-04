@@ -577,6 +577,7 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (env : arg envt) =
          @ [IMov(Reg(RAX), const_false)]
 
          @ [ILabel(lbl_done)]
+      | CheckSize -> raise (NotYetImplemented "CheckSize not currently used in compilation")
      end
   | CLambda(params, body, tag) ->
     let arity = List.length params in
