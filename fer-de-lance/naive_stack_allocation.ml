@@ -50,7 +50,8 @@ let naive_stack_allocation (prog: tag aprogram) : tag aprogram * arg envt =
         let new_env = List.fold_left (fun accum_env cell -> cell :: accum_env) env args_with_idx in
         let self_name = sprintf "closure$%d" tag in
         let new_env_with_self = (self_name, RegOffset(2*word_size, RBP)) :: new_env in
-        help_aexpr body si new_env_with_self
+        let (env_with_body_slots, _) = help_aexpr body 1 new_env_with_self in
+        (env_with_body_slots, si)
   in
   match prog with
   | AProgram(body, _) ->

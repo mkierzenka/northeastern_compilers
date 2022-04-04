@@ -259,22 +259,22 @@ let rec push_free_vars_from_closure (cur_idx : int) (num_free_vars : int): instr
   else IPush(Sized(QWORD_PTR, RegOffset((3 + cur_idx) * word_size, RAX))) :: (push_free_vars_from_closure (cur_idx + 1) num_free_vars)
 ;;
 
-(* shift the RegOffset by "stack_idx_shift" SLOTS (ie. "stack_idx_shift * word_size" bytes) *)
+(* shift the RegOffset "stack_idx_shift" SLOTS down the stack (ie. "stack_idx_shift * word_size" bytes) *)
 let add_stack_offset (stack_idx_shift : int) (orig : arg) : arg =
   match orig with
-  | RegOffset(orig_offset, orig_reg) -> RegOffset(orig_offset + (stack_idx_shift * word_size), orig_reg)
+  | RegOffset(orig_offset, orig_reg) -> RegOffset(orig_offset - (stack_idx_shift * word_size), orig_reg)
   | _ -> raise (InternalCompilerError "Unexpected env entry for stack offset adjustment")
 ;;
-
 let rec compile_aexpr (e : tag aexpr) (stack_offset : int) (env : arg envt) : instruction list =
   match e with
   | ALet(id, bind, body, _) ->
     let compiled_bind = compile_cexpr bind stack_offset env in
-    let dest = add_stack_offset stack_offset (find env id) in
-    let compiled_body = compile_aexpr body stack_offset env in
+    let new_dest = add_stack_offset stack_offset (find env id) in
+    let new_env = (id, new_dest) :: env in
+    let compiled_body = compile_aexpr body stack_offset new_env in
     [ILineComment(sprintf "Let_%s" id)]
     @ compiled_bind
-    @ [IMov(dest, Reg(RAX))]
+    @ [IMov((find new_env id), Reg(RAX))]
     @ compiled_body
   | ACExpr(expr) -> (compile_cexpr expr stack_offset env)
   | ASeq(left, right, tag) ->
