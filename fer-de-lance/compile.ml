@@ -593,7 +593,6 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (env : arg envt) =
                  IMov(Sized(QWORD_PTR, RegOffset((3 + idx)*word_size, heap_reg)), Reg(scratch_reg));
                  ])
                 free_vars_list) in
-    let local_vs_list = List.sort String.compare (local_vars (ACExpr(e))) in
     let prelude = compile_fun_prelude closure_lbl in
     (* Trick, we know the env is a list and lookups will return 1st found, so just add the updated values to the front.
        This new env assumes we have pushed all the closed over values to the stack in order.*)
