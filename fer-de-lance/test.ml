@@ -418,6 +418,12 @@ let tests_for_free_vars = [
   tfvs "tfvs_letrec_flipped" "let rec f2=(lambda(x): x + y), f1 = (lambda(x): x * f2(a)) in f1(7)" ["y"; "a"];
   (* Note, can't write tests here with decls because in the real compiler
      those should have already been desugared into letrec *)
+   
+  tfvs "tfvs_ex_from_notes" "(let rec foo = (lambda(w, x, y, z): (let z = z, y = y, x = x, w = w in (lambda(a): ((a + x) + z)))) in (foo(1, 2, 3, 4))(5))" [];
+  
+  tfvs "tfvs_ex_from_notes2" "(lambda(w, x, y, z): (let z = z, y = y, x = x, w = w in (lambda(a): ((a + x) + z))))" [];
+
+  tfvs "tfvs_ex_from_notes3" "(lambda(a): ((a + x) + z))" ["x"; "z"];
 ]
 
 let free_vars_suite = "free_vars_suite">:::tests_for_free_vars
@@ -433,5 +439,5 @@ let tests_for_fdl = [
 let fdl_suite = "fdl_suite">:::tests_for_fdl
 
 let () =
-  run_test_tt_main ("all_tests">:::[(*cobra_suite; diamondback_suite;*) free_vars_suite; fdl_suite; input_file_test_suite ()])
+  run_test_tt_main ("all_tests">:::[cobra_suite; diamondback_suite; free_vars_suite; fdl_suite; input_file_test_suite ()])
 ;;
