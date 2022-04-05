@@ -140,9 +140,10 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
       | EId(id, loc) ->
           if id_in_env id env then []
           else [UnboundId(id, loc)]
-      | EApp(fname, args, _, loc) ->
+      | EApp(func, args, _, loc) ->
+        let func_errs = wf_E func env in
         let arg_errs = List.fold_left (fun errs arg -> errs @ (wf_E arg env)) [] args in
-        arg_errs
+        func_errs @ arg_errs
       | ELambda(args, body, loc) ->
         let args_extracted = bind_pairs args in
         let args_errs = check_dups args_extracted in
