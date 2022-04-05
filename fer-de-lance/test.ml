@@ -430,10 +430,14 @@ let free_vars_suite = "free_vars_suite">:::tests_for_free_vars
 
 let tests_for_fdl = [
 
-  (* The following may or may not pass, but should
-  terr "letrec_non_lam" "letrec a=(lambda(x): x*x), (b,c)=(1,2) in 4" "" "err";
+  (* The following may or may not pass, but should *)
+  terr "letrec_non_lam" "let rec a=(lambda(x): x*x), (b,c)=(1,2) in 4" "" "err";
   terr "call_num" "let f=7 in f()" "" "non-function";
-  terr "letrec_dups" "letrec a=(lambda(x): x*x), b=(lambda(x): 2*x), a=(lambda(x): 444) in 7" "" "duplicate";*)
+  terr "letrec_dups" "let rec a=(lambda(x): x*x), b=(lambda(x): 2*x), a=(lambda(x): 444) in 7" "" "duplicate";
+
+  t "decls_grouped_pass" "def f(x): if x > 0: g(x) else: x and def g(y): f(y - 2) f(5)" "" "-1";
+  terr "decls_ungrouped_fail" "def f(x): if x > 0: g(x) else: x     def g(y): f(y - 2) f(5)" "" "The function name g";
+  t "decls_ungrouped_pass" "def a(x): 3   def b(y): a(y) b(7)" "" "3"
 ]
 
 let fdl_suite = "fdl_suite">:::tests_for_fdl

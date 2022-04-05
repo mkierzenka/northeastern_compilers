@@ -98,7 +98,7 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
         let new_env = (fname, Id(loc)) :: tail_env in
         (new_env, new_errs)
   and add_group_to_env_check_errs (decgrp : sourcespan decl list) (env : env_entry envt) : (env_entry envt * exn list) =
-  List.fold_left (
+  let (env_with_group, dup_exns) = List.fold_left (
     fun (env_acc, errs_acc) decl ->
       match decl with
       | DFun(name, _, _, loc) ->
@@ -108,10 +108,12 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
           | None -> []
           | Some(existing_loc) -> [DuplicateFun(name, loc, existing_loc)]
           end in
-        let fbody_exns = wf_D decl env_acc in
-        ((name, Id(loc)) :: env_acc, fbody_exns @ dup_exns @ errs_acc))
+        ((name, Id(loc)) :: env_acc, dup_exns @ errs_acc)
+    )
     (env, [])
-    decgrp
+    decgrp in
+  let fbody_exns = wf_DGroup decgrp env_with_group in
+  (env_with_group, fbody_exns @ dup_exns)
   (* checks an expr to see if it's well formed *)
   and wf_E (e : sourcespan expr) (env : env_entry envt) : (exn list) =
     match e with
