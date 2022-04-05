@@ -345,8 +345,8 @@ let tests_from_diamondback = [
   terr "arity_err2b" "def f(x,y): (if isnum(12): 7 else: false)  f(1,3,4)"  "" "arity mismatch in call";
 
   (* Name resolution for vars vs. funcs (vars shadow function names) *)
-  terr "func_let_name" "def f(x,y): (if isnum(12): 7 else: false)  let f=99 in f(1,3)"  "" "tried to call non-closure value";
-  terr "func_let_name2" "def f(x,y): (if isnum(12): 7 else: false)  let f=99 in f(1,3,4)"  "" "tried to call non-closure value";
+  terr "func_let_name" "def f(x,y): (if isnum(12): 7 else: false)  let f=99 in f(1,3)"  "" "tried to call a non-closure value";
+  terr "func_let_name2" "def f(x,y): (if isnum(12): 7 else: false)  let f=99 in f(1,3,4)"  "" "tried to call a non-closure value";
   t "func_let_name3" "def f(x,y): (if isnum(12): 7 else: false)  let f=99 in add1(f)" ""  "100";
 
 
@@ -355,7 +355,7 @@ let tests_from_diamondback = [
   terr "unbound_fun_r" "f()"  "" ", is not in scope";
   terr "unbound_fun" "def f(): add1(4 * 2)  def g(): sub1(2 * 8)  if false: h() else: 9" ""  "is not in scope";
   terr "unbound_fun_in_decl" "def f(): add1(4 * 2)  def g(): h()  7"  "" "not in scope";
-  terr "unbound_fun_let" "def f(): add1(4 * 2)  def g(): sub1(2 * 8) let h=true in h()"  "" "Tried to call non-closure value";
+  terr "unbound_fun_let" "def f(): add1(4 * 2)  def g(): sub1(2 * 8) let h=true in h()"  "" "tried to call a non-closure value";
 
   (* UnboundId errors *)
   terr "unbound_id_l" "a"  "" "The identifier a, used at";
@@ -428,14 +428,12 @@ let tests_for_free_vars = [
 let free_vars_suite = "free_vars_suite">:::tests_for_free_vars
 
 let tests_for_fdl = [
-
-  (* The following may or may not pass, but should *)
   terr "letrec_non_lam" "let rec a=(lambda(x): x*x), (b,c)=(1,2) in 4" "" "err";
-  terr "call_num" "let f=7 in f()" "" "non-function";
+  terr "call_num" "let f=7 in f()" "" "non-closure";
   terr "letrec_dups" "let rec a=(lambda(x): x*x), b=(lambda(x): 2*x), a=(lambda(x): 444) in 7" "" "duplicate";
 
   t "decls_grouped_pass" "def f(x): if x > 0: g(x) else: x and def g(y): f(y - 2) f(5)" "" "-1";
-  terr "decls_ungrouped_fail" "def f(x): if x > 0: g(x) else: x     def g(y): f(y - 2) f(5)" "" "The function name g";
+  terr "decls_ungrouped_fail" "def f(x): if x > 0: g(x) else: x     def g(y): f(y - 2) f(5)" "" "The identifier g";
   t "decls_ungrouped_pass" "def a(x): 3   def b(y): a(y) b(7)" "" "3"
 ]
 
