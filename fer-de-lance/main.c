@@ -193,7 +193,7 @@ SNAKEVAL printStack(SNAKEVAL val, uint64_t* esp, uint64_t* ebp, int args) {
   printf("Num args: %d\n", args);
 
   uint64_t* origEsp = esp;
-  
+
   if (esp > ebp) {
     printf("Error: ESP and EBP are not properly oriented\n"); fflush(stdout);
   } else {

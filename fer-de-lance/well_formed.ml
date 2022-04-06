@@ -89,20 +89,12 @@ let dup_bind_exns (binds : sourcespan bind list) : exn list =
 let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
   (* Goes through the list of function decls and adds them all to our env.  We also
    * gather any errors along the way. *)
-  let rec setup_env (d : sourcespan decl list) (init_env : env_entry envt) : (env_entry envt) * (exn list) =
-    match d with
-    | [] -> (init_env, [])
-    | DFun(fname, args, body, loc) :: tail ->
-        let (tail_env, tail_errs) = (setup_env tail init_env) in
-        let new_errs = (check_duplicate_decl fname tail loc) @ tail_errs in
-        let new_env = (fname, Id(loc)) :: tail_env in
-        (new_env, new_errs)
-  and add_group_to_env_check_errs (decgrp : sourcespan decl list) (env : env_entry envt) : (env_entry envt * exn list) =
+  let rec add_group_to_env_check_errs (decgrp : sourcespan decl list) (env : env_entry envt) : (env_entry envt * exn list) =
   let (env_with_group, dup_exns) = List.fold_left (
     fun (env_acc, errs_acc) decl ->
       match decl with
       | DFun(name, _, _, loc) ->
-        let dup_exns = 
+        let dup_exns =
           begin
           match (maybe_loc_from_env name env_acc) with
           | None -> []

@@ -8,21 +8,21 @@ open Phases
 open Errors
 open Anf
 
-let t name program input expected = name>::test_run ~args:[] ~std_input:input program name expected;;
-let ta name program input expected = name>::test_run_anf ~args:[] ~std_input:input program name expected;;
-let tgc name heap_size program input expected = name>::test_run ~args:[string_of_int heap_size] ~std_input:input program name expected;;
-let tvg name program input expected = name>::test_run_valgrind ~args:[] ~std_input:input program name expected;;
-let tvgc name heap_size program input expected = name>::test_run_valgrind ~args:[string_of_int heap_size] ~std_input:input program name expected;;
-let terr name program input expected = name>::test_err ~args:[] ~std_input:input program name expected;;
-let tgcerr name heap_size program input expected = name>::test_err ~args:[string_of_int heap_size] ~std_input:input program name expected;;
+let t name program input expected = name>::test_run ~args:[] ~std_input:input program name expected
+let ta name program input expected = name>::test_run_anf ~args:[] ~std_input:input program name expected
+let tgc name heap_size program input expected = name>::test_run ~args:[string_of_int heap_size] ~std_input:input program name expected
+let tvg name program input expected = name>::test_run_valgrind ~args:[] ~std_input:input program name expected
+let tvgc name heap_size program input expected = name>::test_run_valgrind ~args:[string_of_int heap_size] ~std_input:input program name expected
+let terr name program input expected = name>::test_err ~args:[] ~std_input:input program name expected
+let tgcerr name heap_size program input expected = name>::test_err ~args:[string_of_int heap_size] ~std_input:input program name expected
 let tanf name program input expected = name>::fun _ ->
-  assert_equal expected (anf (tag program)) ~printer:string_of_aprogram;;
+  assert_equal expected (anf (tag program)) ~printer:string_of_aprogram
 
 let tparse name program expected = name>::fun _ ->
-  assert_equal (untagP expected) (untagP (parse_string name program)) ~printer:string_of_program;;
+  assert_equal (untagP expected) (untagP (parse_string name program)) ~printer:string_of_program
 
 let teq name actual expected = name>::fun _ ->
-  assert_equal expected actual ~printer:(fun s -> s);;
+  assert_equal expected actual ~printer:(fun s -> s)
 
 let tfvs name program expected = name>::
   (fun _ ->
@@ -34,8 +34,6 @@ let tfvs name program expected = name>::
       let c = Stdlib.compare in
       let str_list_print strs = "[" ^ (ExtString.String.join ", " strs) ^ "]" in
       assert_equal (List.sort c expected) (List.sort c vars) ~printer:str_list_print)
-;;
-
 
 (* ### Regression test suite (from Cobra) ### *)
 let max_snake_num = (Int64.div Int64.max_int 2L)
@@ -417,9 +415,9 @@ let tests_for_free_vars = [
   tfvs "tfvs_letrec_flipped" "let rec f2=(lambda(x): x + y), f1 = (lambda(x): x * f2(a)) in f1(7)" ["y"; "a"];
   (* Note, can't write tests here with decls because in the real compiler
      those should have already been desugared into letrec *)
-   
+
   tfvs "tfvs_ex_from_notes" "(let rec foo = (lambda(w, x, y, z): (let z = z, y = y, x = x, w = w in (lambda(a): ((a + x) + z)))) in (foo(1, 2, 3, 4))(5))" [];
-  
+
   tfvs "tfvs_ex_from_notes2" "(lambda(w, x, y, z): (let z = z, y = y, x = x, w = w in (lambda(a): ((a + x) + z))))" [];
 
   tfvs "tfvs_ex_from_notes3" "(lambda(a): ((a + x) + z))" ["x"; "z"];
@@ -444,4 +442,3 @@ let fdl_suite = "fdl_suite">:::tests_for_fdl
 
 let () =
   run_test_tt_main ("all_tests">:::[cobra_suite; diamondback_suite; free_vars_suite; fdl_suite; input_file_test_suite ()])
-;;

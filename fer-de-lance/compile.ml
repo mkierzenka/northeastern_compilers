@@ -73,7 +73,7 @@ let rec replicate x i =
   if i = 0 then []
   else x :: (replicate x (i - 1))
 
-(* Returns the stack-index (in words) of the deepest stack index used for any 
+(* Returns the stack-index (in words) of the deepest stack index used for any
    of the variables in this expression *)
 let rec deepest_stack e env =
   let rec helpA e =
@@ -107,7 +107,6 @@ let rec deepest_stack e env =
     | RegOffset(bytes, RBP) -> bytes / (-1 * word_size) (* negative because stack direction *)
     | _ -> 0
   in max (helpA e) 0 (* if only parameters are used, helpA might return a negative value *)
-;;
 
 (* Find all free variables *)
 let free_vars (e: 'a aexpr) : string list =
@@ -152,9 +151,6 @@ let free_vars (e: 'a aexpr) : string list =
     | ImmNil _ -> StringSet.empty
   in
   StringSet.elements (help_aexpr e StringSet.empty)
-;;
-
-
 
 (* Compiled Type Checking *)
 let check_rax_for_num (err_lbl : string) : instruction list =
@@ -252,14 +248,13 @@ let rec push_free_vars_from_closure (cur_idx : int) (num_free_vars : int): instr
   if cur_idx >= (num_free_vars)
   then []
   else IPush(Sized(QWORD_PTR, RegOffset((3 + cur_idx) * word_size, RAX))) :: (push_free_vars_from_closure (cur_idx + 1) num_free_vars)
-;;
 
 (* shift the RegOffset "stack_idx_shift" SLOTS down the stack (ie. "stack_idx_shift * word_size" bytes) *)
 let add_stack_offset (stack_idx_shift : int) (orig : arg) : arg =
   match orig with
   | RegOffset(orig_offset, orig_reg) -> RegOffset(orig_offset - (stack_idx_shift * word_size), orig_reg)
   | _ -> raise (InternalCompilerError "Unexpected env entry for stack offset adjustment")
-;;
+
 let rec compile_aexpr (e : tag aexpr) (stack_offset : int) (env : arg envt) : instruction list =
   match e with
   | ALet(id, bind, body, _) ->
@@ -368,7 +363,7 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (env : arg envt) =
      @ (compile_aexpr els stack_offset env)
      @ (check_rax_for_bool "err_LOGIC_NOT_BOOL")
      @ [ILabel(lbl_done)]
-  | CPrim1(op, body, tag) -> 
+  | CPrim1(op, body, tag) ->
     let body_imm = compile_imm body env in
      begin match op with
        | Add1 ->
@@ -700,7 +695,7 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (env : arg envt) =
     | _ -> raise (InternalCompilerError "(code gen) Unsupported function application call type")
     end
   | CImmExpr(expr) -> [IMov(Reg(RAX), (compile_imm expr env))]
-  | CTuple(elems, _) -> 
+  | CTuple(elems, _) ->
       let tup_size = List.length elems in
       let need_padding = tup_size mod 2 == 1 in
       let padding_val = HexConst(0xF0F0F0F0L) in
@@ -908,7 +903,6 @@ global our_code_starts_here" in
 
 let run_if should_run f =
   if should_run then f else no_op_phase
-;;
 
 (* We chose to put the desugar phase after the well_formed check to make sure we spit
  * out the correct error location for ill-formed programs.  We choose to desugar before
@@ -935,4 +929,3 @@ let compile_to_string (prog : sourcespan program pipeline) : string pipeline =
   |> (add_phase anfed (fun p -> atag (anf p)))
   |> (add_phase locate_bindings naive_stack_allocation)
   |> (add_phase result compile_prog)
-;;
