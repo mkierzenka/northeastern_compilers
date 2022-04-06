@@ -48,16 +48,11 @@ let err_TUP_IDX_NOT_NUM  = 19L
 let first_six_args_registers = [RDI; RSI; RDX; RCX; R8; R9]
 let heap_reg = R15
 let scratch_reg = R11
+let scratch_reg_2 = R12
 
 module StringSet = Set.Make(String)
 
 (* You may find some of these helpers useful *)
-
-let rec find ls x =
-  match ls with
-  | [] -> raise (InternalCompilerError (sprintf "Name %s not found" x))
-  | (y,v)::rest ->
-     if y = x then v else find rest x
 
 let count_vars e =
   let rec helpA e =
@@ -293,8 +288,34 @@ let rec compile_aexpr (e : tag aexpr) (stack_offset : int) (env : arg envt) : in
                          (compile_cexpr bound_body stack_offset env) @ [IMov(dest, Reg(RAX))] @ cb_acc)
                        []
                        bindings in
+    let bound_names = List.map (fun (name, _) -> name) bindings in
+    let second_pass =
+      let reducer acc (name, body) =
+        let abody = ACExpr(body) in
+        let fvs = List.sort String.compare (free_vars abody) in
+        let locs = List.mapi (fun idx name -> (idx, name)) fvs in
+        let fv_lambdas = List.filter (fun (idx, name) -> find_one bound_names name) locs in
+        let this_lambda_loc = find env name in
+        acc @ List.fold_left (
+          fun code_acc (lambda_fv_offset, lambda) ->
+          let lambda_stack_loc = find env lambda in
+          code_acc @ [
+            IMov(Reg(scratch_reg_2), lambda_stack_loc); (* Now the free lambda ptr is in scratch reg 2 *)
+            IMov(RegOffset((3 + lambda_fv_offset) * word_size, scratch_reg), Reg(scratch_reg_2)); (* Offset of 3 because of closure structure *)
+          ]
+        ) [
+            (* Move lambda location into scratch reg and untag pointer *)
+            IMov(Reg(scratch_reg), this_lambda_loc);
+            ISub(Reg(scratch_reg), HexConst(closure_tag));
+        ] fv_lambdas in
+      List.fold_left reducer [] bindings in
+
     [ILineComment(sprintf "LetRec$%d" tag)]
     @ compiled_bindings
+    @ [ILineComment(sprintf "LetRec$%d patching with ptrs to mutually rec closures" tag)]
+    @ second_pass
+
+
     @ (compile_aexpr body stack_offset env)
 and compile_cexpr (e : tag cexpr) (stack_offset : int) (env : arg envt) =
   match e with

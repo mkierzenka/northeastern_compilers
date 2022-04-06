@@ -210,7 +210,7 @@ let decl_to_binding (decl : sourcespan decl) : sourcespan binding =
     (bnd, expr, floc)
 
 (* Desugar single decl group into a let-rec expression, wrapping the body *)
-let desugar_decl_group (body : sourcespan expr) (decls : sourcespan decl list) : sourcespan expr =
+let desugar_decl_group (decls : sourcespan decl list) (body : sourcespan expr) : sourcespan expr =
   match decls with
   | [] -> body
   | DFun(fname, fargs, fbody, floc)::rest ->
@@ -221,8 +221,8 @@ let desugar_decl_group (body : sourcespan expr) (decls : sourcespan decl list) :
 (* Desugar declaration groups into explicit let-rec bindings *)
 let desugar_decl_groups_to_binds (p : sourcespan program) : sourcespan program =
   match p with
-  | Program(decls, body, loc) ->
-      let new_body = List.fold_left desugar_decl_group body decls in
+  | Program(decl_groups, body, loc) ->
+      let new_body = List.fold_right desugar_decl_group decl_groups body in
       (* don't touch the body otherwise, just looking at decls *)
       Program([], new_body, loc)
 

@@ -33,7 +33,7 @@ let tfvs name program expected = name>::
       let vars = free_vars body in
       let c = Stdlib.compare in
       let str_list_print strs = "[" ^ (ExtString.String.join ", " strs) ^ "]" in
-      assert_equal (List.sort c vars) (List.sort c expected) ~printer:str_list_print)
+      assert_equal (List.sort c expected) (List.sort c vars) ~printer:str_list_print)
 ;;
 
 
@@ -308,7 +308,7 @@ let tests_from_diamondback = [
   t "fname_bind_in_body" "def fun(a,b,c): let fun=4 in add1(fun) \n fun(9,10,11)"  "" "5";
   t "func_split_env" "def f(x,y): let z = x * y in sub1(z)   let z = 9 in f(z, add1(z))" ""  "89";
   t "func_from_func" "def f(x,y): let z = x * y in z + z  and def g(x): if isbool(x): 0 else: f(x,x) g(4)"  "" "32";
-  terr "func_from_func_dif_grp" "def f(x,y): let z = x * y in z + z  def g(x): if isbool(x): 0 else: f(x,x) g(4)"  "" "Name f not found";
+  terr "func_from_nonpreceding_func_dif_grp" "def g(x): if isbool(x): 0 else: f(x,x)  def f(x,y): let z = x * y in z + z g(4)"  "" "The identifier f";
   t "func_from_func_backwards" "def f(): g()  and def g(): sub1(2 * 8)  f()"  "" "15";
   terr "func_from_func_backwards_dif_grp" "def f(): g()  def g(): sub1(2 * 8)  f()"  "" "The identifier g";
   t "max_tail_1" "def max(x,y): if x > y: x else: max(y,x) max(1,9)"  "" "9";
@@ -432,9 +432,12 @@ let tests_for_fdl = [
   terr "call_num" "let f=7 in f()" "" "non-closure";
   terr "letrec_dups" "let rec a=(lambda(x): x*x), b=(lambda(x): 2*x), a=(lambda(x): 444) in 7" "" "duplicate";
 
-  t "decls_grouped_pass" "def f(x): if x > 0: g(x) else: x and def g(y): f(y - 2) f(5)" "" "-1";
-  terr "decls_ungrouped_fail" "def f(x): if x > 0: g(x) else: x     def g(y): f(y - 2) f(5)" "" "The identifier g";
-  t "decls_ungrouped_pass" "def a(x): 3   def b(y): a(y) b(7)" "" "3"
+  t "decls_grouped_pass" "def f1(x): if x > 0: g1(x) else: x and def g1(y): f1(y - 2) f1(5)" "" "-1";
+  terr "decls_ungrouped_fail" "def f2(x): if x > 0: g2(x) else: x     def g2(y): f2(y - 2) f2(5)" "" "The identifier g2";
+  t "decls_ungrouped_pass" "def a3(x): 3   def b3(y): a3(y) b3(7)" "" "3";
+
+  tfvs "free_vars_max_tail_1" "(let rec max = (lambda(x, y): (let y = y, x = x in (if (x > y): x else: (max(y, x))))) in (max(1, 9)))" [];
+  tfvs "free_vars_max_tail_1_inner" "(lambda(x, y): (let y = y, x = x in (if (x > y): x else: (max(y, x)))))" ["max"];
 ]
 
 let fdl_suite = "fdl_suite">:::tests_for_fdl
