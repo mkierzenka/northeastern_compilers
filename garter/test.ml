@@ -6,6 +6,7 @@ open Pretty
 open Exprs
 open Phases
 open Errors
+open Anf
 
 let t name program input expected = name>::test_run ~args:[] ~std_input:input program name expected;;
 let ta name program input expected = name>::test_run_anf ~args:[] ~std_input:input program name expected;;
