@@ -5,7 +5,7 @@ open Exprs
 (* open Assembly *)
 open Errors
 
-type 'a anf_bind =
+(* type 'a anf_bind =
   | BSeq of 'a cexpr
   | BLet of string * 'a cexpr
   | BLetRec of (string * 'a cexpr) list
@@ -171,11 +171,11 @@ let anf (p : tag program) : unit aprogram =
         | BLetRec(names) -> ALetRec(names, body, ()))
       ans_setup (ACExpr ans)
   in
-  helpP p
+  helpP p *)
 
 (* Old *)
 
-(* (* This data type lets us keep track of how a binding was introduced.
+(* This data type lets us keep track of how a binding was introduced.
    We'll use it to discard unnecessary Seq bindings, and to distinguish 
    letrec from let. Essentially, it accumulates just enough information 
    in our binding list to tell us how to reconstruct an appropriate aexpr. *)
@@ -355,4 +355,4 @@ let anf (p : tag program) : unit aprogram =
         | BLetRec(names) -> ALetRec(names, body, ()))
       ans_setup (ACExpr ans)
   in
-  helpP p *)
+  helpP p

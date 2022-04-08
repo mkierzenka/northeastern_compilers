@@ -850,18 +850,28 @@ and compile_imm e (env : arg name_envt) : arg =
   | ImmId(x, _) -> (find env x)
   | ImmNil(_) -> const_nil
 
+
 (* IMPLEMENT THIS FROM YOUR PREVIOUS ASSIGNMENT *)
 (* Additionally, you are provided an initial environment of values that you may want to
    assume should take up the first few stack slots.  See the compiliation of Programs
    below for one way to use this ability... *)
-and compile_fun (name : string) (params : string list) (body : tag aexpr) (initial_env : arg name_envt) (free_vars_list : string list) (num_free_vars : int) =
-    (* TODO: fix env signature stuff *)
-    let num_body_vars = (deepest_stack body initial_env) in (* TODO: take out deepest_stack *)
+and compile_fun (name : string) (params : string list) (body : tag aexpr) (env : arg name_envt name_envt) (free_vars_list : string list) (num_free_vars : int) =
+    let deepest_offset (sub_env : arg name_envt) : int =
+      let rec helper (sub_env : arg name_envt) (deepest_so_far : int) : int =
+        match sub_env with
+        | [] -> deepest_so_far
+        | (_, RegOffset(bytes, RBP))::env_tail ->
+            helper env_tail ((min deepest_so_far bytes) / (~-1 * word_size))
+        | _ -> raise (InternalCompilerError "Unexpected offset for deepest_offset") in
+      helper sub_env 0 in
+    (* TODO: fix remaining env signature stuff (especially in the compile_*exprs); add free vars to envs in Naive_stack_allocation *)
+    let sub_env = find env name in
+    let num_body_vars = (deepest_offset sub_env) in (* TODO: take out deepest_stack *)
     let prelude = compile_fun_prelude name in
     (* Trick, we know the env is a list and lookups will return 1st found, so just add the updated values to the front.
        This new env assumes we have pushed all the closed over values to the stack in order.*)
-    let new_env = (List.mapi (fun idx fv -> (fv, RegOffset(~-1 * (1 + idx) * word_size, RBP))) free_vars_list) @ initial_env in
-    let compiled_body = compile_aexpr body num_free_vars new_env in
+    (* let new_env = (List.mapi (fun idx fv -> (fv, RegOffset(~-1 * (1 + idx) * word_size, RBP))) free_vars_list) @ env in *)
+    let compiled_body = compile_aexpr body num_free_vars env in
     let postlude = compile_fun_postlude in
     prelude
     @ [IMov(Reg(RAX), RegOffset(2 * word_size, RBP))]
@@ -941,7 +951,7 @@ global ?our_code_starts_here" in
   | AProgram(body, _) ->
   (* $heap and $size are mock parameter names, just so that compile_fun knows our_code_starts_here takes in 2 parameters *)
     (*** TODO: fix function signature inconsistency (arg name_envt vs arg name_envt name_envt). Currently has `[] [] 0` so it compiles ***)
-     let comp_main (* (prologue, comp_main, epilogue) *) = compile_fun "?our_code_starts_here" ["$heap"; "$size"] body [] [] 0 in
+     let comp_main (* (prologue, comp_main, epilogue) *) = compile_fun "?our_code_starts_here" ["$heap"; "$size"] body env [] 0 in
      let heap_start =
        [
          ILineComment("heap start");
