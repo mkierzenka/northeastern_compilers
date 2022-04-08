@@ -67,8 +67,6 @@ let heap_reg = R15
 let scratch_reg = R11
 let scratch_reg_2 = R12
 
-type 'a tag_envt  = (tag * 'a) list (* TODO: consider moving to Util *)
-
 let print_env env how =
   debug_printf "Env is\n";
   List.iter (fun (id, bind) -> debug_printf "  %s -> %s\n" id (how bind)) env;;
@@ -851,7 +849,7 @@ and compile_fun (name : string) (params : string list) (body : tag aexpr) (env :
         let min_addr_rest = min_slot_addr rest in
         if addr < min_addr_rest then addr else min_addr_rest
       | [] -> 0 in
-    (* TODO: fix remaining env signature stuff (especially in the compile_*exprs); add free vars to envs in Naive_stack_allocation *)
+    (* TODO: add free vars to envs in Naive_stack_allocation *)
     let sub_env = find env name in
     let prelude = compile_fun_prelude name in
     (* Trick, we know the env is a list and lookups will return 1st found, so just add the updated values to the front.
@@ -895,7 +893,6 @@ extern ?print
 extern ?print_stack
 extern ?equal
 extern ?try_gc
-extern ?naive_print_heap
 extern ?HEAP
 extern ?HEAP_END
 extern ?set_stack_bottom
@@ -942,7 +939,6 @@ global ?our_code_starts_here" in
   match anfed with
   | AProgram(body, _) ->
   (* $heap and $size are mock parameter names, just so that compile_fun knows our_code_starts_here takes in 2 parameters *)
-    (*** TODO: fix function signature inconsistency (arg name_envt vs arg name_envt name_envt). Currently has `[] [] 0` so it compiles ***)
      let comp_main (* (prologue, comp_main, epilogue) *) = compile_fun "?our_code_starts_here" ["$heap"; "$size"] body env [] 0 in
      let heap_start =
        [

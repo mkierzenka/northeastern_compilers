@@ -52,7 +52,7 @@ and 'a expr =
   | EPrim1 of prim1 * 'a expr * 'a
   | EPrim2 of prim2 * 'a expr * 'a expr * 'a
   | EIf of 'a expr * 'a expr * 'a expr * 'a
-  | EScIf of 'a expr * 'a expr * 'a expr * 'a (* TODO: add various ScIf cases into other modules where missing *)
+  | EScIf of 'a expr * 'a expr * 'a expr * 'a
   | ENumber of int64 * 'a
   | EBool of bool * 'a
   | ENil of 'a

@@ -261,10 +261,10 @@ void error(uint64_t code, SNAKEVAL val) {
     fprintf(stderr, "Error: tuple-set index not numeric\n");
     break;
   case ERR_BAD_INPUT:
-    fprintf(stderr, "Error: bad input, input must be a number");
+    fprintf(stderr, "Error: bad input, input must be a number\n");
     break;
   default:
-    fprintf(stderr, "Error: Unknown error code: %ld, val: ", code); printHelp(stderr, val);
+    fprintf(stderr, "Error: Unknown error code: %ld, val: \n", code); printHelp(stderr, val);
   }
   fprintf(stderr, "\n%p ==> ", (uint64_t*)val);
   printHelp(stderr, val);

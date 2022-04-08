@@ -7,10 +7,18 @@ open Errors
 
 module StringSet = Set.Make(String)
 
-let prim_bindings = [] (* TODO: consider moving to Well_formed *)
+let prim_bindings = []
+
+let native_fun_bindings = []
+
+(* you can add any functions or data defined by the runtime here for future use *)
+let initial_val_env = []
+
+let initial_fun_env = prim_bindings @ native_fun_bindings
 
 (* type 'a envt = (string * 'a) list *)
 type 'a name_envt = (string * 'a) list
+type 'a tag_envt  = (tag * 'a) list
 
 let rec find ls x =
   match ls with

@@ -78,8 +78,16 @@ let desugar (p : sourcespan program) : sourcespan program =
     | ENil(t, tag) -> ENil(t, tag)
     | EPrim1(op, e, tag) ->
        EPrim1(op, helpE e, tag)
-    | EPrim2(op, e1, e2, tag) ->
-       EPrim2(op, helpE e1, helpE e2, tag)
+    | EPrim2(op, lhs, rhs, tag) -> 
+       let lhs_untagged = helpE lhs in
+       let rhs_untagged = helpE rhs in
+       begin match op with
+        (* (e1 && e2) -> (if !e1: false else: e2) *)
+        | And -> EScIf(EPrim1(Not, lhs_untagged, tag), EBool(false, tag), rhs_untagged, tag)
+        (* (e1 || e2) -> (if e1: true else: e2) *)
+        | Or -> EScIf(lhs_untagged, EBool(true, tag), rhs_untagged, tag)
+        | _ -> EPrim2(op, lhs_untagged, rhs_untagged, tag)
+        end
     | ELet(binds, body, tag) ->
        let newbinds = (List.map helpBE binds) in
        List.fold_right (fun binds body -> ELet(binds, body, tag)) newbinds (helpE body)
@@ -89,6 +97,7 @@ let desugar (p : sourcespan program) : sourcespan program =
        ELetRec(newbinds, helpE body, tag)
     | EIf(cond, thn, els, tag) ->
        EIf(helpE cond, helpE thn, helpE els, tag)
+    | EScIf _ -> raise (InternalCompilerError "EScIf is not in the egg-eater syntax")
     | EApp(name, args, native, tag) ->
        EApp(helpE name, List.map helpE args, native, tag)
     | ELambda(binds, body, tag) ->
