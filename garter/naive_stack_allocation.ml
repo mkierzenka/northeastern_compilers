@@ -8,9 +8,6 @@ open Util
 
 (* ASSUMES that the program has been alpha-renamed and all names are unique *)
 let naive_stack_allocation (prog: tag aprogram) : tag aprogram * arg name_envt name_envt =
-  let add_var_to_env (name : string) (value : arg) (env_name : string) (env : arg name_envt name_envt) : arg name_envt name_envt =
-    let sub_env = find env env_name in
-    (env_name, ((name, value)::sub_env))::env in
   let rec help_aexpr (body : tag aexpr) (si : int) (curr_env_name : string) (env : arg name_envt name_envt) : arg name_envt name_envt * int =
       match body with
     | ASeq(cexp, aexp, _) ->
@@ -60,5 +57,5 @@ let naive_stack_allocation (prog: tag aprogram) : tag aprogram * arg name_envt n
   in
   match prog with
   | AProgram(aexp, tag) ->
-      let (out, _) = help_aexpr aexp 1 "our_code_starts_here" [("our_code_starts_here", [])] in
+      let (out, _) = help_aexpr aexp 1 "?our_code_starts_here" [("?our_code_starts_here", [])] in
         (prog, out)

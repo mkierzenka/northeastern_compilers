@@ -2,7 +2,7 @@ open Printf
 (* open Pretty
 open Phases *)
 open Exprs
-(* open Assembly *)
+open Assembly
 open Errors
 
 module StringSet = Set.Make(String)
@@ -35,3 +35,7 @@ let rec find_opt (env : 'a name_envt) (elt: string) : 'a option =
   | (x, v) :: rst -> if x = elt then Some(v) else find_opt rst elt
 
 let dummy_span = (Lexing.dummy_pos, Lexing.dummy_pos)
+
+let add_var_to_env (name : string) (value : arg) (env_name : string) (env : arg name_envt name_envt) : arg name_envt name_envt =
+  let sub_env = find env env_name in
+  (env_name, ((name, value)::sub_env))::env

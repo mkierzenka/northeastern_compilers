@@ -11,47 +11,24 @@ open Anf
 open Naive_stack_allocation
 open Util
 
-(* TODO: replace uses of this *)
-let rec deepest_stack e env =
-  let rec helpA e =
-    match e with
-    | ALet(name, bind, body, _) -> List.fold_left max 0 [name_to_offset name; helpC bind; helpA body]
-    | ALetRec(binds, body, _) -> List.fold_left max (helpA body) (List.map (fun (name, bind) -> (max (helpC bind) (name_to_offset name))) binds)
-    | ASeq(first, rest, _) -> max (helpC first) (helpA rest)
-    | ACExpr e -> helpC e
-  and helpC e =
-    match e with
-    | CIf(c, t, f, _) -> List.fold_left max 0 [helpI c; helpA t; helpA f]
-    | CScIf(c, t, f, _) -> List.fold_left max 0 [helpI c; helpA t; helpA f]
-    | CPrim1(_, i, _) -> helpI i
-    | CPrim2(_, i1, i2, _) -> max (helpI i1) (helpI i2)
-    | CApp(_, args, _, _) -> List.fold_left max 0 (List.map helpI args)
-    | CTuple(vals, _) -> List.fold_left max 0 (List.map helpI vals)
-    | CGetItem(t, _, _) -> helpI t
-    | CSetItem(t, _, v, _) -> max (helpI t) (helpI v)
-    | CLambda(args, body, _) ->
-      let new_env = (List.mapi (fun i a -> (a, RegOffset(word_size * (i + 3), RBP))) args) @ env in
-      deepest_stack body new_env
-    | CImmExpr i -> helpI i
-  and helpI i =
-    match i with
-    | ImmNil _ -> 0
-    | ImmNum _ -> 0
-    | ImmBool _ -> 0
-    | ImmId(name, _) -> name_to_offset name
-  and name_to_offset name =
-    match (find env name) with
-    | RegOffset(bytes, RBP) -> bytes / (-1 * word_size) (* negative because stack direction *)
-    | _ -> 0
-  in max (helpA e) 0 (* if only parameters are used, helpA might return a negative value *)
-
-type 'a tag_envt  = (tag * 'a) list (* TODO: consider moving to Util *)
-
-
-let print_env env how =
-  debug_printf "Env is\n";
-  List.iter (fun (id, bind) -> debug_printf "  %s -> %s\n" id (how bind)) env;;
-
+let err_comp_not_num_lbl     = "?err_comp_not_num"
+let err_arith_not_num_lbl    = "?err_arith_not_num"
+let err_logic_not_bool_lbl   = "?err_logic_not_bool"
+let err_if_not_bool_lbl      = "?err_if_not_bool"
+let err_overflow_lbl         = "?err_overflow"
+let err_get_not_tuple_lbl    = "?err_get_not_tuple"
+let err_get_low_index_lbl    = "?err_get_low_index"
+let err_get_high_index_lbl   = "?err_get_high_index"
+let err_nil_deref_lbl        = "?err_nil_deref"
+let err_out_of_memory_lbl    = "?err_out_of_memory"
+let err_set_not_tuple_lbl    = "?err_set_not_tuple"
+let err_set_low_index_lbl    = "?err_set_low_index"
+let err_set_high_index_lbl   = "?err_set_high_index"
+let err_call_not_closure_lbl = "?err_call_not_closure"
+let err_call_arity_err_lbl   = "?err_call_arity_err"
+let err_get_not_num_lbl      = "?err_get_not_num"
+let err_set_not_num_lbl      = "?err_set_not_num"
+let err_bad_input_lbl        = "?err_bad_input"
 
 let const_true       = HexConst(0xFFFFFFFFFFFFFFFFL)
 let const_false      = HexConst(0x7FFFFFFFFFFFFFFFL)
@@ -81,11 +58,20 @@ let err_SET_LOW_INDEX    = 12L
 let err_SET_HIGH_INDEX   = 13L
 let err_CALL_NOT_CLOSURE = 14L
 let err_CALL_ARITY_ERR   = 15L
+let err_GET_NOT_NUM      = 16L
+let err_SET_NOT_NUM      = 17L
+let err_BAD_INPUT        = 18L
 
 let first_six_args_registers = [RDI; RSI; RDX; RCX; R8; R9]
 let heap_reg = R15
 let scratch_reg = R11
 let scratch_reg_2 = R12
+
+type 'a tag_envt  = (tag * 'a) list (* TODO: consider moving to Util *)
+
+let print_env env how =
+  debug_printf "Env is\n";
+  List.iter (fun (id, bind) -> debug_printf "  %s -> %s\n" id (how bind)) env;;
 
 let count_vars e =
   let rec helpA e =
@@ -271,7 +257,7 @@ let check_rax_for_bool (err_lbl : string) : instruction list =
    IJnz(Label(err_lbl));
   ]
 
-let check_for_overflow = [IJo(Label("err_OVERFLOW"))]
+let check_for_overflow = [IJo(Label(err_overflow_lbl))]
 
 
 let check_rax_for_tup (err_lbl : string) : instruction list =
@@ -348,23 +334,22 @@ let add_stack_offset (stack_idx_shift : int) (orig : arg) : arg =
   | RegOffset(orig_offset, orig_reg) -> RegOffset(orig_offset - (stack_idx_shift * word_size), orig_reg)
   | _ -> raise (InternalCompilerError "Unexpected env entry for stack offset adjustment")
 
-let rec compile_aexpr (e : tag aexpr) (stack_offset : int) (env : arg name_envt) : instruction list =
+let rec compile_aexpr (e : tag aexpr) (stack_offset : int) (curr_env_name : string) (env : arg name_envt name_envt) : instruction list =
+  let sub_env = (find env curr_env_name) in
   match e with
   | ALet(id, bind, body, _) ->
-    let compiled_bind = compile_cexpr bind stack_offset env in
-    let new_dest = add_stack_offset stack_offset (find env id) in
-    let new_env = (id, new_dest) :: env in
-    let compiled_body = compile_aexpr body stack_offset new_env in
+    let compiled_bind = compile_cexpr bind stack_offset curr_env_name env in
+    let compiled_body = compile_aexpr body stack_offset curr_env_name env in
     [ILineComment(sprintf "Let_%s" id)]
     @ compiled_bind
-    @ [IMov((find new_env id), Reg(RAX))]
+    @ [IMov((find sub_env id), Reg(RAX))]
     @ compiled_body
-  | ACExpr(expr) -> (compile_cexpr expr stack_offset env)
+  | ACExpr(expr) -> (compile_cexpr expr stack_offset curr_env_name env)
   | ASeq(left, right, tag) ->
     let seq_left_txt = sprintf "seq_left_%d" tag in
     let seq_right_txt = sprintf "seq_right_%d" tag in
-    let compiled_left = (compile_cexpr left stack_offset env) in
-    let compiled_right = (compile_aexpr right stack_offset env) in
+    let compiled_left = (compile_cexpr left stack_offset curr_env_name env) in
+    let compiled_right = (compile_aexpr right stack_offset curr_env_name env) in
     [ILineComment(seq_left_txt)]
     @ compiled_left
     @ [ILineComment(seq_right_txt)]
@@ -372,8 +357,8 @@ let rec compile_aexpr (e : tag aexpr) (stack_offset : int) (env : arg name_envt)
   | ALetRec(bindings, body, tag) ->
     let compiled_bindings =
       List.fold_left (fun cb_acc (name, bound_body) ->
-                       let dest = add_stack_offset stack_offset (find env name) in
-                         (compile_cexpr bound_body stack_offset env) @ [IMov(dest, Reg(RAX))] @ cb_acc)
+                       let dest = add_stack_offset stack_offset (find sub_env name) in
+                         (compile_cexpr bound_body stack_offset curr_env_name env) @ [IMov(dest, Reg(RAX))] @ cb_acc)
                        []
                        bindings in
     let bound_names = List.map (fun (name, _) -> name) bindings in
@@ -383,10 +368,10 @@ let rec compile_aexpr (e : tag aexpr) (stack_offset : int) (env : arg name_envt)
         let fvs = List.sort String.compare (free_vars abody) in
         let locs = List.mapi (fun idx name -> (idx, name)) fvs in
         let fv_lambdas = List.filter (fun (idx, name) -> find_one bound_names name) locs in
-        let this_lambda_loc = find env name in
+        let this_lambda_loc = find sub_env name in
         acc @ List.fold_left (
           fun code_acc (lambda_fv_offset, lambda) ->
-          let lambda_stack_loc = find env lambda in
+          let lambda_stack_loc = find sub_env lambda in
           code_acc @ [
             IMov(Reg(scratch_reg_2), lambda_stack_loc); (* Now the free lambda ptr is in scratch reg 2 *)
             IMov(RegOffset((3 + lambda_fv_offset) * word_size, scratch_reg), Reg(scratch_reg_2)); (* Offset of 3 because of closure structure *)
@@ -404,11 +389,12 @@ let rec compile_aexpr (e : tag aexpr) (stack_offset : int) (env : arg name_envt)
     @ second_pass
 
 
-    @ (compile_aexpr body stack_offset env)
-and compile_cexpr (e : tag cexpr) (stack_offset : int) (env : arg name_envt) =
+    @ (compile_aexpr body stack_offset curr_env_name env)
+and compile_cexpr (e : tag cexpr) (stack_offset : int) (curr_env_name : string) (env : arg name_envt name_envt) =
+  let sub_env = find env curr_env_name in
   match e with
   | CIf(cond, thn, els, tag) ->
-     let cond_reg = compile_imm cond env in
+     let cond_reg = compile_imm cond sub_env in
      let lbl_comment = sprintf "if_%d" tag in
      let lbl_thn = sprintf "if_then_%d" tag in
      let lbl_els = sprintf "if_else_%d" tag in
@@ -416,7 +402,7 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (env : arg name_envt) =
      (* check cond for boolean val *)
      [ILineComment(lbl_comment)]
      @ [IMov(Reg(RAX), cond_reg)]
-     @ (check_rax_for_bool "err_IF_NOT_BOOL")
+     @ (check_rax_for_bool err_if_not_bool_lbl) 
      (* test for RAX == true *)
      (* need to use temp register R8 because Test cannot accept imm64 *)
      @ [IMov(Reg(R8), bool_mask)]
@@ -424,14 +410,14 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (env : arg name_envt) =
      @ [IJz(Label(lbl_els))]
 
      @ [ILabel(lbl_thn)]
-     @ (compile_aexpr thn stack_offset env)
+     @ (compile_aexpr thn stack_offset curr_env_name env)
      @ [IJmp(Label(lbl_done))]
 
      @ [ILabel(lbl_els)]
-     @ (compile_aexpr els stack_offset env)
+     @ (compile_aexpr els stack_offset curr_env_name env)
      @ [ILabel(lbl_done)]
   | CScIf(cond, thn, els, tag) ->
-     let cond_reg = compile_imm cond env in
+     let cond_reg = compile_imm cond sub_env in
      let lbl_comment = sprintf "scif_%d" tag in
      let lbl_thn = sprintf "scif_then_%d" tag in
      let lbl_els = sprintf "scif_else_%d" tag in
@@ -439,7 +425,7 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (env : arg name_envt) =
      (* check cond for boolean val *)
      [ILineComment(lbl_comment)]
      @ [IMov(Reg(RAX), cond_reg)]
-     @ (check_rax_for_bool "err_LOGIC_NOT_BOOL")
+     @ (check_rax_for_bool err_logic_not_bool_lbl)
      (* test for RAX == true *)
      (* need to use temp register R8 because Test cannot accept imm64 *)
      @ [IMov(Reg(R8), bool_mask)]
@@ -448,25 +434,25 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (env : arg name_envt) =
 
      @ [ILabel(lbl_thn)]
      (* LHS is compiled before RHS, so definitely not tail position *)
-     @ (compile_aexpr thn stack_offset env)
+     @ (compile_aexpr thn stack_offset curr_env_name env)
      @ [IJmp(Label(lbl_done))]
 
      @ [ILabel(lbl_els)]
      (* Since we check that result is bool, RHS is also not in tail position *)
-     @ (compile_aexpr els stack_offset env)
-     @ (check_rax_for_bool "err_LOGIC_NOT_BOOL")
+     @ (compile_aexpr els stack_offset curr_env_name env)
+     @ (check_rax_for_bool err_logic_not_bool_lbl) 
      @ [ILabel(lbl_done)]
   | CPrim1(op, body, tag) ->
-    let body_imm = compile_imm body env in
+    let body_imm = compile_imm body sub_env in
      begin match op with
        | Add1 ->
            [IMov(Reg(RAX), body_imm)]
-           @ (check_rax_for_num "err_ARITH_NOT_NUM")
+           @ (check_rax_for_num err_arith_not_num_lbl) 
            @ [IAdd(Reg(RAX), Const(2L))]
            @ check_for_overflow
        | Sub1 ->
            [IMov(Reg(RAX), body_imm)]
-           @ (check_rax_for_num "err_ARITH_NOT_NUM")
+           @ (check_rax_for_num err_arith_not_num_lbl)
            @ [ISub(Reg(RAX), Const(2L))]
            @ check_for_overflow
         | Print -> [IMov(Reg(RDI), body_imm); ICall(Label("print"));]
@@ -515,7 +501,7 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (env : arg name_envt) =
           ]
         | Not ->
            [IMov(Reg(RAX), body_imm)]
-           @ (check_rax_for_bool "err_LOGIC_NOT_BOOL")
+           @ (check_rax_for_bool err_logic_not_bool_lbl)
            (* need to use temp register R8 because Xor cannot accept imm64 *)
            @ [IMov(Reg(R8), bool_mask)]
            @ [IXor(Reg(RAX), Reg(R8))]
@@ -547,16 +533,16 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (env : arg name_envt) =
           ]
      end
   | CPrim2(op, lhs, rhs, tag) ->
-     let lhs_reg = compile_imm lhs env in
-     let rhs_reg = compile_imm rhs env in
+     let lhs_reg = compile_imm lhs sub_env in
+     let rhs_reg = compile_imm rhs sub_env in
      begin match op with
       | Plus ->
          (* check rhs for numerical val *)
          [IMov(Reg(RAX), rhs_reg)]
-         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         @ (check_rax_for_num err_arith_not_num_lbl)
          (* check lhs for numerical val *)
          @ [IMov(Reg(RAX), lhs_reg)]
-         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         @ (check_rax_for_num err_arith_not_num_lbl)
          (* need to use a temp register because ADD does not properly handle imm64 (for overflow) *)
          @ [IMov(Reg(R8), rhs_reg)]
          @ [IAdd(Reg(RAX), Reg(R8))]
@@ -564,10 +550,10 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (env : arg name_envt) =
       | Minus ->
          (* check rhs for numerical val *)
          [IMov(Reg(RAX), rhs_reg)]
-         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         @ (check_rax_for_num err_arith_not_num_lbl)
          (* check lhs for numerical val *)
          @ [IMov(Reg(RAX), lhs_reg)]
-         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         @ (check_rax_for_num err_arith_not_num_lbl)
          (* need to use a temp register because SUB does not properly handle imm64 (for overflow) *)
          @ [IMov(Reg(R8), rhs_reg)]
          @ [ISub(Reg(RAX), Reg(R8))]
@@ -575,10 +561,10 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (env : arg name_envt) =
       | Times ->
          (* check rhs for numerical val *)
          [IMov(Reg(RAX), rhs_reg)]
-         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         @ (check_rax_for_num err_arith_not_num_lbl)
          (* check lhs for numerical val *)
          @ [IMov(Reg(RAX), lhs_reg)]
-         @ (check_rax_for_num "err_ARITH_NOT_NUM")
+         @ (check_rax_for_num err_arith_not_num_lbl)
          @ [ISar(Reg(RAX), Const(1L))]
          (* need to use a temp register because IMUL does not properly handle imm64 (for overflow) *)
          @ [IMov(Reg(R8), rhs_reg)]
@@ -592,10 +578,10 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (env : arg name_envt) =
 
          (* check rhs for numerical val *)
          [IMov(Reg(RAX), rhs_reg)]
-         @ (check_rax_for_num "err_COMP_NOT_NUM")
+         @ (check_rax_for_num err_comp_not_num_lbl)
          (* check lhs for numerical val *)
          @ [IMov(Reg(RAX), lhs_reg)]
-         @ (check_rax_for_num "err_COMP_NOT_NUM")
+         @ (check_rax_for_num err_comp_not_num_lbl)
 
          (* need to use temp register R8 because Test cannot accept imm64 *)
          @ [IMov(Reg(R8), rhs_reg)]
@@ -613,10 +599,10 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (env : arg name_envt) =
 
          (* check rhs for numerical val *)
          [IMov(Reg(RAX), rhs_reg)]
-         @ (check_rax_for_num "err_COMP_NOT_NUM")
+         @ (check_rax_for_num err_comp_not_num_lbl)
          (* check lhs for numerical val *)
          @ [IMov(Reg(RAX), lhs_reg)]
-         @ (check_rax_for_num "err_COMP_NOT_NUM")
+         @ (check_rax_for_num err_comp_not_num_lbl)
 
          (* need to use temp register R8 because Test cannot accept imm64 *)
          @ [IMov(Reg(R8), rhs_reg)]
@@ -634,10 +620,10 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (env : arg name_envt) =
 
          (* check rhs for numerical val *)
          [IMov(Reg(RAX), rhs_reg)]
-         @ (check_rax_for_num "err_COMP_NOT_NUM")
+         @ (check_rax_for_num err_comp_not_num_lbl)
          (* check lhs for numerical val *)
          @ [IMov(Reg(RAX), lhs_reg)]
-         @ (check_rax_for_num "err_COMP_NOT_NUM")
+         @ (check_rax_for_num err_comp_not_num_lbl)
 
          (* need to use temp register R8 because Test cannot accept imm64 *)
          @ [IMov(Reg(R8), rhs_reg)]
@@ -655,10 +641,10 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (env : arg name_envt) =
 
          (* check rhs for numerical val *)
          [IMov(Reg(RAX), rhs_reg)]
-         @ (check_rax_for_num "err_COMP_NOT_NUM")
+         @ (check_rax_for_num err_comp_not_num_lbl)
          (* check lhs for numerical val *)
          @ [IMov(Reg(RAX), lhs_reg)]
-         @ (check_rax_for_num "err_COMP_NOT_NUM")
+         @ (check_rax_for_num err_comp_not_num_lbl)
 
          (* need to use temp register R8 because Test cannot accept imm64 *)
          @ [IMov(Reg(R8), rhs_reg)]
@@ -697,8 +683,8 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (env : arg name_envt) =
     let add_free_vars_to_closure =
       List.flatten (List.mapi (fun idx fv ->
                  [
-                 (* Use incoming env here, because it is the env that the lambda is in *)
-                 IMov(Reg(scratch_reg), (find env fv));
+                 (* Use incoming env here, because it is the env that actually has the free var values *)
+                 IMov(Reg(scratch_reg), (find sub_env fv));
                  IMov(Sized(QWORD_PTR, RegOffset((3 + idx) * word_size, heap_reg)), Reg(scratch_reg));
                  ])
                 free_vars_list) in
@@ -725,14 +711,14 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (env : arg name_envt) =
     let padding = (if needs_padding then [IMov(Reg(R8), HexConst(0xF0F0F0F0L)); IPush(Reg(R8))] else []) in
     let num_pushes = num_args + 1 (* the closure *) + (if needs_padding then 1 else 0) in
     let args_rev = List.rev args in
-    let compiled_func = compile_imm func env in
+    let compiled_func = compile_imm func sub_env in
     begin match ct with
     | Snake ->
         (* TODO- figure out how I will support equal(), print(), etc. *)
         (* Push the args onto stack in reverse order *)
         let push_compiled_args = List.fold_left
                        (fun accum_instrs arg ->
-                          let compiled_imm = (compile_imm arg env) in
+                          let compiled_imm = (compile_imm arg sub_env) in
                           (* Use temp register because can't push imm64 directly *)
                           accum_instrs @ [IMov(Reg(R8), compiled_imm);
                                           IPush(Sized(QWORD_PTR, Reg(R8)))])
@@ -740,20 +726,20 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (env : arg name_envt) =
                        args_rev
                        in
         let check_rax_for_closure =
-        [ILineComment("check_rax_for_closure (err_CALL_NOT_CLOSURE)");
+        [ILineComment(sprintf "check_rax_for_closure (%s)" err_call_not_closure_lbl);
          IMov(Reg(R9), HexConst(closure_tag_mask));
          IAnd(Reg(RAX), Reg(R9));
          IMov(Reg(R9), HexConst(closure_tag));
          ICmp(Reg(RAX), Reg(R9));
-         IJne(Label("err_CALL_NOT_CLOSURE"));] in
+         IJne(Label(err_call_not_closure_lbl));] in
         let check_closure_for_arity =
-        [ILineComment("check_closure_for_arity (err_CALL_ARITY_ERR)");
+        [ILineComment(sprintf "check_closure_for_arity (%s)" err_call_arity_err_lbl);
          (* RAX is tagged ptr to closure on heap *)
          IMov(Reg(RAX), compiled_func);
          ISub(Reg(RAX), HexConst(closure_tag)); (* now RAX is heap addr to closure *)
          IMov(Reg(RAX), RegOffset(0,RAX)); (* get the arity (machine int) *)
          ICmp(Reg(RAX), Const(Int64.of_int num_args)); (* no temp reg, assume won't have that many args *)
-         IJne(Label("err_CALL_ARITY_ERR"));] in
+         IJne(Label(err_call_arity_err_lbl));] in
         let padded_comp_args = padding @ push_compiled_args in
         [IMov(Reg(RAX), compiled_func);]
         @ check_rax_for_closure
@@ -770,7 +756,7 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (env : arg name_envt) =
           ]
     | _ -> raise (InternalCompilerError "(code gen) Unsupported function application call type")
     end
-  | CImmExpr(expr) -> [IMov(Reg(RAX), (compile_imm expr env))]
+  | CImmExpr(expr) -> [IMov(Reg(RAX), (compile_imm expr sub_env))]
   | CTuple(elems, _) ->
       let tup_size = List.length elems in
       let need_padding = tup_size mod 2 == 1 in
@@ -788,7 +774,7 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (env : arg name_envt) =
       @ List.flatten
           (List.mapi
             (fun i e ->
-              let arg = compile_imm e env in
+              let arg = compile_imm e sub_env in
               let offs = i + 1 in
               [IMov(Reg(R8), arg); IMov(RegOffset(offs*word_size, R15), Reg(R8))])
             elems)
@@ -798,18 +784,18 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (env : arg name_envt) =
       (* increment the heap ptr *)
       @ [IMov(Reg(R8), Const(Int64.of_int (next_heap_loc * word_size))); IAdd(Reg(R15), Reg(R8))]
   | CGetItem(tup, i, _) ->
-      let tup_address = compile_imm tup env in
-      let idx = compile_imm i env in
+      let tup_address = compile_imm tup sub_env in
+      let idx = compile_imm i sub_env in
 
       (* first, do runtime error checking *)
       [IMov(Reg(RAX), tup_address)] (* move tuple address (snakeval) into RAX *)
-      @ (check_rax_for_tup "err_GET_NOT_TUPLE")
-      @ (check_rax_for_nil "err_NIL_DEREF")
+      @ (check_rax_for_tup err_get_not_tuple_lbl)
+      @ (check_rax_for_nil err_nil_deref_lbl)
       @ [IMov(Reg(RAX), idx)] (* move the idx (snakeval) into RAX *)
-      @ (check_rax_for_num "err_TUP_IDX_NOT_NUM")
+      @ (check_rax_for_num err_get_not_num_lbl)
       @ [ISar(Reg(RAX), Const(1L))] (* convert from snakeval -> int *)
-      @ (check_rax_for_tup_smaller "err_GET_LOW_INDEX")
-      @ (check_rax_for_tup_bigger tup_address "err_GET_HIGH_INDEX")
+      @ (check_rax_for_tup_smaller err_get_low_index_lbl)
+      @ (check_rax_for_tup_bigger tup_address err_get_high_index_lbl)
 
       (* passed checks, now do actual 'get' *)
       @ [IMov(Reg(RAX), tup_address)] (* move tuple address back into RAX *)
@@ -819,19 +805,19 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (env : arg name_envt) =
       @ [IAdd(Reg(R8), Const(1L))] (* add 1 to the offset to bypass the tup size *)
       @ [IMov(Reg(RAX), RegOffsetReg(RAX,R8,word_size,0))]
   | CSetItem(tup, i, r, _) ->
-      let tup_address = compile_imm tup env in
-      let idx = compile_imm i env in
-      let rhs = compile_imm r env in
+      let tup_address = compile_imm tup sub_env in
+      let idx = compile_imm i sub_env in
+      let rhs = compile_imm r sub_env in
 
       (* first, do runtime error checking *)
       [IMov(Reg(RAX), tup_address)] (* move tuple address (snakeval) into RAX *)
-      @ (check_rax_for_tup "err_GET_NOT_TUPLE")
-      @ (check_rax_for_nil "err_NIL_DEREF")
+      @ (check_rax_for_tup err_get_not_tuple_lbl)
+      @ (check_rax_for_nil err_nil_deref_lbl)
       @ [IMov(Reg(RAX), idx)] (* move the idx (snakeval) into RAX *)
-      @ (check_rax_for_num "err_TUP_IDX_NOT_NUM")
+      @ (check_rax_for_num err_set_not_num_lbl)
       @ [ISar(Reg(RAX), Const(1L))] (* convert from snakeval -> int *)
-      @ (check_rax_for_tup_smaller "err_GET_LOW_INDEX")
-      @ (check_rax_for_tup_bigger tup_address "err_GET_HIGH_INDEX")
+      @ (check_rax_for_tup_smaller err_get_low_index_lbl)
+      @ (check_rax_for_tup_bigger tup_address err_get_high_index_lbl)
 
       (* passed checks, now do actual 'set' *)
       @ [IMov(Reg(RAX), tup_address)] (* move tuple address (snakeval) into RAX *)
@@ -842,12 +828,12 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (env : arg name_envt) =
       @ [IMov(Reg(R11), rhs)]
       @ [IMov(RegOffsetReg(RAX,R8,word_size,0), Reg(R11))]
       @ [IAdd(Reg(RAX), Const(1L))] (* convert the tuple address back to a snakeval *)
-and compile_imm e (env : arg name_envt) : arg =
+and compile_imm e (sub_env : arg name_envt) : arg =
   match e with
   | ImmNum(n, _) -> Const(Int64.shift_left n 1)
   | ImmBool(true, _) -> const_true
   | ImmBool(false, _) -> const_false
-  | ImmId(x, _) -> (find env x)
+  | ImmId(x, _) -> (find sub_env x)
   | ImmNil(_) -> const_nil
 
 
@@ -856,22 +842,22 @@ and compile_imm e (env : arg name_envt) : arg =
    assume should take up the first few stack slots.  See the compiliation of Programs
    below for one way to use this ability... *)
 and compile_fun (name : string) (params : string list) (body : tag aexpr) (env : arg name_envt name_envt) (free_vars_list : string list) (num_free_vars : int) =
-    let deepest_offset (sub_env : arg name_envt) : int =
-      let rec helper (sub_env : arg name_envt) (deepest_so_far : int) : int =
-        match sub_env with
-        | [] -> deepest_so_far
-        | (_, RegOffset(bytes, RBP))::env_tail ->
-            helper env_tail ((min deepest_so_far bytes) / (~-1 * word_size))
-        | _ -> raise (InternalCompilerError "Unexpected offset for deepest_offset") in
-      helper sub_env 0 in
+    let rec min_slot_addr (sub_env : arg name_envt) : int =
+      let get_bytes (arg : arg) : int =
+        match arg with RegOffset(bytes, _) -> bytes | _ -> raise (InternalCompilerError "Unexpected arg for get_bytes") in
+      match sub_env with
+      | (_, addr_arg)::rest ->
+        let addr = get_bytes addr_arg in
+        let min_addr_rest = min_slot_addr rest in
+        if addr < min_addr_rest then addr else min_addr_rest
+      | [] -> 0 in
     (* TODO: fix remaining env signature stuff (especially in the compile_*exprs); add free vars to envs in Naive_stack_allocation *)
     let sub_env = find env name in
-    let num_body_vars = (deepest_offset sub_env) in (* TODO: take out deepest_stack *)
     let prelude = compile_fun_prelude name in
     (* Trick, we know the env is a list and lookups will return 1st found, so just add the updated values to the front.
        This new env assumes we have pushed all the closed over values to the stack in order.*)
     (* let new_env = (List.mapi (fun idx fv -> (fv, RegOffset(~-1 * (1 + idx) * word_size, RBP))) free_vars_list) @ env in *)
-    let compiled_body = compile_aexpr body num_free_vars env in
+    let compiled_body = compile_aexpr body num_free_vars name env in
     let postlude = compile_fun_postlude in
     prelude
     @ [IMov(Reg(RAX), RegOffset(2 * word_size, RBP))]
@@ -881,7 +867,7 @@ and compile_fun (name : string) (params : string list) (body : tag aexpr) (env :
       ]
     @ (push_free_vars_from_closure 0 num_free_vars)
     @ [    (* Don't use temp register here because we assume the RHS will never be very big *)
-      ISub(Reg(RSP), Const(Int64.of_int (word_size * num_body_vars)))  (* allocates stack space for all local vars *)]
+      IAdd(Reg(RSP), Const(Int64.of_int (min_slot_addr sub_env)))  (* allocates stack space for all local vars *)]
     @ compiled_body
     @ postlude
 ;;
@@ -930,6 +916,9 @@ global ?our_code_starts_here" in
 ?err_set_high_index:%s
 ?err_call_not_closure:%s
 ?err_call_arity_err:%s
+?err_get_not_num:%s
+?err_set_not_num:%s
+?err_bad_input:%s
 "
                        (to_asm (native_call (Label "?error") [Const(err_COMP_NOT_NUM); Reg(scratch_reg)]))
                        (to_asm (native_call (Label "?error") [Const(err_ARITH_NOT_NUM); Reg(scratch_reg)]))
@@ -962,7 +951,6 @@ global ?our_code_starts_here" in
        ] in
      let set_stack_bottom =
        [
-         ILabel("?our_code_starts_here");
          IMov(Reg R12, Reg RDI);
        ]
        @ (native_call (Label "?set_stack_bottom") [Reg(RBP)])
