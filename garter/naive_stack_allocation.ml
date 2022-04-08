@@ -6,6 +6,7 @@ open Assembly
 (* open Errors *)
 open Util
 
+(* TODO- explain/justify our env choice (see assignment) *)
 (* ASSUMES that the program has been alpha-renamed and all names are unique *)
 let naive_stack_allocation (prog: tag aprogram) : tag aprogram * arg name_envt name_envt =
   let rec help_aexpr (body : tag aexpr) (si : int) (curr_env_name : string) (env : arg name_envt name_envt) : arg name_envt name_envt * int =

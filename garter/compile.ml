@@ -935,6 +935,9 @@ global ?our_code_starts_here" in
                        (to_asm (native_call (Label "?error") [Const(err_SET_HIGH_INDEX); Reg(scratch_reg)]))
                        (to_asm (native_call (Label "?error") [Const(err_CALL_NOT_CLOSURE); Reg(scratch_reg)]))
                        (to_asm (native_call (Label "?error") [Const(err_CALL_ARITY_ERR); Reg(scratch_reg)]))
+                       (to_asm (native_call (Label "?error") [Const(err_GET_NOT_NUM); Reg(scratch_reg)]))
+                       (to_asm (native_call (Label "?error") [Const(err_SET_NOT_NUM); Reg(scratch_reg)]))
+                       (to_asm (native_call (Label "?error") [Const(err_BAD_INPUT); Reg(scratch_reg)]))
   in
   match anfed with
   | AProgram(body, _) ->
