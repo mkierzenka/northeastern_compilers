@@ -52,7 +52,11 @@ let naive_stack_allocation (prog: tag aprogram) : tag aprogram * arg name_envt n
         let args_with_idx = List.mapi (fun i arg -> (arg, RegOffset((i + 3) * word_size, RBP))) args in
         let new_sub_env = List.fold_left (fun accum_env cell -> cell :: accum_env) [] args_with_idx in
         let new_sub_env_with_self = (self_name, RegOffset(2*word_size, RBP)) :: new_sub_env in
-        let new_env = (self_name, new_sub_env_with_self)::env in
+        let free_vars_list = List.sort String.compare (free_vars (ACExpr expr)) in
+        (* Trick, we know the env is a list and lookups will return 1st found, so just add the updated values to the front.
+           This new env assumes we have pushed all the closed over values to the stack in order. *)
+        let new_sub_env_with_fvs = (List.mapi (fun idx fv -> (fv, RegOffset(~-1 * (1 + idx)*word_size, RBP))) free_vars_list) @ new_sub_env_with_self in
+        let new_env = (self_name, new_sub_env_with_fvs)::env in
         let (env_with_body_slots, _) = help_aexpr body 1 self_name new_env in
         (env_with_body_slots, si)
   in
