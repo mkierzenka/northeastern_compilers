@@ -133,7 +133,7 @@ void printHelp(FILE *out, SNAKEVAL val) {
       fprintf(out, "forwarding to %p", (uint64_t*)(len - 1));
       return;
     } /* else {
-      len /= 2; // length is encoded
+      len /= 2; // length is encoded, also see below/end of this func
     } */
     /* fprintf(out, "Heap is:\n"); */
     /* naive_print_heap(HEAP, HEAP_END); */
@@ -148,7 +148,7 @@ void printHelp(FILE *out, SNAKEVAL val) {
     if (len == 1) fprintf(out, ", ");
     fprintf(out, ")");
     // Unmark this tuple: restore its length
-    *(addr) = len * 2; // length is encoded
+    *(addr) = len;
   }
   else {
     fprintf(out, "Unknown value: %#018lx", val);

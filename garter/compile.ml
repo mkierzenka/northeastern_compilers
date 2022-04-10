@@ -727,7 +727,7 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (curr_env_name : string) 
             (fun i e ->
               let arg = compile_imm e sub_env in
               let offs = i + 1 in
-              [IMov(Reg(R8), arg); IMov(RegOffset(offs*word_size, R15), Reg(R8))])
+              [IMov(Reg(R8), Sized(QWORD_PTR, arg)); IMov(RegOffset(offs*word_size, R15), Reg(R8))])
             elems)
       @ padding
       (* return the pointer to the tuple, make it a snakeval *)
