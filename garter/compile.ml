@@ -807,21 +807,26 @@ and compile_fun (name : string) (params : string list) (body : tag aexpr) (env :
       | [] -> 0 in
     let num_free_vars = List.length free_var_list in
     let sub_env = find env name in
-    let load_free_vars = List.mapi (fun idx free_var -> IMov((find sub_env free_var), RegOffset((3 + idx) * word_size, RAX))) free_var_list in
+    let load_free_vars = List.flatten (List.mapi (
+      fun idx free_var -> [
+        IMov(Reg(scratch_reg), RegOffset((3 + idx) * word_size, RAX));
+        IMov(find sub_env free_var, Reg(scratch_reg));
+      ]
+    ) free_var_list) in
     let prelude = compile_fun_prelude name in
     let compiled_body = compile_aexpr body num_free_vars name env in
-    let postlude = compile_fun_postlude in
-    (prelude,
-     [IMov(Reg(RAX), RegOffset(2 * word_size, RBP))]
-     (* Now RAX has the (tagged) func value *)
-     @ [
-       ISub(Reg(RAX), HexConst(closure_tag)); (* now RAX is heap addr to closure *)
-       ]
-     @ [    (* Don't use temp register here because we assume the RHS will never be very big *)
-       IAdd(Reg(RSP), Const(Int64.of_int (min_slot_addr sub_env)))  (* allocates stack space for all free and local vars *)]
-     @ load_free_vars
-     @ compiled_body,
-     postlude)
+    let postlude = compile_fun_postlude in (
+      prelude,
+      [IMov(Reg(RAX), RegOffset(2 * word_size, RBP))] (* Now RAX has the (tagged) func value *)
+      @ [ISub(Reg(RAX), HexConst(closure_tag))] (* now RAX is heap addr to closure *)
+      
+      (* Don't use temp register here because we assume the RHS will never be very big *)
+      (* allocates stack space for all free and local vars *)
+      @ [IAdd(Reg(RSP), Const(Int64.of_int (min_slot_addr sub_env)))]
+      @ load_free_vars
+      @ compiled_body,
+      postlude
+    )
 
 (* This function can be used to take the native functions and produce DFuns whose bodies
    simply contain an EApp (with a Native call_type) to that native function.  Then,
