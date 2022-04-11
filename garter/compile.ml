@@ -276,11 +276,6 @@ let compile_fun_postlude : instruction list =
     IRet;
   ]
 
-let rec push_free_vars_from_closure (cur_idx : int) (num_free_vars : int): instruction list =
-  if cur_idx >= (num_free_vars)
-  then []
-  else IPush(Sized(QWORD_PTR, RegOffset((3 + cur_idx) * word_size, RAX))) :: (push_free_vars_from_closure (cur_idx + 1) num_free_vars)
-
 (* shift the RegOffset "stack_idx_shift" SLOTS down the stack (ie. "stack_idx_shift * word_size" bytes) *)
 let add_stack_offset (stack_idx_shift : int) (orig : arg) : arg =
   match orig with
@@ -643,8 +638,11 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (curr_env_name : string) 
                 free_vars_list) in
     let true_heap_size = 3 + num_free_vars in
     let reserved_heap_size = true_heap_size + (true_heap_size mod 2) in
+    let (prelude, body, postlude) = compile_fun closure_lbl params body env free_vars_list in
     [IJmp(Label(closure_done_lbl))]
-    @ compile_fun closure_lbl params body env num_free_vars
+    @ prelude
+    @ body
+    @ postlude
     @ [
       ILabel(closure_done_lbl);
       IMov(Sized(QWORD_PTR, RegOffset(0 * word_size, heap_reg)), Const(Int64.of_int arity));
@@ -729,7 +727,7 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (curr_env_name : string) 
             (fun i e ->
               let arg = compile_imm e sub_env in
               let offs = i + 1 in
-              [IMov(Reg(R8), arg); IMov(RegOffset(offs*word_size, R15), Reg(R8))])
+              [IMov(Reg(R8), Sized(QWORD_PTR, arg)); IMov(RegOffset(offs*word_size, R15), Reg(R8))])
             elems)
       @ padding
       (* return the pointer to the tuple, make it a snakeval *)
@@ -794,7 +792,10 @@ and compile_imm e (sub_env : arg name_envt) : arg =
 (* Additionally, you are provided an initial environment of values that you may want to
    assume should take up the first few stack slots.  See the compiliation of Programs
    below for one way to use this ability... *)
-and compile_fun (name : string) (params : string list) (body : tag aexpr) (env : arg name_envt name_envt) (num_free_vars : int) =
+
+(* Compile a function, returns tuple of prelude,body,postlude *)
+and compile_fun (name : string) (params : string list) (body : tag aexpr) (env : arg name_envt name_envt) (free_var_list : string list) :
+  (instruction list * instruction list * instruction list) =
     let rec min_slot_addr (sub_env : arg name_envt) : int =
       let get_bytes (arg : arg) : int =
         match arg with RegOffset(bytes, _) -> bytes | _ -> raise (InternalCompilerError "Unexpected arg for get_bytes") in
@@ -804,22 +805,28 @@ and compile_fun (name : string) (params : string list) (body : tag aexpr) (env :
         let min_addr_rest = min_slot_addr rest in
         if addr < min_addr_rest then addr else min_addr_rest
       | [] -> 0 in
+    let num_free_vars = List.length free_var_list in
     let sub_env = find env name in
+    let load_free_vars = List.flatten (List.mapi (
+      fun idx free_var -> [
+        IMov(Reg(scratch_reg), RegOffset((3 + idx) * word_size, RAX));
+        IMov(find sub_env free_var, Reg(scratch_reg));
+      ]
+    ) free_var_list) in
     let prelude = compile_fun_prelude name in
     let compiled_body = compile_aexpr body num_free_vars name env in
-    let postlude = compile_fun_postlude in
-    prelude
-    @ [IMov(Reg(RAX), RegOffset(2 * word_size, RBP))]
-    (* Now RAX has the (tagged) func value *)
-    @ [
-      ISub(Reg(RAX), HexConst(closure_tag)); (* now RAX is heap addr to closure *)
-      ]
-    @ (push_free_vars_from_closure 0 num_free_vars)
-    @ [    (* Don't use temp register here because we assume the RHS will never be very big *)
-      IAdd(Reg(RSP), Const(Int64.of_int (min_slot_addr sub_env)))  (* allocates stack space for all local vars *)]
-    @ compiled_body
-    @ postlude
-;;
+    let postlude = compile_fun_postlude in (
+      prelude,
+      [IMov(Reg(RAX), RegOffset(2 * word_size, RBP))] (* Now RAX has the (tagged) func value *)
+      @ [ISub(Reg(RAX), HexConst(closure_tag))] (* now RAX is heap addr to closure *)
+      
+      (* Don't use temp register here because we assume the RHS will never be very big *)
+      (* allocates stack space for all free and local vars *)
+      @ [IAdd(Reg(RSP), Const(Int64.of_int (min_slot_addr sub_env)))]
+      @ load_free_vars
+      @ compiled_body,
+      postlude
+    )
 
 (* This function can be used to take the native functions and produce DFuns whose bodies
    simply contain an EApp (with a Native call_type) to that native function.  Then,
@@ -890,7 +897,7 @@ global ?our_code_starts_here" in
   match anfed with
   | AProgram(body, _) ->
   (* $heap and $size are mock parameter names, just so that compile_fun knows our_code_starts_here takes in 2 parameters *)
-     let comp_main (* (prologue, comp_main, epilogue) *) = compile_fun "?our_code_starts_here" ["$heap"; "$size"] body env 0 in
+     let (ocsh_prelude, ocsh_body, ocsh_postlude) = compile_fun "?our_code_starts_here" ["$heap"; "$size"] body env [] in
      let heap_start =
        [
          ILineComment("heap start");
@@ -907,7 +914,7 @@ global ?our_code_starts_here" in
        @ [
            IMov(Reg RDI, Reg R12)
          ] in
-     let main = ((*prologue @ *)set_stack_bottom @ heap_start @ comp_main (*@ epilogue*)) in
+     let main = (ocsh_prelude @ set_stack_bottom @ heap_start @ ocsh_body @ ocsh_postlude) in
      sprintf "%s%s%s\n" prelude (to_asm main) suffix
 ;;
 
