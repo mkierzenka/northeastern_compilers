@@ -52,6 +52,7 @@ and 'a expr =
   | EPrim1 of prim1 * 'a expr * 'a
   | EPrim2 of prim2 * 'a expr * 'a expr * 'a
   | EIf of 'a expr * 'a expr * 'a expr * 'a
+  | EScIf of 'a expr * 'a expr * 'a expr * 'a
   | ENumber of int64 * 'a
   | EBool of bool * 'a
   | ENil of 'a
@@ -73,6 +74,7 @@ type 'a immexpr = (* immediate expressions *)
   | ImmNil of 'a
 and 'a cexpr = (* compound expressions *)
   | CIf of 'a immexpr * 'a aexpr * 'a aexpr * 'a
+  | CScIf of 'a immexpr * 'a aexpr * 'a aexpr * 'a
   | CPrim1 of prim1 * 'a immexpr * 'a
   | CPrim2 of prim2 * 'a immexpr * 'a immexpr * 'a
   | CApp of 'a immexpr * 'a immexpr list * call_type * 'a
@@ -106,6 +108,7 @@ let get_tag_E e = match e with
   | EPrim1(_, _, t) -> t
   | EPrim2(_, _, _, t) -> t
   | EIf(_, _, _, t) -> t
+  | EScIf(_, _, _, t) -> t
   | ENil t -> t
   | ENumber(_, t) -> t
   | EBool(_, t) -> t
@@ -167,6 +170,12 @@ let rec map_tag_E (f : 'a -> 'b) (e : 'a expr) =
      let tag_thn = map_tag_E f thn in
      let tag_els = map_tag_E f els in
      EIf(tag_cond, tag_thn, tag_els, tag_if)
+  | EScIf(cond, thn, els, a) ->
+     let tag_if = f a in
+     let tag_cond = map_tag_E f cond in
+     let tag_thn = map_tag_E f thn in
+     let tag_els = map_tag_E f els in
+     EScIf(tag_cond, tag_thn, tag_els, tag_if)
   | EApp(func, args, native, a) ->
      let tag_app = f a in
      EApp(map_tag_E f func, List.map (map_tag_E f) args, native, tag_app)
@@ -242,6 +251,8 @@ and untagE e =
      ELet(List.map (fun (b, e, _) -> (untagB b, untagE e, ())) binds, untagE body, ())
   | EIf(cond, thn, els, _) ->
      EIf(untagE cond, untagE thn, untagE els, ())
+  | EScIf(cond, thn, els, _) ->
+     EScIf(untagE cond, untagE thn, untagE els, ())
   | EApp(func, args, native, _) ->
      EApp(untagE func, List.map untagE args, native, ())
   | ELetRec(binds, body, _) ->
@@ -287,6 +298,9 @@ let atag (p : 'a aprogram) : tag aprogram =
     | CIf(cond, thn, els, _) ->
        let if_tag = tag() in
        CIf(helpI cond, helpA thn, helpA els, if_tag)
+    | CScIf(cond, thn, els, _) ->
+       let if_tag = tag() in
+       CScIf(helpI cond, helpA thn, helpA els, if_tag)
     | CApp(func, args, native, _) ->
        let app_tag = tag() in
        CApp(helpI func, List.map helpI args, native, app_tag)

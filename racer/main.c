@@ -44,6 +44,10 @@ const uint64_t ERR_SET_LOW_INDEX    = 12;
 const uint64_t ERR_SET_HIGH_INDEX   = 13;
 const uint64_t ERR_CALL_NOT_CLOSURE = 14;
 const uint64_t ERR_CALL_ARITY_ERR   = 15;
+const uint64_t ERR_GET_NOT_NUM      = 16;
+const uint64_t ERR_SET_NOT_NUM      = 17;
+const uint64_t ERR_BAD_INPUT        = 18;
+// TODO- Add error checking to input() for ERR_BAD_INPUT
 
 size_t HEAP_SIZE;
 uint64_t* STACK_BOTTOM;
@@ -93,7 +97,8 @@ void printHelp(FILE *out, SNAKEVAL val) {
   else if ((val & CLOSURE_TAG_MASK) == CLOSURE_TAG) {
     uint64_t* addr = (uint64_t*)(val - CLOSURE_TAG);
     fprintf(out, "[%p - 5] ==> <function arity %ld, closed %ld, fn-ptr %p>",
-            (uint64_t*)val, addr[0] / 2, addr[1] / 2, (uint64_t*)addr[2]);
+            (uint64_t*)val, addr[0], addr[1], (uint64_t*)addr[2]);
+    // TODO- If we switch to encoding the lengths as SNAKEVALs, need to divide by 2 above (and for tuples)
     /* fprintf(out, "\nClosed-over values:\n"); */
     /* for (uint64_t i = 0; i < addr[1] / 2; i++) { */
     /*   if (i > 0) { fprintf(out, "\n"); } */
@@ -127,9 +132,9 @@ void printHelp(FILE *out, SNAKEVAL val) {
     if (len & 0x1) { // actually, it's a forwarding pointer
       fprintf(out, "forwarding to %p", (uint64_t*)(len - 1));
       return;
-    } else {
-      len /= 2; // length is encoded
-    }
+    } /* else {
+      len /= 2; // length is encoded, also see below/end of this func
+    } */
     /* fprintf(out, "Heap is:\n"); */
     /* naive_print_heap(HEAP, HEAP_END); */
     /* fprintf(out, "%p-->(len=%d)", (int*)(val - 1), len / 2); */
@@ -143,7 +148,7 @@ void printHelp(FILE *out, SNAKEVAL val) {
     if (len == 1) fprintf(out, ", ");
     fprintf(out, ")");
     // Unmark this tuple: restore its length
-    *(addr) = len * 2; // length is encoded
+    *(addr) = len;
   }
   else {
     fprintf(out, "Unknown value: %#018lx", val);
@@ -250,8 +255,17 @@ void error(uint64_t code, SNAKEVAL val) {
   case ERR_CALL_ARITY_ERR:
     fprintf(stderr, "Error: arity mismatch in call\n");
     break;
+  case ERR_GET_NOT_NUM:
+    fprintf(stderr, "Error: tuple-get index not numeric\n");
+    break;
+  case ERR_SET_NOT_NUM:
+    fprintf(stderr, "Error: tuple-set index not numeric\n");
+    break;
+  case ERR_BAD_INPUT:
+    fprintf(stderr, "Error: bad input, input must be a number\n");
+    break;
   default:
-    fprintf(stderr, "Error: Unknown error code: %ld, val: ", code); printHelp(stderr, val);
+    fprintf(stderr, "Error: Unknown error code: %ld, val: \n", code); printHelp(stderr, val);
   }
   fprintf(stderr, "\n%p ==> ", (uint64_t*)val);
   printHelp(stderr, val);

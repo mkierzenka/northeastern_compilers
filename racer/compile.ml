@@ -4,19 +4,32 @@ open Phases
 open Exprs
 open Assembly
 open Errors
-open Graph
+open Well_formed
+open Desugar
+open Rename_and_tag
+open Anf
+open Naive_stack_allocation
+open Register_allocation
+open Util
 
-module StringSet = Set.Make(String)
-
-
-type 'a name_envt = (string * 'a) list
-type 'a tag_envt  = (tag * 'a) list
-
-
-let print_env env how =
-  debug_printf "Env is\n";
-  List.iter (fun (id, bind) -> debug_printf "  %s -> %s\n" id (how bind)) env;;
-
+let err_comp_not_num_lbl     = "?err_comp_not_num"
+let err_arith_not_num_lbl    = "?err_arith_not_num"
+let err_logic_not_bool_lbl   = "?err_logic_not_bool"
+let err_if_not_bool_lbl      = "?err_if_not_bool"
+let err_overflow_lbl         = "?err_overflow"
+let err_get_not_tuple_lbl    = "?err_get_not_tuple"
+let err_get_low_index_lbl    = "?err_get_low_index"
+let err_get_high_index_lbl   = "?err_get_high_index"
+let err_nil_deref_lbl        = "?err_nil_deref"
+let err_out_of_memory_lbl    = "?err_out_of_memory"
+let err_set_not_tuple_lbl    = "?err_set_not_tuple"
+let err_set_low_index_lbl    = "?err_set_low_index"
+let err_set_high_index_lbl   = "?err_set_high_index"
+let err_call_not_closure_lbl = "?err_call_not_closure"
+let err_call_arity_err_lbl   = "?err_call_arity_err"
+let err_get_not_num_lbl      = "?err_get_not_num"
+let err_set_not_num_lbl      = "?err_set_not_num"
+let err_bad_input_lbl        = "?err_bad_input"
 
 let const_true       = HexConst(0xFFFFFFFFFFFFFFFFL)
 let const_false      = HexConst(0x7FFFFFFFFFFFFFFFL)
@@ -46,45 +59,18 @@ let err_SET_LOW_INDEX    = 12L
 let err_SET_HIGH_INDEX   = 13L
 let err_CALL_NOT_CLOSURE = 14L
 let err_CALL_ARITY_ERR   = 15L
-
-let dummy_span = (Lexing.dummy_pos, Lexing.dummy_pos);;
+let err_GET_NOT_NUM      = 16L
+let err_SET_NOT_NUM      = 17L
+let err_BAD_INPUT        = 18L
 
 let first_six_args_registers = [RDI; RSI; RDX; RCX; R8; R9]
-let caller_saved_regs : arg list =
-  [ Reg RDI
-  ; Reg RSI
-  ; Reg RDX
-  ; Reg RCX
-  ; Reg R8
-  ; Reg R9
-  ; Reg R10
-  ]
-;;
-
-let callee_saved_regs : arg list =
-  [ Reg R12
-  ; Reg R14
-  ; Reg RBX
-  ]
-;;
 let heap_reg = R15
 let scratch_reg = R11
+let scratch_reg_2 = R12
 
-(* you can add any functions or data defined by the runtime here for future use *)
-let initial_val_env = [];;
-
-let prim_bindings = [];;
-let native_fun_bindings = [];;
-
-let initial_fun_env = prim_bindings @ native_fun_bindings;;
-
-(* You may find some of these helpers useful *)
-
-let rec find ls x =
-  match ls with
-  | [] -> raise (InternalCompilerError (sprintf "Name %s not found" x))
-  | (y,v)::rest ->
-     if y = x then v else find rest x
+let print_env env how =
+  debug_printf "Env is\n";
+  List.iter (fun (id, bind) -> debug_printf "  %s -> %s\n" id (how bind)) env;;
 
 let count_vars e =
   let rec helpA e =
@@ -104,18 +90,6 @@ let rec replicate x i =
   if i = 0 then []
   else x :: (replicate x (i - 1))
 
-
-let rec find_decl (ds : 'a decl list) (name : string) : 'a decl option =
-  match ds with
-    | [] -> None
-    | (DFun(fname, _, _, _) as d)::ds_rest ->
-      if name = fname then Some(d) else find_decl ds_rest name
-
-let rec find_one (l : 'a list) (elt : 'a) : bool =
-  match l with
-    | [] -> false
-    | x::xs -> (elt = x) || (find_one xs elt)
-
 let rec find_dup (l : 'a list) : 'a option =
   match l with
     | [] -> None
@@ -124,16 +98,6 @@ let rec find_dup (l : 'a list) : 'a option =
       if find_one xs x then Some(x) else find_dup xs
 ;;
 
-let rec find_opt (env : 'a name_envt) (elt: string) : 'a option =
-  match env with
-  | [] -> None
-  | (x, v) :: rst -> if x = elt then Some(v) else find_opt rst elt
-;;
-                             
-(* Prepends a list-like env onto an name_envt *)
-let merge_envs list_env1 list_env2 =
-  list_env1 @ list_env2
-;;
 (* Combines two name_envts into one, preferring the first one *)
 let prepend env1 env2 =
   let rec help env1 env2 =
@@ -144,606 +108,6 @@ let prepend env1 env2 =
       if List.mem_assoc k env2 then rst_prepend else fst::rst_prepend
   in
   help env1 env2
-;;
-
-let env_keys e = List.map fst e;;
-
-(* Scope_info stores the location where something was defined,
-   and if it was a function declaration, then its type arity and argument arity *)
-type scope_info = (sourcespan * int option * int option)
-let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
-  let rec wf_E e (env : scope_info name_envt) =
-    debug_printf "In wf_E: %s\n" (ExtString.String.join ", " (env_keys env));
-    match e with
-    | ESeq(e1, e2, _) -> wf_E e1 env @ wf_E e2 env
-    | ETuple(es, _) -> List.concat (List.map (fun e -> wf_E e env) es)
-    | EGetItem(e, idx, pos) ->
-       wf_E e env @ wf_E idx env
-    | ESetItem(e, idx, newval, pos) ->
-       wf_E e env @ wf_E idx env @ wf_E newval env
-    | ENil _ -> []
-    | EBool _ -> []
-    | ENumber(n, loc) ->
-       if n > (Int64.div Int64.max_int 2L) || n < (Int64.div Int64.min_int 2L) then
-         [Overflow(n, loc)]
-       else
-         []
-    | EId (x, loc) -> if (find_one (List.map fst env) x) then [] else [UnboundId(x, loc)]
-    | EPrim1(_, e, _) -> wf_E e env
-    | EPrim2(_, l, r, _) -> wf_E l env @ wf_E r env
-    | EIf(c, t, f, _) -> wf_E c env @ wf_E t env @ wf_E f env
-    | ELet(bindings, body, _) ->
-       let rec find_locs x (binds : 'a bind list) : 'a list =
-         match binds with
-         | [] -> []
-         | BBlank _::rest -> find_locs x rest
-         | BName(y, _, loc)::rest ->
-            if x = y then loc :: find_locs x rest
-            else  find_locs x rest
-         | BTuple(binds, _)::rest -> find_locs x binds @ find_locs x rest in
-       let rec find_dupes (binds : 'a bind list) : exn list =
-         match binds with
-         | [] -> []
-         | (BBlank _::rest) -> find_dupes rest
-         | (BName(x, _, def)::rest) -> (List.map (fun use -> DuplicateId(x, use, def)) (find_locs x rest)) @ (find_dupes rest)
-         | (BTuple(binds, _)::rest) -> find_dupes (binds @ rest) in
-       let dupeIds = find_dupes (List.map (fun (b, _, _) -> b) bindings) in
-       let rec process_binds (rem_binds : 'a bind list) (env : scope_info name_envt) =
-         match rem_binds with
-         | [] -> (env, [])
-         | BBlank _::rest -> process_binds rest env
-         | BTuple(binds, _)::rest -> process_binds (binds @ rest) env
-         | BName(x, allow_shadow, xloc)::rest ->
-            let shadow =
-              if allow_shadow then []
-              else match find_opt env x with
-                   | None -> []
-                   | Some (existing, _, _) -> [ShadowId(x, xloc, existing)] in
-            let new_env = (x, (xloc, None, None))::env in
-            let (newer_env, errs) = process_binds rest new_env in
-            (newer_env, (shadow @ errs)) in
-       let rec process_bindings bindings (env : scope_info name_envt) =
-         match bindings with
-         | [] -> (env, [])
-         | (b, e, loc)::rest ->
-            let errs_e = wf_E e env in
-            let (env', errs) = process_binds [b] env in
-            let (env'', errs') = process_bindings rest env' in
-            (env'', errs @ errs_e @ errs') in
-       let (env2, errs) = process_bindings bindings env in
-       dupeIds @ errs @ wf_E body env2
-    | EApp(func, args, native, loc) ->
-       let rec_errors = List.concat (List.map (fun e -> wf_E e env) (func :: args)) in
-       (match func with
-        | EId(funname, _) -> 
-           (match (find_opt env funname) with
-            | Some(_, _, Some arg_arity) ->
-               let actual = List.length args in
-               if actual != arg_arity then [Arity(arg_arity, actual, loc)] else []
-            | _ -> [])
-        | _ -> [])
-       @ rec_errors
-    | ELetRec(binds, body, _) ->
-       let nonfuns = List.find_all (fun b -> match b with | (BName _, ELambda _, _) -> false | _ -> true) binds in
-       let nonfun_errs = List.map (fun (b, _, where) -> LetRecNonFunction(b, where)) nonfuns in
-
-     
-       let rec find_locs x (binds : 'a bind list) : 'a list =
-         match binds with
-         | [] -> []
-         | BBlank _::rest -> find_locs x rest
-         | BName(y, _, loc)::rest ->
-            if x = y then loc :: find_locs x rest
-            else  find_locs x rest
-         | BTuple(binds, _)::rest -> find_locs x binds @ find_locs x rest in
-       let rec find_dupes (binds : 'a bind list) : exn list =
-         match binds with
-         | [] -> []
-         | (BBlank _::rest) -> find_dupes rest
-         | (BName(x, _, def)::rest) -> List.map (fun use -> DuplicateId(x, use, def)) (find_locs x rest)
-         | (BTuple(binds, _)::rest) -> find_dupes (binds @ rest) in
-       let dupeIds = find_dupes (List.map (fun (b, _, _) -> b) binds) in
-       let rec process_binds (rem_binds : sourcespan bind list) (env : scope_info name_envt) =
-         match rem_binds with
-         | [] -> (env, [])
-         | BBlank _::rest -> process_binds rest env
-         | BTuple(binds, _)::rest -> process_binds (binds @ rest) env
-         | BName(x, allow_shadow, xloc)::rest ->
-            let shadow =
-              if allow_shadow then []
-              else match (find_opt env x) with
-                   | None -> []
-                   | Some (existing, _, _) -> if xloc = existing then [] else [ShadowId(x, xloc, existing)] in
-            let new_env = (x, (xloc, None, None))::env in
-            let (newer_env, errs) = process_binds rest new_env in
-            (newer_env, (shadow @ errs)) in
-
-       let (env, bind_errs) = process_binds (List.map (fun (b, _, _) -> b) binds) env in
-       
-       let rec process_bindings bindings env =
-         match bindings with
-         | [] -> (env, [])
-         | (b, e, loc)::rest ->
-            let (env, errs) = process_binds [b] env in
-            let errs_e = wf_E e env in
-            let (env', errs') = process_bindings rest env in
-            (env', errs @ errs_e @ errs') in
-       let (new_env, binding_errs) = process_bindings binds env in
-
-       let rhs_problems = List.map (fun (_, rhs, _) -> wf_E rhs new_env) binds in
-       let body_problems = wf_E body new_env in
-       nonfun_errs @ dupeIds @ bind_errs @ binding_errs @ (List.flatten rhs_problems) @ body_problems
-    | ELambda(binds, body, _) ->
-       let rec dupe x args =
-         match args with
-         | [] -> None
-         | BName(y, _, loc)::_ when x = y -> Some loc
-         | BTuple(binds, _)::rest -> dupe x (binds @ rest)
-         | _::rest -> dupe x rest in
-       let rec process_args rem_args =
-         match rem_args with
-         | [] -> []
-         | BBlank _::rest -> process_args rest
-         | BName(x, _, loc)::rest ->
-            (match dupe x rest with
-             | None -> []
-             | Some where -> [DuplicateId(x, where, loc)]) @ process_args rest
-         | BTuple(binds, loc)::rest ->
-            process_args (binds @ rest)
-       in
-       let rec flatten_bind (bind : sourcespan bind) : (string * scope_info) list =
-         match bind with
-         | BBlank _ -> []
-         | BName(x, _, xloc) -> [(x, (xloc, None, None))]
-         | BTuple(args, _) -> List.concat (List.map flatten_bind args) in
-       (process_args binds) @ wf_E body (merge_envs (List.concat (List.map flatten_bind binds)) env)
-  and wf_D d (env : scope_info name_envt) (tyenv : StringSet.t) =
-    match d with
-    | DFun(_, args, body, _) ->
-       let rec dupe x args =
-         match args with
-         | [] -> None
-         | BName(y, _, loc)::_ when x = y -> Some loc
-         | BTuple(binds, _)::rest -> dupe x (binds @ rest)
-         | _::rest -> dupe x rest in
-       let rec process_args rem_args =
-         match rem_args with
-         | [] -> []
-         | BBlank _::rest -> process_args rest
-         | BName(x, _, loc)::rest ->
-            (match dupe x rest with
-             | None -> []
-             | Some where -> [DuplicateId(x, where, loc)]) @ process_args rest
-         | BTuple(binds, loc)::rest ->
-            process_args (binds @ rest)
-       in
-       let rec arg_env args (env : scope_info name_envt) =
-         match args with
-         | [] -> env
-         | BBlank _ :: rest -> arg_env rest env
-         | BName(name, _, loc)::rest -> (name, (loc, None, None))::(arg_env rest env)
-         | BTuple(binds, _)::rest -> arg_env (binds @ rest) env in
-       (process_args args) @ (wf_E body (arg_env args env))
-  and wf_G (g : sourcespan decl list) (env : scope_info name_envt) (tyenv : StringSet.t) =
-    let add_funbind (env : scope_info name_envt) d =
-      match d with
-      | DFun(name, args, _, loc) ->
-         (name, (loc, Some (List.length args), Some (List.length args)))::env in
-    let env = List.fold_left add_funbind env g in
-    let errs = List.concat (List.map (fun d -> wf_D d env tyenv) g) in
-    (errs, env)
-  in
-  match p with
-  | Program(decls, body, _) ->
-     let initial_env = initial_val_env in
-     let initial_env = List.fold_left
-                          (fun env (name, (_, arg_count)) -> (name, (dummy_span, Some arg_count, Some arg_count))::env)
-     initial_fun_env
-     initial_env in
-     let rec find name (decls : 'a decl list) =
-       match decls with
-       | [] -> None
-       | DFun(n, args, _, loc)::rest when n = name -> Some(loc)
-       | _::rest -> find name rest in
-     let rec dupe_funbinds decls =
-       match decls with
-       | [] -> []
-       | DFun(name, args, _, loc)::rest ->
-          (match find name rest with
-          | None -> []
-          | Some where -> [DuplicateFun(name, where, loc)]) @ dupe_funbinds rest in
-     let all_decls = List.flatten decls in
-     let initial_tyenv = StringSet.of_list ["Int"; "Bool"] in
-     let help_G (env, exns) g =
-       let (g_exns, funbinds) = wf_G g env initial_tyenv in
-       (List.fold_left (fun xs x -> x::xs) env funbinds, exns @ g_exns) in
-     let (env, exns) = List.fold_left help_G (initial_env, dupe_funbinds all_decls) decls in
-     debug_printf "In wf_P: %s\n" (ExtString.String.join ", " (env_keys env));
-     let exns = exns @ (wf_E body env)
-     in match exns with
-        | [] -> Ok p
-        | _ -> Error exns
-;;
-
-(* ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   ;;;;;; DESUGARING ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; *)
-
-let desugar (p : sourcespan program) : sourcespan program =
-  let gensym =
-    let next = ref 0 in
-    (fun name ->
-      next := !next + 1;
-      sprintf "%s_%d" name (!next)) in
-  let rec helpP (p : sourcespan program) =
-    match p with
-    | Program(decls, body, tag) ->
-       (* This particular desugaring will convert declgroups into ELetRecs *)
-       let merge_sourcespans ((s1, _) : sourcespan) ((_, s2) : sourcespan) : sourcespan = (s1, s2) in
-       let wrap_G g body =
-         match g with
-         | [] -> body
-         | f :: r ->
-            let span = List.fold_left merge_sourcespans (get_tag_D f) (List.map get_tag_D r) in
-            ELetRec(helpG g, body, span) in
-       Program([], List.fold_right wrap_G decls (helpE body), tag)
-  and helpG g =
-    List.map helpD g
-  and helpD d =
-    match d with
-    | DFun(name, args, body, tag) ->
-       let helpArg a =
-         match a with
-         | BTuple(_, tag) ->
-            let name = gensym "argtup" in
-            let newbind = BName(name, false, tag) in
-            (newbind, [(a, EId(name, tag), tag)])
-         | _ -> (a, []) in
-       let (newargs, argbinds) = List.split (List.map helpArg args) in
-       let newbody = ELet(List.flatten argbinds, body, tag) in
-       (BName(name, false, tag), ELambda(newargs, helpE newbody, tag), tag)
-  and helpBE bind =
-    let (b, e, btag) = bind in
-    let e = helpE e in
-    match b with
-    | BTuple(binds, ttag) ->
-       (match e with
-        | EId _ ->
-           expandTuple binds ttag e
-        | _ ->
-           let newname = gensym "tup" in
-           (BName(newname, false, ttag), e, btag) :: expandTuple binds ttag (EId(newname, ttag)))
-    | _ -> [(b, e, btag)]
-  and expandTuple binds tag source : sourcespan binding list =
-    let tupleBind i b =
-      match b with
-      | BBlank btag -> []
-      | BName(_, _, btag) ->
-        [(b, EGetItem(source, ENumber(Int64.of_int(i), dummy_span), tag), btag)]
-      | BTuple(binds, tag) ->
-          let newname = gensym "tup" in
-          let newexpr = EId(newname, tag) in
-          (BName(newname, false, tag), EGetItem(source, ENumber(Int64.of_int(i), dummy_span), tag), tag) :: expandTuple binds tag newexpr
-    in
-    let size_check = EPrim2(CheckSize, source, ENumber(Int64.of_int(List.length binds), dummy_span), dummy_span) in
-    let size_check_bind = (BBlank(dummy_span), size_check, dummy_span) in
-    size_check_bind::(List.flatten (List.mapi tupleBind binds))
-  and helpE e =
-    match e with
-    | ESeq(e1, e2, tag) -> ELet([(BBlank(tag), helpE e1, tag)], helpE e2, tag)
-    | ETuple(exprs, tag) -> ETuple(List.map helpE exprs, tag)
-    | EGetItem(e, idx, tag) -> EGetItem(helpE e, helpE idx, tag)
-    | ESetItem(e, idx, newval, tag) -> ESetItem(helpE e, helpE idx, helpE newval, tag)
-    | EId(x, tag) -> EId(x, tag)
-    | ENumber(n, tag) -> ENumber(n, tag)
-    | EBool(b, tag) -> EBool(b, tag)
-    | ENil(t, tag) -> ENil(t, tag)
-    | EPrim1(op, e, tag) ->
-       EPrim1(op, helpE e, tag)
-    | EPrim2(op, e1, e2, tag) ->
-       EPrim2(op, helpE e1, helpE e2, tag)
-    | ELet(binds, body, tag) ->
-       let newbinds = (List.map helpBE binds) in
-       List.fold_right (fun binds body -> ELet(binds, body, tag)) newbinds (helpE body)
-    | ELetRec(bindexps, body, tag) ->
-       (* ASSUMES well-formed letrec, so only BName bindings *)
-       let newbinds = (List.map (fun (bind, e, tag) -> (bind, helpE e, tag)) bindexps) in
-       ELetRec(newbinds, helpE body, tag)
-    | EIf(cond, thn, els, tag) ->
-       EIf(helpE cond, helpE thn, helpE els, tag)
-    | EApp(name, args, native, tag) ->
-       EApp(helpE name, List.map helpE args, native, tag)
-    | ELambda(binds, body, tag) ->
-       let expandBind bind =
-         match bind with
-         | BTuple(_, btag) ->
-            let newparam = gensym "tuparg" in
-            (BName(newparam, false, btag), helpBE (bind, EId(newparam, btag), btag))
-         | _ -> (bind, []) in
-       let (params, newbinds) = List.split (List.map expandBind binds) in
-       let newbody = List.fold_right (fun binds body -> ELet(binds, body, tag)) newbinds (helpE body) in
-       ELambda(params, newbody, tag)
-
-  in helpP p
-;;
-
-(* ASSUMES desugaring is complete *)
-let rename_and_tag (p : tag program) : tag program =
-  let rec rename env p =
-    match p with
-    | Program(decls, body, tag) ->
-       Program(List.map (fun group -> List.map (helpD env) group) decls, helpE env body, tag)
-  and helpD env decl =
-    match decl with
-    | DFun(name, args, body, tag) ->
-       let (newArgs, env') = helpBS env args in
-       DFun(name, newArgs, helpE env' body, tag)
-  and helpB env b =
-    match b with
-    | BBlank tag -> (b, env)
-    | BName(name, allow_shadow, tag) ->
-       let name' = sprintf "%s_%d" name tag in
-       (BName(name', allow_shadow, tag), (name, name') :: env)
-    | BTuple(binds, tag) ->
-       let (binds', env') = helpBS env binds in
-       (BTuple(binds', tag), env')
-  and helpBS env (bs : tag bind list) =
-    match bs with
-    | [] -> ([], env)
-    | b::bs ->
-       let (b', env') = helpB env b in
-       let (bs', env'') = helpBS env' bs in
-       (b'::bs', env'')
-  and helpBG env (bindings : tag binding list) =
-    match bindings with
-    | [] -> ([], env)
-    | (b, e, a)::bindings ->
-       let (b', env') = helpB env b in
-       let e' = helpE env e in
-       let (bindings', env'') = helpBG env' bindings in
-       ((b', e', a)::bindings', env'')
-  and helpE env e =
-    match e with
-    | ESeq(e1, e2, tag) -> ESeq(helpE env e1, helpE env e2, tag)
-    | ETuple(es, tag) -> ETuple(List.map (helpE env) es, tag)
-    | EGetItem(e, idx, tag) -> EGetItem(helpE env e, helpE env idx, tag)
-    | ESetItem(e, idx, newval, tag) -> ESetItem(helpE env e, helpE env idx, helpE env newval, tag)
-    | EPrim1(op, arg, tag) -> EPrim1(op, helpE env arg, tag)
-    | EPrim2(op, left, right, tag) -> EPrim2(op, helpE env left, helpE env right, tag)
-    | EIf(c, t, f, tag) -> EIf(helpE env c, helpE env t, helpE env f, tag)
-    | ENumber _ -> e
-    | EBool _ -> e
-    | ENil _ -> e
-    | EId(name, tag) ->
-       (try
-         EId(find env name, tag)
-       with InternalCompilerError _ -> e)
-    | EApp(func, args, native, tag) ->
-       let func = helpE env func in
-       let call_type =
-         (* TODO: If you want, try to determine whether func is a known function name, and if so,
-            whether it's a Snake function or a Native function *)
-         Snake in
-       EApp(func, List.map (helpE env) args, call_type, tag)
-    | ELet(binds, body, tag) ->
-       let (binds', env') = helpBG env binds in
-       let body' = helpE env' body in
-       ELet(binds', body', tag)
-    | ELetRec(bindings, body, tag) ->
-       let (revbinds, env) = List.fold_left (fun (revbinds, env) (b, e, t) ->
-                                 let (b, env) = helpB env b in ((b, e, t)::revbinds, env)) ([], env) bindings in
-       let bindings' = List.fold_left (fun bindings (b, e, tag) -> (b, helpE env e, tag)::bindings) [] revbinds in
-       let body' = helpE env body in
-       ELetRec(bindings', body', tag)
-    | ELambda(binds, body, tag) ->
-       let (binds', env') = helpBS env binds in
-       let body' = helpE env' body in
-       ELambda(binds', body', tag)
-  in (rename [] p)
-;;
-
-
-(* ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   ;;;;;;; ANFING ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; *)
-
-
-type 'a anf_bind =
-  | BSeq of 'a cexpr
-  | BLet of string * 'a cexpr
-  | BLetRec of (string * 'a cexpr) list
-
-let anf (p : tag program) : unit aprogram =
-  let rec helpP (p : tag program) : unit aprogram =
-    match p with
-    | Program([], body, _) -> AProgram(helpA body, ())
-    | Program _ -> raise (InternalCompilerError "decls should have been desugared away")
-  and helpC (e : tag expr) : (unit cexpr * unit anf_bind list) = 
-    match e with
-    | EPrim1(op, arg, _) ->
-       let (arg_imm, arg_setup) = helpI arg in
-       (CPrim1(op, arg_imm, ()), arg_setup)
-    | EPrim2(op, left, right, _) ->
-       let (left_imm, left_setup) = helpI left in
-       let (right_imm, right_setup) = helpI right in
-       (CPrim2(op, left_imm, right_imm, ()), left_setup @ right_setup)
-    | EIf(cond, _then, _else, _) ->
-       let (cond_imm, cond_setup) = helpI cond in
-       (CIf(cond_imm, helpA _then, helpA _else, ()), cond_setup)
-    | ELet([], body, _) -> helpC body
-    | ELet((BBlank _, exp, _)::rest, body, pos) ->
-       let (exp_ans, exp_setup) = helpC exp in
-       let (body_ans, body_setup) = helpC (ELet(rest, body, pos)) in
-       (body_ans, exp_setup @ [BSeq exp_ans] @ body_setup)
-    | ELet((BName(bind, _, _), exp, _)::rest, body, pos) ->
-       let (exp_ans, exp_setup) = helpC exp in
-       let (body_ans, body_setup) = helpC (ELet(rest, body, pos)) in
-       (body_ans, exp_setup @ [BLet (bind, exp_ans)] @ body_setup)
-    | ELetRec(binds, body, _) ->
-       let processBind (bind, rhs, _) =
-         match bind with
-         | BName(name, _, _) -> (name, helpC rhs)
-         | _ -> raise (InternalCompilerError(sprintf "Encountered a non-simple binding in ANFing a let-rec: %s"
-                                             (string_of_bind bind))) in
-       let (names, new_binds_setup) = List.split (List.map processBind binds) in
-       let (new_binds, new_setup) = List.split new_binds_setup in
-       let (body_ans, body_setup) = helpC body in
-       (body_ans, (BLetRec (List.combine names new_binds)) :: body_setup)
-    | ELambda(args, body, _) ->
-       let processBind bind =
-         match bind with
-         | BName(name, _, _) -> name
-         | _ -> raise (InternalCompilerError(sprintf "Encountered a non-simple binding in ANFing a lambda: %s"
-                                             (string_of_bind bind))) in
-       (CLambda(List.map processBind args, helpA body, ()), [])
-    | ELet((BTuple(binds, _), exp, _)::rest, body, pos) ->
-       raise (InternalCompilerError("Tuple bindings should have been desugared away"))
-    | EApp(func, args, native, _) ->
-       let (func_ans, func_setup) = helpI func in
-       let (new_args, new_setup) = List.split (List.map helpI args) in
-       (CApp(func_ans, new_args, native, ()), func_setup @ List.concat new_setup)
-
-    | ESeq(e1, e2, _) ->
-       let (e1_ans, e1_setup) = helpC e1 in
-       let (e2_ans, e2_setup) = helpC e2 in
-       (e2_ans, e1_setup @ [BSeq e1_ans] @ e2_setup)
-
-    | ETuple(args, _) ->
-       let (new_args, new_setup) = List.split (List.map helpI args) in
-       (CTuple(new_args, ()), List.concat new_setup)
-    | EGetItem(tup, idx, _) ->
-       let (tup_imm, tup_setup) = helpI tup in
-       let (idx_imm, idx_setup) = helpI idx in
-       (CGetItem(tup_imm, idx_imm, ()), tup_setup @ idx_setup)
-    | ESetItem(tup, idx, newval, _) ->
-       let (tup_imm, tup_setup) = helpI tup in
-       let (idx_imm, idx_setup) = helpI idx in
-       let (new_imm, new_setup) = helpI newval in
-       (CSetItem(tup_imm, idx_imm, new_imm, ()), tup_setup @ idx_setup @ new_setup)
-         
-
-    | _ -> let (imm, setup) = helpI e in (CImmExpr imm, setup)
-
-  and helpI (e : tag expr) : (unit immexpr * unit anf_bind list) =
-    match e with
-    | ENumber(n, _) -> (ImmNum(n, ()), [])
-    | EBool(b, _) -> (ImmBool(b, ()), [])
-    | EId(name, _) -> (ImmId(name, ()), [])
-    | ENil _ -> (ImmNil(), [])
-
-    | ESeq(e1, e2, _) ->
-       let (e1_imm, e1_setup) = helpI e1 in
-       let (e2_imm, e2_setup) = helpI e2 in
-       (e2_imm, e1_setup @ e2_setup)
-
-
-    | ETuple(args, tag) ->
-       let tmp = sprintf "tup_%d" tag in
-       let (new_args, new_setup) = List.split (List.map helpI args) in
-       (ImmId(tmp, ()), (List.concat new_setup) @ [BLet (tmp, CTuple(new_args, ()))])
-    | EGetItem(tup, idx, tag) ->
-       let tmp = sprintf "get_%d" tag in
-       let (tup_imm, tup_setup) = helpI tup in
-       let (idx_imm, idx_setup) = helpI idx in
-       (ImmId(tmp, ()), tup_setup @ idx_setup @ [BLet (tmp, CGetItem(tup_imm, idx_imm, ()))])
-    | ESetItem(tup, idx, newval, tag) ->
-       let tmp = sprintf "set_%d" tag in
-       let (tup_imm, tup_setup) = helpI tup in
-       let (idx_imm, idx_setup) = helpI idx in
-       let (new_imm, new_setup) = helpI newval in
-       (ImmId(tmp, ()), tup_setup @ idx_setup @ new_setup @ [BLet (tmp, CSetItem(tup_imm, idx_imm, new_imm,()))])
-
-    | EPrim1(op, arg, tag) ->
-       let tmp = sprintf "unary_%d" tag in
-       let (arg_imm, arg_setup) = helpI arg in
-       (ImmId(tmp, ()), arg_setup @ [BLet (tmp, CPrim1(op, arg_imm, ()))])
-    | EPrim2(op, left, right, tag) ->
-       let tmp = sprintf "binop_%d" tag in
-       let (left_imm, left_setup) = helpI left in
-       let (right_imm, right_setup) = helpI right in
-       (ImmId(tmp, ()), left_setup @ right_setup @ [BLet (tmp, CPrim2(op, left_imm, right_imm, ()))])
-    | EIf(cond, _then, _else, tag) ->
-       let tmp = sprintf "if_%d" tag in
-       let (cond_imm, cond_setup) = helpI cond in
-       (ImmId(tmp, ()), cond_setup @ [BLet (tmp, CIf(cond_imm, helpA _then, helpA _else, ()))])
-    | EApp(func, args, native, tag) ->
-       let tmp = sprintf "app_%d" tag in
-       let (new_func, func_setup) = helpI func in
-       let (new_args, new_setup) = List.split (List.map helpI args) in
-       (ImmId(tmp, ()), func_setup @ (List.concat new_setup) @ [BLet (tmp, CApp(new_func, new_args, native, ()))])
-    | ELet([], body, _) -> helpI body
-    | ELet((BBlank _, exp, _)::rest, body, pos) ->
-       let (exp_ans, exp_setup) = helpC exp in
-       let (body_ans, body_setup) = helpI (ELet(rest, body, pos)) in
-       (body_ans, exp_setup @ [BSeq exp_ans] @ body_setup)
-    | ELetRec(binds, body, tag) ->
-       let tmp = sprintf "lam_%d" tag in
-       let processBind (bind, rhs, _) =
-         match bind with
-         | BName(name, _, _) -> (name, helpC rhs)
-         | _ -> raise (InternalCompilerError(sprintf "Encountered a non-simple binding in ANFing a let-rec: %s"
-                                             (string_of_bind bind))) in
-       let (names, new_binds_setup) = List.split (List.map processBind binds) in
-       let (new_binds, new_setup) = List.split new_binds_setup in
-       let (body_ans, body_setup) = helpC body in
-       (ImmId(tmp, ()), (List.concat new_setup)
-                        @ [BLetRec (List.combine names new_binds)]
-                        @ body_setup
-                        @ [BLet(tmp, body_ans)])
-    | ELambda(args, body, tag) ->
-       let tmp = sprintf "lam_%d" tag in
-       let processBind bind =
-         match bind with
-         | BName(name, _, _) -> name
-         | _ -> raise (InternalCompilerError(sprintf "Encountered a non-simple binding in ANFing a lambda: %s"
-                                             (string_of_bind bind))) in
-       (ImmId(tmp, ()), [BLet(tmp, CLambda(List.map processBind args, helpA body, ()))])
-    | ELet((BName(bind, _, _), exp, _)::rest, body, pos) ->
-       let (exp_ans, exp_setup) = helpC exp in
-       let (body_ans, body_setup) = helpI (ELet(rest, body, pos)) in
-       (body_ans, exp_setup @ [BLet (bind, exp_ans)] @ body_setup)
-    | ELet((BTuple(binds, _), exp, _)::rest, body, pos) ->
-       raise (InternalCompilerError("Tuple bindings should have been desugared away"))
-  and helpA e : unit aexpr = 
-    let (ans, ans_setup) = helpC e in
-    List.fold_right
-      (fun bind body ->
-        match bind with
-        | BSeq(exp) -> ASeq(exp, body, ())
-        | BLet(name, exp) -> ALet(name, exp, body, ())
-        | BLetRec(names) -> ALetRec(names, body, ()))
-      ans_setup (ACExpr ans)
-  in
-  helpP p
-;;
-
-(* IMPLEMENT THIS FROM YOUR PREVIOUS ASSIGNMENT *)
-let free_vars (e: 'a aexpr) : string list =
-  raise (NotYetImplemented "Implement free_vars for racer")
-;;
-
-let free_vars_cache (prog: 'a aprogram): StringSet.t aprogram =
-  raise (NotYetImplemented "Implement free_vars_cache for racer")
-;;
-
-(* IMPLEMENT THIS FROM YOUR PREVIOUS ASSIGNMENT *)
-let naive_stack_allocation (prog: tag aprogram) : tag aprogram * arg name_envt name_envt =
-  raise (NotYetImplemented "Implement stack allocation for racer")
-;;
-
-(* IMPLEMENT THE BELOW *)
-
-let interfere (e : StringSet.t aexpr) (live : StringSet.t) : grapht =
-  raise (NotYetImplemented "Generate interference graphs from expressions for racer")
-;;
-
-let color_graph (g: grapht) (init_env: arg name_envt) : arg name_envt =
-  raise (NotYetImplemented "Implement graph coloring for racer")
-;;
-
-let register_allocation (prog: tag aprogram) : tag aprogram * arg name_envt name_envt =
-  raise (NotYetImplemented "Implement register allocation for racer")
-;;
 
 let count_vars e =
   let rec helpA e =
@@ -763,7 +127,7 @@ let rec replicate x i =
   if i = 0 then []
   else x :: (replicate x (i - 1))
 
-and reserve size tag =
+let rec reserve size tag =
   let ok = sprintf "$memcheck_%d" tag in
   [
     IInstrComment(IMov(Reg(RAX), LabelContents("?HEAP_END")),
@@ -782,13 +146,6 @@ and reserve size tag =
       IInstrComment(IMov(Reg(heap_reg), Reg(RAX)), "assume gc success if returning here, so RAX holds the new heap_reg value");
       ILabel(ok);
     ]
-
-(* IMPLEMENT THIS FROM YOUR PREVIOUS ASSIGNMENT *)
-(* Additionally, you are provided an initial environment of values that you may want to
-   assume should take up the first few stack slots.  See the compiliation of Programs
-   below for one way to use this ability... *)
-and compile_fun name args body initial_env = raise (NotYetImplemented "NYI: compile_fun")
-
 and args_help args regs =
   match args, regs with
   | arg :: args, reg :: regs ->
@@ -828,7 +185,649 @@ and call (closure : arg) args =
     if len = 0 then []
     else [ IInstrComment(IAdd(Reg(RSP), Const(Int64.of_int(word_size * len))), sprintf "Popping %d arguments" len) ] in
   setup @ [ ICall(closure) ] @ teardown
-;;
+
+(* Compiled Type Checking *)
+let check_rax_for_num (err_lbl : string) : instruction list =
+  [
+   (* This "test" trick depends on num_tag being 0. R8 used because Test doesn't support imm64 *)
+   ILineComment("check_rax_for_num (" ^ err_lbl ^ ")");
+   IMov(Reg(R8), HexConst(num_tag_mask));
+   ITest(Reg(RAX), Reg(R8));
+   IJnz(Label(err_lbl));
+  ]
+
+let check_rax_for_bool (err_lbl : string) : instruction list =
+  [
+   (* Operate on temp register R8 instead of RAX. This is because we call AND
+    * on the register, which will alter the value. We want to preserve the value
+    * in RAX, hence we operate on R8 instead. R9 is used as intermediate because
+      And, Cmp don't work on imm64s *)
+   ILineComment("check_rax_for_bool (" ^ err_lbl ^ ")");
+   IMov(Reg(R8), Reg(RAX));
+   IMov(Reg(R9), HexConst(bool_tag_mask));
+   IAnd(Reg(R8), Reg(R9));
+   IMov(Reg(R9), HexConst(bool_tag));
+   ICmp(Reg(R8), Reg(R9));
+   IJnz(Label(err_lbl));
+  ]
+
+let check_for_overflow = [IJo(Label(err_overflow_lbl))]
+
+
+let check_rax_for_tup (err_lbl : string) : instruction list =
+  [
+   (* Operate on temp register R8 instead of RAX. This is because we call AND
+    * on the register, which will alter the value. We want to preserve the value
+    * in RAX, hence we operate on R8 instead. R9 is used as intermediate because
+      And, Cmp don't work on imm64s *)
+   ILineComment("check_rax_for_tup (" ^ err_lbl ^ ")");
+   IMov(Reg(R8), Reg(RAX));
+   IMov(Reg(R9), HexConst(tuple_tag_mask));
+   IAnd(Reg(R8), Reg(R9));
+   IMov(Reg(R9), HexConst(tuple_tag));
+   ICmp(Reg(R8), Reg(R9));
+   IJne(Label(err_lbl));
+  ]
+
+let check_rax_for_nil (err_lbl : string) : instruction list =
+  [
+   ILineComment("check_rax_for_nil (" ^ err_lbl ^ ")");
+   IMov(Reg(R8), const_nil);
+   ICmp(Reg(RAX), Reg(R8));
+   IJe(Label(err_lbl));
+  ]
+
+
+(* RAX should be the snakeval of the index (in a tuple)*)
+(* DO NOT MODIFY RAX *)
+let check_rax_for_tup_smaller (err_lbl : string) : instruction list =
+  [
+   ILineComment("check_rax_for_tup_smaller (" ^ err_lbl ^ ")");
+   ICmp(Reg(RAX), Const(0L));
+   (* no temp register because imm32 0 will be "sign-extended to imm64", which should still be 0 *)
+   IJl(Label(err_lbl));
+  ]
+
+
+(* RAX should be the snakeval of the index (in a tuple)*)
+(* DO NOT MODIFY RAX *)
+let check_rax_for_tup_bigger (tup_address : arg) (err_lbl : string) : instruction list =
+  [
+   (* R8 is used as intermediate because Cmp don't work on imm64s *)
+   ILineComment("check_rax_for_tup_bigger (" ^ err_lbl ^ ")");
+   IMov(Reg(R8), tup_address);
+   ISub(Reg(R8), Const(1L)); (* convert from snake val address -> machine address *)
+   IMov(Reg(R8), RegOffset(0, R8)); (* load the tup length into RAX *)
+   ICmp(Reg(RAX), Reg(R8));
+   IJge(Label(err_lbl));
+  ]
+
+
+let compile_fun_prelude (fun_name : string) : instruction list =
+  [
+    ILabel(fun_name);
+    IPush(Reg(RBP));
+    IMov(Reg(RBP), Reg(RSP));
+  ]
+
+let compile_fun_postlude : instruction list =
+  [
+    IMov(Reg(RSP), Reg(RBP));  (* Move stack to how it was at start of this function *)
+    IPop(Reg(RBP));
+    IRet;
+  ]
+
+(* shift the RegOffset "stack_idx_shift" SLOTS down the stack (ie. "stack_idx_shift * word_size" bytes) *)
+let add_stack_offset (stack_idx_shift : int) (orig : arg) : arg =
+  match orig with
+  | RegOffset(orig_offset, orig_reg) -> RegOffset(orig_offset - (stack_idx_shift * word_size), orig_reg)
+  | _ -> raise (InternalCompilerError "Unexpected env entry for stack offset adjustment")
+
+let rec compile_aexpr (e : tag aexpr) (stack_offset : int) (curr_env_name : string) (env : arg name_envt name_envt) : instruction list =
+  let sub_env = (find env curr_env_name) in
+  match e with
+  | ALet(id, bind, body, _) ->
+    let compiled_bind = compile_cexpr bind stack_offset curr_env_name env in
+    let compiled_body = compile_aexpr body stack_offset curr_env_name env in
+    [ILineComment(sprintf "Let_%s" id)]
+    @ compiled_bind
+    @ [IMov((find sub_env id), Reg(RAX))]
+    @ compiled_body
+  | ACExpr(expr) -> (compile_cexpr expr stack_offset curr_env_name env)
+  | ASeq(left, right, tag) ->
+    let seq_left_txt = sprintf "seq_left_%d" tag in
+    let seq_right_txt = sprintf "seq_right_%d" tag in
+    let compiled_left = (compile_cexpr left stack_offset curr_env_name env) in
+    let compiled_right = (compile_aexpr right stack_offset curr_env_name env) in
+    [ILineComment(seq_left_txt)]
+    @ compiled_left
+    @ [ILineComment(seq_right_txt)]
+    @ compiled_right
+  | ALetRec(bindings, body, tag) ->
+    let compiled_bindings =
+      List.fold_left (fun cb_acc (name, bound_body) ->
+                       let dest = add_stack_offset stack_offset (find sub_env name) in
+                         (compile_cexpr bound_body stack_offset curr_env_name env) @ [IMov(dest, Reg(RAX))] @ cb_acc)
+                       []
+                       bindings in
+    let bound_names = List.map (fun (name, _) -> name) bindings in
+    let second_pass =
+      let reducer acc (name, body) =
+        let abody = ACExpr(body) in
+        let fvs = List.sort String.compare (free_vars abody) in
+        let locs = List.mapi (fun idx name -> (idx, name)) fvs in
+        let fv_lambdas = List.filter (fun (idx, name) -> find_one bound_names name) locs in
+        let this_lambda_loc = find sub_env name in
+        acc @ List.fold_left (
+          fun code_acc (lambda_fv_offset, lambda) ->
+          let lambda_stack_loc = find sub_env lambda in
+          code_acc @ [
+            IMov(Reg(scratch_reg_2), lambda_stack_loc); (* Now the free lambda ptr is in scratch reg 2 *)
+            IMov(RegOffset((3 + lambda_fv_offset) * word_size, scratch_reg), Reg(scratch_reg_2)); (* Offset of 3 because of closure structure *)
+          ]
+        ) [
+            (* Move lambda location into scratch reg and untag pointer *)
+            IMov(Reg(scratch_reg), this_lambda_loc);
+            ISub(Reg(scratch_reg), HexConst(closure_tag));
+        ] fv_lambdas in
+      List.fold_left reducer [] bindings in
+
+    [ILineComment(sprintf "LetRec$%d" tag)]
+    @ compiled_bindings
+    @ [ILineComment(sprintf "LetRec$%d patching with ptrs to mutually rec closures" tag)]
+    @ second_pass
+
+
+    @ (compile_aexpr body stack_offset curr_env_name env)
+and compile_cexpr (e : tag cexpr) (stack_offset : int) (curr_env_name : string) (env : arg name_envt name_envt) =
+  let sub_env = find env curr_env_name in
+  match e with
+  | CIf(cond, thn, els, tag) ->
+     let cond_reg = compile_imm cond sub_env in
+     let lbl_comment = sprintf "if_%d" tag in
+     let lbl_thn = sprintf "if_then_%d" tag in
+     let lbl_els = sprintf "if_else_%d" tag in
+     let lbl_done = sprintf "if_done_%d" tag in
+     (* check cond for boolean val *)
+     [ILineComment(lbl_comment)]
+     @ [IMov(Reg(RAX), cond_reg)]
+     @ (check_rax_for_bool err_if_not_bool_lbl) 
+     (* test for RAX == true *)
+     (* need to use temp register R8 because Test cannot accept imm64 *)
+     @ [IMov(Reg(R8), bool_mask)]
+     @ [ITest(Reg(RAX), Reg(R8))]
+     @ [IJz(Label(lbl_els))]
+
+     @ [ILabel(lbl_thn)]
+     @ (compile_aexpr thn stack_offset curr_env_name env)
+     @ [IJmp(Label(lbl_done))]
+
+     @ [ILabel(lbl_els)]
+     @ (compile_aexpr els stack_offset curr_env_name env)
+     @ [ILabel(lbl_done)]
+  | CScIf(cond, thn, els, tag) ->
+     let cond_reg = compile_imm cond sub_env in
+     let lbl_comment = sprintf "scif_%d" tag in
+     let lbl_thn = sprintf "scif_then_%d" tag in
+     let lbl_els = sprintf "scif_else_%d" tag in
+     let lbl_done = sprintf "scif_done_%d" tag in
+     (* check cond for boolean val *)
+     [ILineComment(lbl_comment)]
+     @ [IMov(Reg(RAX), cond_reg)]
+     @ (check_rax_for_bool err_logic_not_bool_lbl)
+     (* test for RAX == true *)
+     (* need to use temp register R8 because Test cannot accept imm64 *)
+     @ [IMov(Reg(R8), bool_mask)]
+     @ [ITest(Reg(RAX), Reg(R8))]
+     @ [IJz(Label(lbl_els))]
+
+     @ [ILabel(lbl_thn)]
+     (* LHS is compiled before RHS, so definitely not tail position *)
+     @ (compile_aexpr thn stack_offset curr_env_name env)
+     @ [IJmp(Label(lbl_done))]
+
+     @ [ILabel(lbl_els)]
+     (* Since we check that result is bool, RHS is also not in tail position *)
+     @ (compile_aexpr els stack_offset curr_env_name env)
+     @ (check_rax_for_bool err_logic_not_bool_lbl) 
+     @ [ILabel(lbl_done)]
+  | CPrim1(op, body, tag) ->
+    let body_imm = compile_imm body sub_env in
+     begin match op with
+       | Add1 ->
+           [IMov(Reg(RAX), body_imm)]
+           @ (check_rax_for_num err_arith_not_num_lbl) 
+           @ [IAdd(Reg(RAX), Const(2L))]
+           @ check_for_overflow
+       | Sub1 ->
+           [IMov(Reg(RAX), body_imm)]
+           @ (check_rax_for_num err_arith_not_num_lbl)
+           @ [ISub(Reg(RAX), Const(2L))]
+           @ check_for_overflow
+        | Print -> [IMov(Reg(RDI), body_imm); ICall(Label("print"));]
+        | IsBool ->
+          let true_lbl = sprintf "is_bool_true_%d" tag in
+          let false_lbl = sprintf "is_bool_false_%d" tag in
+          let done_lbl = sprintf "is_bool_done_%d" tag in
+          [
+           IMov(Reg(RAX), body_imm);
+           (* Don't need to save RAX on the stack because we overwrite the
+            * value with true/false later. R8 used because And, Cmp don't support imm64 *)
+           IMov(Reg(R8), HexConst(bool_tag_mask));
+           IAnd(Reg(RAX), Reg(R8));
+           IMov(Reg(R8), HexConst(bool_tag));
+           ICmp(Reg(RAX), Reg(R8));
+           IJz(Label(true_lbl));
+           (* case not bool *)
+           ILabel(false_lbl);
+           IMov(Reg(RAX), const_false);
+           IJmp(Label(done_lbl));
+           (* case is a bool *)
+           ILabel(true_lbl);
+           IMov(Reg(RAX), const_true);
+           (* done *)
+           ILabel(done_lbl);
+          ]
+        | IsNum ->
+          let true_lbl = sprintf "is_num_true_%d" tag in
+          let false_lbl = sprintf "is_num_false_%d" tag in
+          let done_lbl = sprintf "is_num_done_%d" tag in
+          [
+           IMov(Reg(RAX), body_imm);
+           (* This "test" trick depends on num_tag being 0. R8 used because Test doesn't support imm64 *)
+           IMov(Reg(R8), HexConst(num_tag_mask));
+           ITest(Reg(RAX), Reg(R8));
+           IJz(Label(true_lbl));
+           (* case not num *)
+           ILabel(false_lbl);
+           IMov(Reg(RAX), const_false);
+           IJmp(Label(done_lbl));
+           (* case is a num *)
+           ILabel(true_lbl);
+           IMov(Reg(RAX), const_true);
+           (* done *)
+           ILabel(done_lbl);
+          ]
+        | Not ->
+           [IMov(Reg(RAX), body_imm)]
+           @ (check_rax_for_bool err_logic_not_bool_lbl)
+           (* need to use temp register R8 because Xor cannot accept imm64 *)
+           @ [IMov(Reg(R8), bool_mask)]
+           @ [IXor(Reg(RAX), Reg(R8))]
+        | PrintStack ->
+            (* TODO Lerner provided this *)
+            raise (NotYetImplemented "PrintStack not yet implemented")
+        | IsTuple ->
+          let true_lbl = sprintf "is_tup_true_%d" tag in
+          let false_lbl = sprintf "is_tup_false_%d" tag in
+          let done_lbl = sprintf "is_tup_done_%d" tag in
+          [
+           IMov(Reg(RAX), body_imm);
+           (* Don't need to save RAX on the stack because we overwrite the
+            * value with true/false later. R8 used because And, Cmp don't support imm64 *)
+           IMov(Reg(R8), HexConst(tuple_tag_mask));
+           IAnd(Reg(RAX), Reg(R8));
+           IMov(Reg(R8), HexConst(tuple_tag));
+           ICmp(Reg(RAX), Reg(R8));
+           IJz(Label(true_lbl));
+           (* case not tup *)
+           ILabel(false_lbl);
+           IMov(Reg(RAX), const_false);
+           IJmp(Label(done_lbl));
+           (* case is a tup *)
+           ILabel(true_lbl);
+           IMov(Reg(RAX), const_true);
+           (* done *)
+           ILabel(done_lbl);
+          ]
+     end
+  | CPrim2(op, lhs, rhs, tag) ->
+     let lhs_reg = compile_imm lhs sub_env in
+     let rhs_reg = compile_imm rhs sub_env in
+     begin match op with
+      | Plus ->
+         (* check rhs for numerical val *)
+         [IMov(Reg(RAX), rhs_reg)]
+         @ (check_rax_for_num err_arith_not_num_lbl)
+         (* check lhs for numerical val *)
+         @ [IMov(Reg(RAX), lhs_reg)]
+         @ (check_rax_for_num err_arith_not_num_lbl)
+         (* need to use a temp register because ADD does not properly handle imm64 (for overflow) *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [IAdd(Reg(RAX), Reg(R8))]
+         @ check_for_overflow
+      | Minus ->
+         (* check rhs for numerical val *)
+         [IMov(Reg(RAX), rhs_reg)]
+         @ (check_rax_for_num err_arith_not_num_lbl)
+         (* check lhs for numerical val *)
+         @ [IMov(Reg(RAX), lhs_reg)]
+         @ (check_rax_for_num err_arith_not_num_lbl)
+         (* need to use a temp register because SUB does not properly handle imm64 (for overflow) *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [ISub(Reg(RAX), Reg(R8))]
+         @ check_for_overflow
+      | Times ->
+         (* check rhs for numerical val *)
+         [IMov(Reg(RAX), rhs_reg)]
+         @ (check_rax_for_num err_arith_not_num_lbl)
+         (* check lhs for numerical val *)
+         @ [IMov(Reg(RAX), lhs_reg)]
+         @ (check_rax_for_num err_arith_not_num_lbl)
+         @ [ISar(Reg(RAX), Const(1L))]
+         (* need to use a temp register because IMUL does not properly handle imm64 (for overflow) *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [IMul(Reg(RAX), Reg(R8))]
+         @ check_for_overflow
+      | And -> raise (InternalCompilerError "Impossible: 'and' should be rewritten")
+      | Or -> raise (InternalCompilerError "Impossible: 'or' should be rewritten")
+      | Greater ->
+         let lbl_false = sprintf "greater_false_%d" tag in
+         let lbl_done = sprintf "greater_done_%d" tag in
+
+         (* check rhs for numerical val *)
+         [IMov(Reg(RAX), rhs_reg)]
+         @ (check_rax_for_num err_comp_not_num_lbl)
+         (* check lhs for numerical val *)
+         @ [IMov(Reg(RAX), lhs_reg)]
+         @ (check_rax_for_num err_comp_not_num_lbl)
+
+         (* need to use temp register R8 because Test cannot accept imm64 *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [ICmp(Reg(RAX), Reg(R8))]
+         @ [IMov(Reg(RAX), const_true)]
+         @ [IJg(Label(lbl_done))]
+
+         @ [ILabel(lbl_false)]
+         @ [IMov(Reg(RAX), const_false)]
+
+         @ [ILabel(lbl_done)]
+      | GreaterEq ->
+         let lbl_false = sprintf "greater_eq_false_%d" tag in
+         let lbl_done = sprintf "greater_eq_done_%d" tag in
+
+         (* check rhs for numerical val *)
+         [IMov(Reg(RAX), rhs_reg)]
+         @ (check_rax_for_num err_comp_not_num_lbl)
+         (* check lhs for numerical val *)
+         @ [IMov(Reg(RAX), lhs_reg)]
+         @ (check_rax_for_num err_comp_not_num_lbl)
+
+         (* need to use temp register R8 because Test cannot accept imm64 *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [ICmp(Reg(RAX), Reg(R8))]
+         @ [IMov(Reg(RAX), const_true)]
+         @ [IJge(Label(lbl_done))]
+
+         @ [ILabel(lbl_false)]
+         @ [IMov(Reg(RAX), const_false)]
+
+         @ [ILabel(lbl_done)]
+      | Less ->
+         let lbl_false = sprintf "less_false_%d" tag in
+         let lbl_done = sprintf "less_done_%d" tag in
+
+         (* check rhs for numerical val *)
+         [IMov(Reg(RAX), rhs_reg)]
+         @ (check_rax_for_num err_comp_not_num_lbl)
+         (* check lhs for numerical val *)
+         @ [IMov(Reg(RAX), lhs_reg)]
+         @ (check_rax_for_num err_comp_not_num_lbl)
+
+         (* need to use temp register R8 because Test cannot accept imm64 *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [ICmp(Reg(RAX), Reg(R8))]
+         @ [IMov(Reg(RAX), const_true)]
+         @ [IJl(Label(lbl_done))]
+
+         @ [ILabel(lbl_false)]
+         @ [IMov(Reg(RAX), const_false)]
+
+         @ [ILabel(lbl_done)]
+      | LessEq ->
+         let lbl_false = sprintf "less_eq_false_%d" tag in
+         let lbl_done = sprintf "less_eq_done_%d" tag in
+
+         (* check rhs for numerical val *)
+         [IMov(Reg(RAX), rhs_reg)]
+         @ (check_rax_for_num err_comp_not_num_lbl)
+         (* check lhs for numerical val *)
+         @ [IMov(Reg(RAX), lhs_reg)]
+         @ (check_rax_for_num err_comp_not_num_lbl)
+
+         (* need to use temp register R8 because Test cannot accept imm64 *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [ICmp(Reg(RAX), Reg(R8))]
+         @ [IMov(Reg(RAX), const_true)]
+         @ [IJle(Label(lbl_done))]
+
+         @ [ILabel(lbl_false)]
+         @ [IMov(Reg(RAX), const_false)]
+
+         @ [ILabel(lbl_done)]
+      | Eq ->
+         let lbl_false = sprintf "eq_false_%d" tag in
+         let lbl_done = sprintf "eq_done_%d" tag in
+
+         [IMov(Reg(RAX), lhs_reg)]
+
+         (* need to use temp register R8 because Test cannot accept imm64 *)
+         @ [IMov(Reg(R8), rhs_reg)]
+         @ [ICmp(Reg(RAX), Reg(R8))]
+         @ [IMov(Reg(RAX), const_true)]
+         @ [IJe(Label(lbl_done))]
+
+         @ [ILabel(lbl_false)]
+         @ [IMov(Reg(RAX), const_false)]
+
+         @ [ILabel(lbl_done)]
+      | CheckSize -> raise (NotYetImplemented "CheckSize not currently used in compilation")
+     end
+  | CLambda(params, body, tag) ->
+    let arity = List.length params in
+    let closure_lbl = sprintf "closure$%d" tag in
+    let closure_done_lbl = sprintf "closure_done$%d" tag in
+    let free_vars_list = List.sort String.compare (free_vars (ACExpr(e))) in
+    let num_free_vars = List.length free_vars_list in
+    let add_free_vars_to_closure =
+      List.flatten (List.mapi (fun idx fv ->
+                 [
+                 (* Use incoming env here, because it is the env that actually has the free var values *)
+                 IMov(Reg(scratch_reg), (find sub_env fv));
+                 IMov(Sized(QWORD_PTR, RegOffset((3 + idx) * word_size, heap_reg)), Reg(scratch_reg));
+                 ])
+                free_vars_list) in
+    let true_heap_size = 3 + num_free_vars in
+    let reserved_heap_size = true_heap_size + (true_heap_size mod 2) in
+    let (prelude, body, postlude) = compile_fun closure_lbl params body env free_vars_list in
+    [IJmp(Label(closure_done_lbl))]
+    @ prelude
+    @ body
+    @ postlude
+    @ [
+      ILabel(closure_done_lbl);
+      IMov(Sized(QWORD_PTR, RegOffset(0 * word_size, heap_reg)), Const(Int64.of_int arity));
+      IMov(Sized(QWORD_PTR, RegOffset(1 * word_size, heap_reg)), Label(closure_lbl));
+      IMov(Sized(QWORD_PTR, RegOffset(2 * word_size, heap_reg)), Const(Int64.of_int num_free_vars));
+      ]
+    @ add_free_vars_to_closure
+    @ [
+      IMov(Reg(RAX), Reg(heap_reg));
+      IAdd(Reg(RAX), HexConst(closure_tag));
+      IAdd(Reg(heap_reg), Const(Int64.of_int (reserved_heap_size * word_size)));
+      ]
+  | CApp(func, args, ct, tag) ->
+    let num_args = (List.length args) in
+    (* we add 1 below because we will also push the closure itself before making the call *)
+    let needs_padding = (num_args + 1) mod 2 == 1 in
+    let padding = (if needs_padding then [IMov(Reg(R8), HexConst(0xF0F0F0F0L)); IPush(Reg(R8))] else []) in
+    let num_pushes = num_args + 1 (* the closure *) + (if needs_padding then 1 else 0) in
+    let args_rev = List.rev args in
+    let compiled_func = compile_imm func sub_env in
+    begin match ct with
+    | Snake ->
+        (* TODO- figure out how I will support equal(), print(), etc. *)
+        (* Push the args onto stack in reverse order *)
+        let push_compiled_args = List.fold_left
+                       (fun accum_instrs arg ->
+                          let compiled_imm = (compile_imm arg sub_env) in
+                          (* Use temp register because can't push imm64 directly *)
+                          accum_instrs @ [IMov(Reg(R8), compiled_imm);
+                                          IPush(Sized(QWORD_PTR, Reg(R8)))])
+                       []
+                       args_rev
+                       in
+        let check_rax_for_closure =
+        [ILineComment(sprintf "check_rax_for_closure (%s)" err_call_not_closure_lbl);
+         IMov(Reg(R9), HexConst(closure_tag_mask));
+         IAnd(Reg(RAX), Reg(R9));
+         IMov(Reg(R9), HexConst(closure_tag));
+         ICmp(Reg(RAX), Reg(R9));
+         IJne(Label(err_call_not_closure_lbl));] in
+        let check_closure_for_arity =
+        [ILineComment(sprintf "check_closure_for_arity (%s)" err_call_arity_err_lbl);
+         (* RAX is tagged ptr to closure on heap *)
+         IMov(Reg(RAX), compiled_func);
+         ISub(Reg(RAX), HexConst(closure_tag)); (* now RAX is heap addr to closure *)
+         IMov(Reg(RAX), RegOffset(0,RAX)); (* get the arity (machine int) *)
+         ICmp(Reg(RAX), Const(Int64.of_int num_args)); (* no temp reg, assume won't have that many args *)
+         IJne(Label(err_call_arity_err_lbl));] in
+        let padded_comp_args = padding @ push_compiled_args in
+        [IMov(Reg(RAX), compiled_func);]
+        @ check_rax_for_closure
+        @ check_closure_for_arity
+        @ padded_comp_args
+        @ [
+          IMov(Reg(RAX), compiled_func);
+          IPush(Reg(RAX)); (*Push the tagged func itself onto the stack*)
+          ISub(Reg(RAX), HexConst(closure_tag)); (* now RAX is heap addr to closure *)
+          IMov(Reg(RAX), RegOffset(1*word_size,RAX)); (* get the code ptr (machine addr) *)
+          ICall(Reg(RAX));
+          (* Don't use temp register here because we assume the RHS will never be very big *)
+          IAdd(Reg(RSP), Const(Int64.of_int (word_size * num_pushes)));
+          ]
+    | _ -> raise (InternalCompilerError "(code gen) Unsupported function application call type")
+    end
+  | CImmExpr(expr) -> [IMov(Reg(RAX), (compile_imm expr sub_env))]
+  | CTuple(elems, _) ->
+      let tup_size = List.length elems in
+      let need_padding = tup_size mod 2 == 1 in
+      let padding_val = HexConst(0xF0F0F0F0L) in
+      let padding =
+        if need_padding then []
+        else
+          let offs = tup_size + 1 in
+          [IMov(Reg(R8), padding_val); IMov(RegOffset(offs*word_size, R15), Reg(R8))] in
+      let next_heap_loc = tup_size + 1 + ((1+tup_size) mod 2) in
+
+      (* store the tuple size on the heap *)
+      [IMov(Reg(R8), Const(Int64.of_int tup_size)); IMov(RegOffset(0, R15), Reg(R8))]
+      (* store each tuple element on the heap *)
+      @ List.flatten
+          (List.mapi
+            (fun i e ->
+              let arg = compile_imm e sub_env in
+              let offs = i + 1 in
+              [IMov(Reg(R8), Sized(QWORD_PTR, arg)); IMov(RegOffset(offs*word_size, R15), Reg(R8))])
+            elems)
+      @ padding
+      (* return the pointer to the tuple, make it a snakeval *)
+      @ [IMov(Reg(RAX), Reg(R15)); IAdd(Reg(RAX), Const(1L))]
+      (* increment the heap ptr *)
+      @ [IMov(Reg(R8), Const(Int64.of_int (next_heap_loc * word_size))); IAdd(Reg(R15), Reg(R8))]
+  | CGetItem(tup, i, _) ->
+      let tup_address = compile_imm tup sub_env in
+      let idx = compile_imm i sub_env in
+
+      (* first, do runtime error checking *)
+      [IMov(Reg(RAX), tup_address)] (* move tuple address (snakeval) into RAX *)
+      @ (check_rax_for_tup err_get_not_tuple_lbl)
+      @ (check_rax_for_nil err_nil_deref_lbl)
+      @ [IMov(Reg(RAX), idx)] (* move the idx (snakeval) into RAX *)
+      @ (check_rax_for_num err_get_not_num_lbl)
+      @ [ISar(Reg(RAX), Const(1L))] (* convert from snakeval -> int *)
+      @ (check_rax_for_tup_smaller err_get_low_index_lbl)
+      @ (check_rax_for_tup_bigger tup_address err_get_high_index_lbl)
+
+      (* passed checks, now do actual 'get' *)
+      @ [IMov(Reg(RAX), tup_address)] (* move tuple address back into RAX *)
+      @ [ISub(Reg(RAX), Const(1L))] (* convert from snake val address -> machine address *)
+      @ [IMov(Reg(R8), idx)] (* move the idx (snakeval) into R8 *)
+      @ [ISar(Reg(R8), Const(1L))] (* convert from snake val -> int *)
+      @ [IAdd(Reg(R8), Const(1L))] (* add 1 to the offset to bypass the tup size *)
+      @ [IMov(Reg(RAX), RegOffsetReg(RAX,R8,word_size,0))]
+  | CSetItem(tup, i, r, _) ->
+      let tup_address = compile_imm tup sub_env in
+      let idx = compile_imm i sub_env in
+      let rhs = compile_imm r sub_env in
+
+      (* first, do runtime error checking *)
+      [IMov(Reg(RAX), tup_address)] (* move tuple address (snakeval) into RAX *)
+      @ (check_rax_for_tup err_get_not_tuple_lbl)
+      @ (check_rax_for_nil err_nil_deref_lbl)
+      @ [IMov(Reg(RAX), idx)] (* move the idx (snakeval) into RAX *)
+      @ (check_rax_for_num err_set_not_num_lbl)
+      @ [ISar(Reg(RAX), Const(1L))] (* convert from snakeval -> int *)
+      @ (check_rax_for_tup_smaller err_get_low_index_lbl)
+      @ (check_rax_for_tup_bigger tup_address err_get_high_index_lbl)
+
+      (* passed checks, now do actual 'set' *)
+      @ [IMov(Reg(RAX), tup_address)] (* move tuple address (snakeval) into RAX *)
+      @ [ISub(Reg(RAX), Const(1L))] (* convert from snake val -> address *)
+      @ [IMov(Reg(R8), idx)] (* move the idx (* snakeval *) into R8 *)
+      @ [ISar(Reg(R8), Const(1L))] (* convert from snake val -> int *)
+      @ [IAdd(Reg(R8), Const(1L))] (* add 1 to the offset to bypass the tup size *)
+      @ [IMov(Reg(R11), rhs)]
+      @ [IMov(RegOffsetReg(RAX,R8,word_size,0), Reg(R11))]
+      @ [IAdd(Reg(RAX), Const(1L))] (* convert the tuple address back to a snakeval *)
+and compile_imm e (sub_env : arg name_envt) : arg =
+  match e with
+  | ImmNum(n, _) -> Const(Int64.shift_left n 1)
+  | ImmBool(true, _) -> const_true
+  | ImmBool(false, _) -> const_false
+  | ImmId(x, _) -> (find sub_env x)
+  | ImmNil(_) -> const_nil
+
+
+(* IMPLEMENT THIS FROM YOUR PREVIOUS ASSIGNMENT *)
+(* Additionally, you are provided an initial environment of values that you may want to
+   assume should take up the first few stack slots.  See the compiliation of Programs
+   below for one way to use this ability... *)
+
+(* Compile a function, returns tuple of prelude,body,postlude *)
+and compile_fun (name : string) (params : string list) (body : tag aexpr) (env : arg name_envt name_envt) (free_var_list : string list) :
+  (instruction list * instruction list * instruction list) =
+    let rec min_slot_addr (sub_env : arg name_envt) : int =
+      let get_bytes (arg : arg) : int =
+        match arg with RegOffset(bytes, _) -> bytes | _ -> raise (InternalCompilerError "Unexpected arg for get_bytes") in
+      match sub_env with
+      | (_, addr_arg)::rest ->
+        let addr = get_bytes addr_arg in
+        let min_addr_rest = min_slot_addr rest in
+        if addr < min_addr_rest then addr else min_addr_rest
+      | [] -> 0 in
+    let num_free_vars = List.length free_var_list in
+    let sub_env = find env name in
+    let load_free_vars = List.flatten (List.mapi (
+      fun idx free_var -> [
+        IMov(Reg(scratch_reg), RegOffset((3 + idx) * word_size, RAX));
+        IMov(find sub_env free_var, Reg(scratch_reg));
+      ]
+    ) free_var_list) in
+    let prelude = compile_fun_prelude name in
+    let compiled_body = compile_aexpr body num_free_vars name env in
+    let postlude = compile_fun_postlude in (
+      prelude,
+      [IMov(Reg(RAX), RegOffset(2 * word_size, RBP))] (* Now RAX has the (tagged) func value *)
+      @ [ISub(Reg(RAX), HexConst(closure_tag))] (* now RAX is heap addr to closure *)
+      
+      (* Don't use temp register here because we assume the RHS will never be very big *)
+      (* allocates stack space for all free and local vars *)
+      @ [IAdd(Reg(RSP), Const(Int64.of_int (min_slot_addr sub_env)))]
+      @ load_free_vars
+      @ compiled_body,
+      postlude
+    )
 
 (* This function can be used to take the native functions and produce DFuns whose bodies
    simply contain an EApp (with a Native call_type) to that native function.  Then,
@@ -853,7 +852,6 @@ extern ?print
 extern ?print_stack
 extern ?equal
 extern ?try_gc
-extern ?naive_print_heap
 extern ?HEAP
 extern ?HEAP_END
 extern ?set_stack_bottom
@@ -874,6 +872,9 @@ global ?our_code_starts_here" in
 ?err_set_high_index:%s
 ?err_call_not_closure:%s
 ?err_call_arity_err:%s
+?err_get_not_num:%s
+?err_set_not_num:%s
+?err_bad_input:%s
 "
                        (to_asm (native_call (Label "?error") [Const(err_COMP_NOT_NUM); Reg(scratch_reg)]))
                        (to_asm (native_call (Label "?error") [Const(err_ARITH_NOT_NUM); Reg(scratch_reg)]))
@@ -890,11 +891,14 @@ global ?our_code_starts_here" in
                        (to_asm (native_call (Label "?error") [Const(err_SET_HIGH_INDEX); Reg(scratch_reg)]))
                        (to_asm (native_call (Label "?error") [Const(err_CALL_NOT_CLOSURE); Reg(scratch_reg)]))
                        (to_asm (native_call (Label "?error") [Const(err_CALL_ARITY_ERR); Reg(scratch_reg)]))
+                       (to_asm (native_call (Label "?error") [Const(err_GET_NOT_NUM); Reg(scratch_reg)]))
+                       (to_asm (native_call (Label "?error") [Const(err_SET_NOT_NUM); Reg(scratch_reg)]))
+                       (to_asm (native_call (Label "?error") [Const(err_BAD_INPUT); Reg(scratch_reg)]))
   in
   match anfed with
   | AProgram(body, _) ->
   (* $heap and $size are mock parameter names, just so that compile_fun knows our_code_starts_here takes in 2 parameters *)
-     let (prologue, comp_main, epilogue) = compile_fun "?our_code_starts_here" ["$heap"; "$size"] body env in
+     let (ocsh_prelude, ocsh_body, ocsh_postlude) = compile_fun "?our_code_starts_here" ["$heap"; "$size"] body env [] in
      let heap_start =
        [
          ILineComment("heap start");
@@ -905,14 +909,13 @@ global ?our_code_starts_here" in
        ] in
      let set_stack_bottom =
        [
-         ILabel("?our_code_starts_here");
          IMov(Reg R12, Reg RDI);
        ]
        @ (native_call (Label "?set_stack_bottom") [Reg(RBP)])
        @ [
            IMov(Reg RDI, Reg R12)
          ] in
-     let main = (prologue @ set_stack_bottom @ heap_start @ comp_main @ epilogue) in
+     let main = (ocsh_prelude @ set_stack_bottom @ heap_start @ ocsh_body @ ocsh_postlude) in
      sprintf "%s%s%s\n" prelude (to_asm main) suffix
 ;;
 

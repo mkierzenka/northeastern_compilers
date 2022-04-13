@@ -6,6 +6,7 @@ open Pretty
 open Exprs
 open Phases
 open Errors
+open Anf
 
 let t name program input expected = name>::test_run ~args:[] ~std_input:input Naive program name expected;;
 let tr name program input expected = name>::test_run ~args:[] ~std_input:input Register program name expected;;
@@ -84,10 +85,13 @@ let input = [
     t "input1" "let x = input() in x + 2" "123" "125"
   ]
 
+let simple = [
+  t "let_a" "let a = 3 in a" "" "3"
+]
 
 let suite =
 "unit_tests">:::
- pair_tests @ oom @ gc @ input
+ pair_tests @ oom @ gc @ input @ simple
 
 
 
