@@ -125,6 +125,31 @@ let get_tag_D d = match d with
   | DFun(_, _, _, t) -> t
 ;;
 
+let rec get_tag_I (i : 'a immexpr) : 'a =
+  match i with
+  | ImmNum(_, t) -> t
+  | ImmBool(_, t) -> t
+  | ImmId(_, t) -> t
+  | ImmNil(t) -> t
+and get_tag_C (c : 'a cexpr) : 'a =
+  match c with
+  | CIf(_, _, _, t) -> t
+  | CScIf(_, _, _, t) -> t
+  | CPrim1(_, _, t) -> t
+  | CPrim2(_, _, _, t) -> t
+  | CApp(_, _, _, t) -> t
+  | CImmExpr(e) -> get_tag_I e
+  | CTuple(_, t) -> t
+  | CGetItem(_, _, t) -> t
+  | CSetItem(_, _, _, t) -> t
+  | CLambda(_, _, t) -> t
+and get_tag_A (a : 'a aexpr) : 'a =
+  match a with
+  | ASeq(_, _, t) -> t
+  | ALet(_, _, _, t) -> t
+  | ALetRec(_, _, t) -> t
+  | ACExpr(cexp) -> get_tag_C cexp
+
            
 let rec map_tag_E (f : 'a -> 'b) (e : 'a expr) =
   match e with
