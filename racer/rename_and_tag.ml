@@ -61,9 +61,9 @@ let rename_and_tag (p : tag program) : tag program =
     | EApp(func, args, native, tag) ->
        let func = helpE env func in
        let call_type =
-         (* TODO: If you want, try to determine whether func is a known function name, and if so,
-            whether it's a Snake function or a Native function *)
-         native in
+         match func with
+         | EId(name, tag) -> if List.mem (detag_name name) native_fun_names then Native else Snake
+         | _ -> Snake in
        EApp(func, List.map (helpE env) args, call_type, tag)
     | ELet(binds, body, tag) ->
        let (binds', env') = helpBG env binds in

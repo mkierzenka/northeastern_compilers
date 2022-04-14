@@ -12,7 +12,17 @@ let dummy_span = (Lexing.dummy_pos, Lexing.dummy_pos)
 let prim_bindings = []
 
 let native_fun_bindings = [("input", (dummy_span, Some 0, Some 0))]
-(* scope_info name_envt *)
+let native_fun_names = List.map (fun (name, _) -> name) native_fun_bindings
+
+(* strips trailing "_%d" tag from a string *)
+let detag_name name =
+  match String.rindex_opt name '_' with
+  | Some(i) -> String.sub name 0 i
+  | None -> raise (InternalCompilerError (
+    sprintf "Original function name not retrievable: detagging did not find underscore (tagged name: %s)" name
+  ))
+
+let extern_name name = "?" ^ detag_name name
 
 (* you can add any functions or data defined by the runtime here for future use *)
 let initial_val_env = []

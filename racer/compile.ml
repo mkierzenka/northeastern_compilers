@@ -710,11 +710,12 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (curr_env_name : string) 
     begin
     match func with
     | ImmId(fname, _) ->
+      let extern_fname = extern_name fname in
       let compiled_args = if num_args > 6
         then raise (InternalCompilerError "(code gen) Too many args for native function call")
         else List.map (fun arg -> (compile_imm arg sub_env)) args in
-      [ILineComment("Native call: " ^ fname);]
-      @ (native_call (Label fname) compiled_args)
+      [ILineComment("Native call: " ^ extern_fname ^ (sprintf " (tag: %d)" tag));]
+      @ (native_call (Label extern_fname) compiled_args)
     | _ -> raise (InternalCompilerError "(code gen) Unsupported native function expr")
     end
     | _ -> raise (InternalCompilerError "(code gen) Unsupported function application call type")
