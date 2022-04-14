@@ -77,7 +77,11 @@ let desugar (p : sourcespan program) : sourcespan program =
     | EBool(b, tag) -> EBool(b, tag)
     | ENil(t, tag) -> ENil(t, tag)
     | EPrim1(op, e, tag) ->
-       EPrim1(op, helpE e, tag)
+      begin
+      match op with
+      | Print -> helpE (EApp(EId("print", tag), [e], Native, tag))
+      | _ -> EPrim1(op, helpE e, tag)
+      end
     | EPrim2(op, lhs, rhs, tag) -> 
        let lhs_untagged = helpE lhs in
        let rhs_untagged = helpE rhs in

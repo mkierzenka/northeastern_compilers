@@ -79,19 +79,42 @@ let gc = [
        end"
       ""
       "(1, 2)";
-  ]
+]
 
 let input = [
-    t "input1" "let x = input() in x + 2" "123" "125"
-  ]
+  t "input1" "let x = input() in x + 2" "123" "125";
+  t "rename_input" "let new_input = input in new_input()" "1337" "1337";
+]
 
-let simple = [
-  t "let_a" "let a = 3 in a" "" "3"
+let racer = [
+  t "let_a" "let a = 3 in a" "" "3";
+
+  t "basic_func_call" "def ident(x): x ident(10)"  "" "10";
+  t "basic_func_call2" "def ident(x): x ident(false)"  "" "false";
+  t "general_func_call" "def ident(x): x  11 * ident(print(7)+9)" ""  "7\n176";
+  t "general_func_call2" "def add_eight(x): (x + (4 * add1(1))) def sub_seven(x): (x - 7)
+                          if add_eight(2) < 10: print(false) else: add_eight(sub_seven(10))"
+                           "" "11";
+  t "general_func_call3a" "def ident(x): x  ident(let y=11 in y + 9)"  "" "20";
+  t "general_func_call3b" "def ident(x): x  ident(let x=11 in x + 9)" ""  "20";
+  t "general_func_call4" "def f(x): x  let x=6 in f(8)" ""  "8";
+  t "noarg_func_call" "def f(): (let a=23,b=true in b) f()" ""  "true";
+
+  terr "fname_bind_in_body" "def fun(a,b,c): let fun=4 in add1(fun) \n fun(9,10,11)"  "" "shadows";
+  t "func_split_env" "def f(x,y): let z = x * y in sub1(z)   let z = 9 in f(z, add1(z))" ""  "89";
+  t "func_from_func" "def f(x,y): let z = x * y in z + z  and def g(x): if isbool(x): 0 else: f(x,x) g(4)"  "" "32";
+  terr "func_from_nonpreceding_func_dif_grp" "def g(x): if isbool(x): 0 else: f(x,x)  def f(x,y): let z = x * y in z + z g(4)"  "" "The identifier f";
+  t "func_from_func_backwards" "def f(): g()  and def g(): sub1(2 * 8)  f()"  "" "15";
+  terr "func_from_func_backwards_dif_grp" "def f(): g()  def g(): sub1(2 * 8)  f()"  "" "The identifier g";
+  
+  t "max_tail_1" "def max(x,y): if x > y: x else: max(y,x) max(1,9)"  "" "9";
+  t "max_tail_2" "def max(x,y): if x > y: x else: max(y,x) max(9,1)"  "" "9";
+  terr "rebind_arg" "def f(a,b): let a=b,b=8 in a+b f(4,10)"  "" "shadows";
 ]
 
 let suite =
 "unit_tests">:::
- pair_tests @ oom @ gc @ input @ simple
+ pair_tests @ oom @ gc @ input @ racer
 
 
 

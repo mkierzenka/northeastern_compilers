@@ -11,7 +11,11 @@ let dummy_span = (Lexing.dummy_pos, Lexing.dummy_pos)
 
 let prim_bindings = []
 
-let native_fun_bindings = [("input", (dummy_span, Some 0, Some 0))]
+let native_fun_bindings = [
+  ("input", (dummy_span, Some 0, Some 0));
+  ("print", (dummy_span, Some 1, Some 1));
+]
+
 let native_fun_names = List.map (fun (name, _) -> name) native_fun_bindings
 
 (* strips trailing "_%d" tag from a string *)

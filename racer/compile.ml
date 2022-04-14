@@ -404,7 +404,7 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (curr_env_name : string) 
            @ (check_rax_for_num err_arith_not_num_lbl)
            @ [ISub(Reg(RAX), Const(2L))]
            @ check_for_overflow
-        | Print -> [IMov(Reg(RDI), body_imm); ICall(Label("print"));]
+        | Print -> raise (InternalCompilerError "Print Prim1s should've been desugared away")
         | IsBool ->
           let true_lbl = sprintf "is_bool_true_%d" tag in
           let false_lbl = sprintf "is_bool_false_%d" tag in
