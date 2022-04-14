@@ -7,9 +7,12 @@ open Errors
 
 module StringSet = Set.Make(String)
 
+let dummy_span = (Lexing.dummy_pos, Lexing.dummy_pos)
+
 let prim_bindings = []
 
-let native_fun_bindings = []
+let native_fun_bindings = [("input", (dummy_span, Some 0, Some 0))]
+(* scope_info name_envt *)
 
 (* you can add any functions or data defined by the runtime here for future use *)
 let initial_val_env = []
@@ -41,8 +44,6 @@ let rec find_opt (env : 'a name_envt) (elt: string) : 'a option =
   match env with
   | [] -> None
   | (x, v) :: rst -> if x = elt then Some(v) else find_opt rst elt
-
-let dummy_span = (Lexing.dummy_pos, Lexing.dummy_pos)
 
 let add_var_to_env (name : string) (value : arg) (env_name : string) (env : arg name_envt name_envt) : arg name_envt name_envt =
   let sub_env = find env env_name in

@@ -706,6 +706,17 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (curr_env_name : string) 
           (* Don't use temp register here because we assume the RHS will never be very big *)
           IAdd(Reg(RSP), Const(Int64.of_int (word_size * num_pushes)));
           ]
+    | Native ->
+    begin
+    match func with
+    | ImmId(fname, _) ->
+      let compiled_args = if num_args > 6
+        then raise (InternalCompilerError "(code gen) Too many args for native function call")
+        else List.map (fun arg -> (compile_imm arg sub_env)) args in
+      [ILineComment("Native call: " ^ fname);]
+      @ (native_call (Label fname) compiled_args)
+    | _ -> raise (InternalCompilerError "(code gen) Unsupported native function expr")
+    end
     | _ -> raise (InternalCompilerError "(code gen) Unsupported function application call type")
     end
   | CImmExpr(expr) -> [IMov(Reg(RAX), (compile_imm expr sub_env))]
@@ -836,12 +847,15 @@ and compile_fun (name : string) (params : string list) (body : tag aexpr) (env :
    native_calling the runtime-provided functions. *)
 let add_native_lambdas (p : sourcespan program) =
   let wrap_native name arity =
-    let argnames = List.init arity (fun i -> sprintf "%s_arg_%d" name i) in
-    [DFun(name, List.map (fun name -> BName(name, false, dummy_span)) argnames, EApp(EId(name, dummy_span), List.map(fun name -> EId(name, dummy_span)) argnames, Native, dummy_span), dummy_span)]
+    match arity with
+    | None -> raise (InternalCompilerError "Bad native lambda")
+    | Some a ->
+      let argnames = List.init a (fun i -> sprintf "%s_arg_%d" name i) in
+      [DFun(name, List.map (fun name -> BName(name, false, dummy_span)) argnames, EApp(EId(name, dummy_span), List.map(fun name -> EId(name, dummy_span)) argnames, Native, dummy_span), dummy_span)]
   in
   match p with
   | Program(declss, body, tag) ->
-    Program((List.fold_left (fun declss (name, (_, arity)) -> (wrap_native name arity)::declss) declss native_fun_bindings), body, tag)
+    Program((List.fold_left (fun declss (name, (_, _, arity)) -> (wrap_native name arity)::declss) declss native_fun_bindings), body, tag)
 
 let compile_prog (anfed, (env : arg name_envt name_envt)) =
   let prelude =
