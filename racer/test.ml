@@ -7,6 +7,7 @@ open Exprs
 open Phases
 open Errors
 open Anf
+open Util
 
 let t name program input expected = name>::test_run ~args:[] ~std_input:input Naive program name expected;;
 let tr name program input expected = name>::test_run ~args:[] ~std_input:input Register program name expected;;
@@ -34,6 +35,13 @@ let teq name actual expected = name>::fun _ ->
 (*     let str_list_print strs = "[" ^ (ExtString.String.join ", " strs) ^ "]" in *)
 (*     assert_equal (List.sort c vars) (List.sort c expected) ~printer:str_list_print) *)
 (* ;; *)
+
+let tfvs name program expected = name>::
+  (fun _ ->
+    let ast = parse_string name program in
+    let anfed = anf (tag ast) in
+    let fv_prog = free_vars_cache anfed in
+    assert_equal expected (string_of_aprogram_with_fvs fv_prog) ~printer:(fun s -> s))
 
 let builtins_size = 4 (* arity + 0 vars + codeptr + padding *) * 1 (* TODO FIXME (List.length Compile.native_fun_bindings) *)
 
@@ -112,9 +120,14 @@ let racer = [
   terr "rebind_arg" "def f(a,b): let a=b,b=8 in a+b f(4,10)"  "" "shadows";
 ]
 
+let fvs_tests = [
+  tfvs "a1" "let a = 3 in a" "3";
+]
+
 let suite =
 "unit_tests">:::
- pair_tests @ oom @ gc @ input @ racer
+  fvs_tests
+ (*pair_tests @ oom @ gc @ input @ racer*)
 
 
 

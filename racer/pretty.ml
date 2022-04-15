@@ -3,6 +3,9 @@ open Printf
 open Format
 open Lexing
 
+(* Redefined here to avoid circular dependency *)
+module StringSet = Set.Make(String)
+
 let rec intersperse (elts : 'a list) (sep : 'a) : 'a list =
   match elts with
   | [] -> []
@@ -207,7 +210,17 @@ let string_of_aexpr ?depth:(depth=100) (e : 'a aexpr) : string = string_of_aexpr
 let string_of_cexpr ?depth:(depth=100) (c : 'a cexpr) : string = string_of_cexpr_with depth (fun _ -> "") c
 let string_of_immexpr (i : 'a immexpr) : string = string_of_immexpr_with (fun _ -> "") i
 let string_of_aprogram ?depth:(depth=100) (p : 'a aprogram) : string = string_of_aprogram_with depth (fun _ -> "") p
-;;
+
+
+let print_string_set (set : StringSet.t) : string =
+  (* (string -> 'a -> 'a) -> StringSet.t -> 'a -> 'a *)
+  (* 'a is string in this case *)
+  "{" ^ (StringSet.fold (fun el acc -> printf "%s" el ; acc ^ "; " ^ el) set "") ^ "}"
+
+let string_of_aprogram_with_fvs ?depth:(depth=100) (p : StringSet.t aprogram) : string =
+  string_of_aprogram_with depth print_string_set p
+
+
 let print_list fmt p_item items p_sep =
   match items with
   | [] -> ()
