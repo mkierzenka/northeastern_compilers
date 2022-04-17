@@ -215,7 +215,7 @@ let string_of_aprogram ?depth:(depth=100) (p : 'a aprogram) : string = string_of
 let print_string_set (set : StringSet.t) : string =
   (* (string -> 'a -> 'a) -> StringSet.t -> 'a -> 'a *)
   (* 'a is string in this case *)
-  "{" ^ (StringSet.fold (fun el acc -> printf "%s" el ; acc ^ "; " ^ el) set "") ^ "}"
+  "{" ^ (StringSet.fold (fun el acc -> el ^ "; " ^ acc) set "") ^ "}"
 
 let string_of_aprogram_with_fvs ?depth:(depth=100) (p : StringSet.t aprogram) : string =
   string_of_aprogram_with depth print_string_set p

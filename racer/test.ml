@@ -121,7 +121,17 @@ let racer = [
 ]
 
 let fvs_tests = [
-  tfvs "a1" "let a = 3 in a" "3";
+  tfvs "fvs_binop1" "4 + b" "(4{} + b{b; }){b; }\n{b; }";
+  tfvs "fvs_binop2" "b + 4" "(b{b; } + 4{}){b; }\n{b; }";
+  tfvs "fvs_binop3" "b + b" "(b{b; } + b{b; }){b; }\n{b; }";
+  tfvs "fvs_binop4" "4 + 6" "(4{} + 6{}){}\n{}";
+  tfvs "fvs_id" "b" "b{b; }\n{b; }";
+  tfvs "fvs_if1" "if b: 4 else: 5" "(if b{b; }: 4{} else: 5{}){b; }\n{b; }";
+  tfvs "fvs_if2" "if b: c else: d" "(if b{b; }: c{c; } else: d{d; }){d; c; b; }\n{d; c; b; }";
+  tfvs "fvs_if3" "if false: a else: b" "(if false{}: a{a; } else: b{b; }){b; a; }\n{b; a; }";
+  tfvs "fvs_let" "let a = c in b + a" "(alet a = c{c; } in (b{b; } + a{}){b; }){c; b; }\n{c; b; }";
+  tfvs "fvs_letrec" "let rec func = (lambda(x,y): if x < a: y else: let tmp = b in tmp * y) in func(1, 2)"
+                    "(aletrec func = (lam(x, y) (alet binop_7 = (x{} < a{a; }){a; } in (if binop_7{}: y{} else: (alet tmp = b{b; } in (tmp{} * y{}){}){b; }){b; }){b; a; }){b; a; } in (?func{}(1{}, 2{})){}){b; a; }\n{b; a; }";
 ]
 
 let suite =
