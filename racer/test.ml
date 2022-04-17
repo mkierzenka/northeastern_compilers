@@ -136,8 +136,7 @@ let fvs_tests = [
 
 let suite =
 "unit_tests">:::
-  fvs_tests
- (*pair_tests @ oom @ gc @ input @ racer*)
+  pair_tests @ oom @ gc @ input @ racer @ fvs_tests
 
 
 
