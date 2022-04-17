@@ -134,9 +134,13 @@ let fvs_tests = [
                     "(aletrec func = (lam(x, y) (alet binop_7 = (x{} < a{a; }){a; } in (if binop_7{}: y{} else: (alet tmp = b{b; } in (tmp{} * y{}){}){b; }){b; }){b; a; }){b; a; } in (?func{}(1{}, 2{})){}){b; a; }\n{b; a; }";
 ]
 
+let racer_tr = [
+  tr "reg_let1" "let a = input(), b=4*5 in (if a > b: false else: a + a)" "444" "false";
+]
+
 let suite =
 "unit_tests">:::
-  pair_tests @ oom @ gc @ input @ racer @ fvs_tests
+  pair_tests @ oom @ gc @ input @ racer @ fvs_tests @ racer_tr
 
 
 
