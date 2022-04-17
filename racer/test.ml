@@ -112,9 +112,13 @@ let racer = [
   terr "rebind_arg" "def f(a,b): let a=b,b=8 in a+b f(4,10)"  "" "shadows";
 ]
 
+let racer_tr = [
+  tr "reg_let1" "let a = input(), b=4*5 in (if a > b: false else: a + a)" "444" "false";
+]
+
 let suite =
 "unit_tests">:::
- pair_tests @ oom @ gc @ input @ racer
+ pair_tests @ oom @ gc @ input @ racer @ racer_tr
 
 
 
