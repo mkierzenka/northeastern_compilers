@@ -277,39 +277,74 @@ let compile_fun_postlude : instruction list =
     IRet;
   ]
 
-(* shift the RegOffset "stack_idx_shift" SLOTS down the stack (ie. "stack_idx_shift * word_size" bytes) *)
-let add_stack_offset (stack_idx_shift : int) (orig : arg) : arg =
-  match orig with
-  | RegOffset(orig_offset, orig_reg) -> RegOffset(orig_offset - (stack_idx_shift * word_size), orig_reg)
-  | _ -> raise (InternalCompilerError "Unexpected env entry for stack offset adjustment")
-
-let rec compile_aexpr (e : tag aexpr) (stack_offset : int) (curr_env_name : string) (env : arg name_envt name_envt) : instruction list =
+let rec compile_aexpr (e : tag aexpr) (curr_env_name : string) (env : arg name_envt name_envt) : instruction list =
   let sub_env = (find env curr_env_name) in
   match e with
   | ALet(id, bind, body, _) ->
-    let compiled_bind = compile_cexpr bind stack_offset curr_env_name env in
-    let compiled_body = compile_aexpr body stack_offset curr_env_name env in
+    let compiled_bind = compile_cexpr bind curr_env_name env in
+    let compiled_body = compile_aexpr body curr_env_name env in
     [ILineComment(sprintf "Let_%s" id)]
     @ compiled_bind
     @ [IMov((find sub_env id), Reg(RAX))]
     @ compiled_body
-  | ACExpr(expr) -> (compile_cexpr expr stack_offset curr_env_name env)
+  | ACExpr(expr) -> (compile_cexpr expr curr_env_name env)
   | ASeq(left, right, tag) ->
     let seq_left_txt = sprintf "seq_left_%d" tag in
     let seq_right_txt = sprintf "seq_right_%d" tag in
-    let compiled_left = (compile_cexpr left stack_offset curr_env_name env) in
-    let compiled_right = (compile_aexpr right stack_offset curr_env_name env) in
+    let compiled_left = (compile_cexpr left curr_env_name env) in
+    let compiled_right = (compile_aexpr right curr_env_name env) in
     [ILineComment(seq_left_txt)]
     @ compiled_left
     @ [ILineComment(seq_right_txt)]
     @ compiled_right
   | ALetRec(bindings, body, tag) ->
     let compiled_bindings =
-      List.fold_left (fun cb_acc (name, bound_body) ->
-                       let dest = add_stack_offset stack_offset (find sub_env name) in
-                         (compile_cexpr bound_body stack_offset curr_env_name env) @ [IMov(dest, Reg(RAX))] @ cb_acc)
-                       []
-                       bindings in
+      List.fold_left (
+        fun cb_acc (name, bound_body) ->
+          match bound_body with
+          (* used to call this
+          | CLambda(params, body, tag) -> 
+            (compile_cexpr bound_body stack_offset curr_env_name env) @ [IMov(dest, Reg(RAX))] @ cb_acc
+            *)
+          | CLambda(params, body, tag) ->
+            let arity = List.length params in
+            (*let closure_lbl = sprintf "closure$%d" tag in
+            let closure_done_lbl = sprintf "closure_done$%d" tag in*)
+            let closure_lbl = name in
+            let closure_done_lbl = sprintf "%s_done" name in
+            let free_vars_list = List.sort String.compare (free_vars (ACExpr(bound_body))) in
+            let num_free_vars = List.length free_vars_list in
+            let add_free_vars_to_closure =
+              List.flatten (List.mapi (fun idx fv ->
+                        [
+                        (* Use incoming env here, because it is the env that actually has the free var values *)
+                        IMov(Reg(scratch_reg), (find sub_env fv));
+                        IMov(Sized(QWORD_PTR, RegOffset((3 + idx) * word_size, heap_reg)), Reg(scratch_reg));
+                        ])
+                        free_vars_list) in
+            let true_heap_size = 3 + num_free_vars in
+            let reserved_heap_size = true_heap_size + (true_heap_size mod 2) in
+            let (prelude, body, postlude) = compile_fun closure_lbl params body env free_vars_list in
+            [IJmp(Label(closure_done_lbl))]
+            @ prelude
+            @ body
+            @ postlude
+            @ [
+              ILabel(closure_done_lbl);
+              IMov(Sized(QWORD_PTR, RegOffset(0 * word_size, heap_reg)), Const(Int64.of_int arity));
+              IMov(Sized(QWORD_PTR, RegOffset(1 * word_size, heap_reg)), Label(closure_lbl));
+              IMov(Sized(QWORD_PTR, RegOffset(2 * word_size, heap_reg)), Const(Int64.of_int num_free_vars));
+              ]
+            @ add_free_vars_to_closure
+            @ [
+              IMov(Reg(RAX), Reg(heap_reg));
+              IAdd(Reg(RAX), HexConst(closure_tag));
+              IAdd(Reg(heap_reg), Const(Int64.of_int (reserved_heap_size * word_size)));
+              ]
+            @ [IMov(find sub_env name, Reg(RAX))]
+            @ cb_acc
+          | _ -> raise (InternalCompilerError "LetRecs cannot have non-CLambda bindings")
+      ) [] bindings in
     let bound_names = List.map (fun (name, _) -> name) bindings in
     let second_pass =
       let reducer acc (name, body) =
@@ -320,9 +355,9 @@ let rec compile_aexpr (e : tag aexpr) (stack_offset : int) (curr_env_name : stri
         let this_lambda_loc = find sub_env name in
         acc @ List.fold_left (
           fun code_acc (lambda_fv_offset, lambda) ->
-          let lambda_stack_loc = find sub_env lambda in
+          let lambda_ptr_stack_loc = find sub_env lambda in
           code_acc @ [
-            IMov(Reg(scratch_reg_2), lambda_stack_loc); (* Now the free lambda ptr is in scratch reg 2 *)
+            IMov(Reg(scratch_reg_2), lambda_ptr_stack_loc); (* Now the free lambda ptr is in scratch reg 2 *)
             IMov(RegOffset((3 + lambda_fv_offset) * word_size, scratch_reg), Reg(scratch_reg_2)); (* Offset of 3 because of closure structure *)
           ]
         ) [
@@ -338,8 +373,8 @@ let rec compile_aexpr (e : tag aexpr) (stack_offset : int) (curr_env_name : stri
     @ second_pass
 
 
-    @ (compile_aexpr body stack_offset curr_env_name env)
-and compile_cexpr (e : tag cexpr) (stack_offset : int) (curr_env_name : string) (env : arg name_envt name_envt) =
+    @ (compile_aexpr body curr_env_name env)
+and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt name_envt) =
   let sub_env = find env curr_env_name in
   match e with
   | CIf(cond, thn, els, tag) ->
@@ -359,11 +394,11 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (curr_env_name : string) 
      @ [IJz(Label(lbl_els))]
 
      @ [ILabel(lbl_thn)]
-     @ (compile_aexpr thn stack_offset curr_env_name env)
+     @ (compile_aexpr thn curr_env_name env)
      @ [IJmp(Label(lbl_done))]
 
      @ [ILabel(lbl_els)]
-     @ (compile_aexpr els stack_offset curr_env_name env)
+     @ (compile_aexpr els curr_env_name env)
      @ [ILabel(lbl_done)]
   | CScIf(cond, thn, els, tag) ->
      let cond_reg = compile_imm cond sub_env in
@@ -383,12 +418,12 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (curr_env_name : string) 
 
      @ [ILabel(lbl_thn)]
      (* LHS is compiled before RHS, so definitely not tail position *)
-     @ (compile_aexpr thn stack_offset curr_env_name env)
+     @ (compile_aexpr thn curr_env_name env)
      @ [IJmp(Label(lbl_done))]
 
      @ [ILabel(lbl_els)]
      (* Since we check that result is bool, RHS is also not in tail position *)
-     @ (compile_aexpr els stack_offset curr_env_name env)
+     @ (compile_aexpr els curr_env_name env)
      @ (check_rax_for_bool err_logic_not_bool_lbl) 
      @ [ILabel(lbl_done)]
   | CPrim1(op, body, tag) ->
@@ -623,39 +658,7 @@ and compile_cexpr (e : tag cexpr) (stack_offset : int) (curr_env_name : string) 
          @ [ILabel(lbl_done)]
       | CheckSize -> raise (NotYetImplemented "CheckSize not currently used in compilation")
      end
-  | CLambda(params, body, tag) ->
-    let arity = List.length params in
-    let closure_lbl = sprintf "closure$%d" tag in
-    let closure_done_lbl = sprintf "closure_done$%d" tag in
-    let free_vars_list = List.sort String.compare (free_vars (ACExpr(e))) in
-    let num_free_vars = List.length free_vars_list in
-    let add_free_vars_to_closure =
-      List.flatten (List.mapi (fun idx fv ->
-                 [
-                 (* Use incoming env here, because it is the env that actually has the free var values *)
-                 IMov(Reg(scratch_reg), (find sub_env fv));
-                 IMov(Sized(QWORD_PTR, RegOffset((3 + idx) * word_size, heap_reg)), Reg(scratch_reg));
-                 ])
-                free_vars_list) in
-    let true_heap_size = 3 + num_free_vars in
-    let reserved_heap_size = true_heap_size + (true_heap_size mod 2) in
-    let (prelude, body, postlude) = compile_fun closure_lbl params body env free_vars_list in
-    [IJmp(Label(closure_done_lbl))]
-    @ prelude
-    @ body
-    @ postlude
-    @ [
-      ILabel(closure_done_lbl);
-      IMov(Sized(QWORD_PTR, RegOffset(0 * word_size, heap_reg)), Const(Int64.of_int arity));
-      IMov(Sized(QWORD_PTR, RegOffset(1 * word_size, heap_reg)), Label(closure_lbl));
-      IMov(Sized(QWORD_PTR, RegOffset(2 * word_size, heap_reg)), Const(Int64.of_int num_free_vars));
-      ]
-    @ add_free_vars_to_closure
-    @ [
-      IMov(Reg(RAX), Reg(heap_reg));
-      IAdd(Reg(RAX), HexConst(closure_tag));
-      IAdd(Reg(heap_reg), Const(Int64.of_int (reserved_heap_size * word_size)));
-      ]
+  | CLambda _ -> raise (InternalCompilerError "Unbound CLambdas should have been processed away")
   | CApp(func, args, ct, tag) ->
     let num_args = (List.length args) in
     (* we add 1 below because we will also push the closure itself before making the call *)
@@ -818,7 +821,6 @@ and compile_fun (name : string) (params : string list) (body : tag aexpr) (env :
         let min_addr_rest = min_slot_addr rest in
         if addr < min_addr_rest then addr else min_addr_rest
       | [] -> 0 in
-    let num_free_vars = List.length free_var_list in
     let sub_env = find env name in
     let load_free_vars = List.flatten (List.mapi (
       fun idx free_var -> [
@@ -827,7 +829,7 @@ and compile_fun (name : string) (params : string list) (body : tag aexpr) (env :
       ]
     ) free_var_list) in
     let prelude = compile_fun_prelude name in
-    let compiled_body = compile_aexpr body num_free_vars name env in
+    let compiled_body = compile_aexpr body name env in
     let postlude = compile_fun_postlude in (
       prelude,
       [IMov(Reg(RAX), RegOffset(2 * word_size, RBP))] (* Now RAX has the (tagged) func value *)
