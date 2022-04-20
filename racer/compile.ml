@@ -282,44 +282,10 @@ let rec compile_aexpr (e : tag aexpr) (curr_env_name : string) (env : arg name_e
   match e with
   | ALet(id, bind, body, _) ->
     let compiled_bind =
-    begin
-    match bind with
-    | CLambda(params, lambda_body, tag) -> 
-      let arity = List.length params in
-      let closure_lbl = id in
-      let closure_done_lbl = sprintf "%s_done" id in
-      let free_vars_list = List.sort String.compare (free_vars (ACExpr(bind))) in
-      let num_free_vars = List.length free_vars_list in
-      let add_free_vars_to_closure =
-        List.flatten (List.mapi (fun idx fv ->
-                  [
-                  (* Use incoming env here, because it is the env that actually has the free var values *)
-                  IMov(Reg(scratch_reg), (find sub_env fv));
-                  IMov(Sized(QWORD_PTR, RegOffset((3 + idx) * word_size, heap_reg)), Reg(scratch_reg));
-                  ])
-                  free_vars_list) in
-      let true_heap_size = 3 + num_free_vars in
-      let reserved_heap_size = true_heap_size + (true_heap_size mod 2) in
-      let (prelude, lambda_body, postlude) = compile_fun closure_lbl params lambda_body env free_vars_list in
-      [IJmp(Label(closure_done_lbl))]
-      @ prelude
-      @ lambda_body
-      @ postlude
-      @ [
-        ILabel(closure_done_lbl);
-        IMov(Sized(QWORD_PTR, RegOffset(0 * word_size, heap_reg)), Const(Int64.of_int arity));
-        IMov(Sized(QWORD_PTR, RegOffset(1 * word_size, heap_reg)), Label(closure_lbl));
-        IMov(Sized(QWORD_PTR, RegOffset(2 * word_size, heap_reg)), Const(Int64.of_int num_free_vars));
-        ]
-      @ add_free_vars_to_closure
-      @ [
-        IMov(Reg(RAX), Reg(heap_reg));
-        IAdd(Reg(RAX), HexConst(closure_tag));
-        IAdd(Reg(heap_reg), Const(Int64.of_int (reserved_heap_size * word_size)));
-        ]
-      @ [IMov(find sub_env id, Reg(RAX))]
-    | _ -> compile_cexpr bind curr_env_name env
-    end in
+      match bind with
+      | CLambda(params, lambda_body, tag) -> (compile_clambda id params lambda_body tag sub_env env)
+      | _ -> (compile_cexpr bind curr_env_name env)
+      in
     let compiled_body = compile_aexpr body curr_env_name env in
     [ILineComment(sprintf "Let_%s" id)]
     @ compiled_bind
@@ -340,41 +306,7 @@ let rec compile_aexpr (e : tag aexpr) (curr_env_name : string) (env : arg name_e
       List.fold_left (
         fun cb_acc (name, bound_body) ->
           match bound_body with
-          | CLambda(params, body, tag) ->
-            let arity = List.length params in
-            let closure_lbl = name in
-            let closure_done_lbl = sprintf "%s_done" name in
-            let free_vars_list = List.sort String.compare (free_vars (ACExpr(bound_body))) in
-            let num_free_vars = List.length free_vars_list in
-            let add_free_vars_to_closure =
-              List.flatten (List.mapi (fun idx fv ->
-                        [
-                        (* Use incoming env here, because it is the env that actually has the free var values *)
-                        IMov(Reg(scratch_reg), (find sub_env fv));
-                        IMov(Sized(QWORD_PTR, RegOffset((3 + idx) * word_size, heap_reg)), Reg(scratch_reg));
-                        ])
-                        free_vars_list) in
-            let true_heap_size = 3 + num_free_vars in
-            let reserved_heap_size = true_heap_size + (true_heap_size mod 2) in
-            let (prelude, body, postlude) = compile_fun closure_lbl params body env free_vars_list in
-            [IJmp(Label(closure_done_lbl))]
-            @ prelude
-            @ body
-            @ postlude
-            @ [
-              ILabel(closure_done_lbl);
-              IMov(Sized(QWORD_PTR, RegOffset(0 * word_size, heap_reg)), Const(Int64.of_int arity));
-              IMov(Sized(QWORD_PTR, RegOffset(1 * word_size, heap_reg)), Label(closure_lbl));
-              IMov(Sized(QWORD_PTR, RegOffset(2 * word_size, heap_reg)), Const(Int64.of_int num_free_vars));
-              ]
-            @ add_free_vars_to_closure
-            @ [
-              IMov(Reg(RAX), Reg(heap_reg));
-              IAdd(Reg(RAX), HexConst(closure_tag));
-              IAdd(Reg(heap_reg), Const(Int64.of_int (reserved_heap_size * word_size)));
-              ]
-            @ [IMov(find sub_env name, Reg(RAX))]
-            @ cb_acc
+          | CLambda(params, body, tag) -> (compile_clambda name params body tag sub_env env) @ cb_acc
           | _ -> raise (InternalCompilerError "LetRecs cannot have non-CLambda bindings")
       ) [] bindings in
     let bound_names = List.map (fun (name, _) -> name) bindings in
@@ -403,9 +335,41 @@ let rec compile_aexpr (e : tag aexpr) (curr_env_name : string) (env : arg name_e
     @ compiled_bindings
     @ [ILineComment(sprintf "LetRec$%d patching with ptrs to mutually rec closures" tag)]
     @ second_pass
-
-
     @ (compile_aexpr body curr_env_name env)
+and compile_clambda (name : string) (params : string list) (lambda_body : tag aexpr) (tag : tag) (sub_env : arg name_envt) (env : arg name_envt name_envt) : instruction list = 
+  let arity = List.length params in
+  let closure_lbl = name in
+  let closure_done_lbl = sprintf "%s_done" name in
+  let free_vars_list = List.sort String.compare (free_vars (ACExpr(CLambda(params, lambda_body, tag)))) in
+  let num_free_vars = List.length free_vars_list in
+  let add_free_vars_to_closure =
+    List.flatten (List.mapi (fun idx fv ->
+              [
+              (* Use incoming env here, because it is the env that actually has the free var values *)
+              IMov(Reg(scratch_reg), (find sub_env fv));
+              IMov(Sized(QWORD_PTR, RegOffset((3 + idx) * word_size, heap_reg)), Reg(scratch_reg));
+              ])
+              free_vars_list) in
+  let true_heap_size = 3 + num_free_vars in
+  let reserved_heap_size = true_heap_size + (true_heap_size mod 2) in
+  let (prelude, lambda_body, postlude) = compile_fun closure_lbl params lambda_body env free_vars_list in
+  [IJmp(Label(closure_done_lbl))]
+  @ prelude
+  @ lambda_body
+  @ postlude
+  @ [
+    ILabel(closure_done_lbl);
+    IMov(Sized(QWORD_PTR, RegOffset(0 * word_size, heap_reg)), Const(Int64.of_int arity));
+    IMov(Sized(QWORD_PTR, RegOffset(1 * word_size, heap_reg)), Label(closure_lbl));
+    IMov(Sized(QWORD_PTR, RegOffset(2 * word_size, heap_reg)), Const(Int64.of_int num_free_vars));
+    ]
+  @ add_free_vars_to_closure
+  @ [
+    IMov(Reg(RAX), Reg(heap_reg));
+    IAdd(Reg(RAX), HexConst(closure_tag));
+    IAdd(Reg(heap_reg), Const(Int64.of_int (reserved_heap_size * word_size)));
+    ]
+  @ [IMov(find sub_env name, Reg(RAX))]
 and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt name_envt) =
   let sub_env = find env curr_env_name in
   match e with
