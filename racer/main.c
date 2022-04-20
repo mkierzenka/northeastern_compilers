@@ -96,8 +96,8 @@ void printHelp(FILE *out, SNAKEVAL val) {
   }
   else if ((val & CLOSURE_TAG_MASK) == CLOSURE_TAG) {
     uint64_t* addr = (uint64_t*)(val - CLOSURE_TAG);
-    fprintf(out, "[%p - 5] ==> <function arity %ld, closed %ld, fn-ptr %p>",
-            (uint64_t*)val, addr[0], addr[1], (uint64_t*)addr[2]);
+    fprintf(out, "[%p - 5] ==> <function arity %ld, fn-ptr %p, closed %ld>",
+            (uint64_t*)val, addr[0], (uint64_t*)addr[1], addr[2]);
     // TODO- If we switch to encoding the lengths as SNAKEVALs, need to divide by 2 above (and for tuples)
     /* fprintf(out, "\nClosed-over values:\n"); */
     /* for (uint64_t i = 0; i < addr[1] / 2; i++) { */

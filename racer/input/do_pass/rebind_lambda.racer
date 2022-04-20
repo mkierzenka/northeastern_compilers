@@ -1,0 +1,3 @@
+let a = (lambda: true) in
+let b = a in
+b()

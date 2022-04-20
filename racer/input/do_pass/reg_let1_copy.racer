@@ -1,0 +1,1 @@
+let a = input(), b=4*5 in (if a > b: false else: a + a)
