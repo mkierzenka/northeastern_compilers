@@ -28,16 +28,16 @@ let naive_stack_allocation (prog: tag aprogram) : tag aprogram * arg name_envt n
         help_aexpr aexp lhs_si curr_env_name lhs_env
     | ALet(fname, CLambda(args, body, _), let_body, _) ->
         let newenv = add_var_to_env fname (RegOffset(~-si*word_size, RBP)) curr_env_name env in
-        let (bindenv, newsi) = help_closure fname args body (si+1) newenv in
-        help_aexpr let_body newsi curr_env_name bindenv
+        let (bindenv, newsi) = help_closure fname args body 1 newenv in
+        help_aexpr let_body (si + 1) curr_env_name bindenv
     | ALet(sym, bind, body, _) ->
         let newenv = add_var_to_env sym (RegOffset(~-si*word_size, RBP)) curr_env_name env in
         let (bindenv, newsi) = help_cexpr bind (si+1) curr_env_name newenv in
         help_aexpr body newsi curr_env_name bindenv
     | ALetRec((fname, CLambda(args, body, _))::bindings, let_rec_body, let_rec_tag) ->
         let newenv = add_var_to_env fname (RegOffset(~-si*word_size, RBP)) curr_env_name env in
-        let (bindenv, newsi) = help_closure fname args body (si+1) newenv in
-        (help_aexpr (ALetRec(bindings, let_rec_body, let_rec_tag)) newsi curr_env_name bindenv)
+        let (bindenv, _) = help_closure fname args body 1 newenv in
+        (help_aexpr (ALetRec(bindings, let_rec_body, let_rec_tag)) (si + 1) curr_env_name bindenv)
     | ALetRec([], body, _) -> help_aexpr body si curr_env_name env
     | ALetRec _ -> raise (InternalCompilerError "LetRecs cannot have non-CLambda bindings")
     (* | ALetRec(bindings, body, _) ->

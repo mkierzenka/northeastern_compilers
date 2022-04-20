@@ -60,28 +60,16 @@ let register_allocation (prog: tag aprogram) : tag aprogram * arg name_envt name
         help_aexpr aexp lhs_si curr_env_name lhs_env
     | ALet(fname, CLambda(args, body, fvs), let_body, _) ->
         let newenv = add_var_to_env fname (RegOffset(~-si*word_size, RBP)) curr_env_name env in
-        let (bindenv, newsi) = help_closure fname args body fvs (si+1) newenv in
-        help_aexpr let_body newsi curr_env_name bindenv
+        let (bindenv, _) = help_closure fname args body fvs 1 newenv in
+        help_aexpr let_body (si+1) curr_env_name bindenv
     | ALet(sym, bind, body, _) ->
         let newenv = add_var_to_env sym (RegOffset(~-si*word_size, RBP)) curr_env_name env in
         let (bindenv, newsi) = help_cexpr bind (si+1) curr_env_name newenv in
         help_aexpr body newsi curr_env_name bindenv
     | ALetRec((fname, CLambda(args, body, fvs))::bindings, let_rec_body, let_rec_fvs) ->
-        (*let (bindings_env, bindings_si) =
-          List.fold_left (
-            fun (accum_env, accum_si) (name, _) ->
-              (add_var_to_env name (RegOffset(~-accum_si*word_size, RBP)) curr_env_name accum_env, accum_si + 1)
-          )
-          (env, si) bindings in
-        let (new_env, new_si) =
-          List.fold_left (fun (accum_env, accum_si) (_, exp) ->
-            help_cexpr exp accum_si curr_env_name accum_env)
-          (bindings_env, bindings_si)
-          bindings in
-        help_aexpr body new_si curr_env_name new_env*)
         let newenv = add_var_to_env fname (RegOffset(~-si*word_size, RBP)) curr_env_name env in
-        let (bindenv, newsi) = help_closure fname args body fvs (si+1) newenv in
-        (help_aexpr (ALetRec(bindings, let_rec_body, let_rec_fvs)) newsi curr_env_name bindenv)
+        let (bindenv, _) = help_closure fname args body fvs 1 newenv in
+        (help_aexpr (ALetRec(bindings, let_rec_body, let_rec_fvs)) (si+1) curr_env_name bindenv)
     | ALetRec([], body, _) -> help_aexpr body si curr_env_name env
     | ALetRec _ -> raise (InternalCompilerError "LetRecs cannot have non-CLambda bindings")
     | ACExpr(cexpr) -> help_cexpr cexpr si curr_env_name env
