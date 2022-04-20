@@ -68,7 +68,18 @@ let desugar (p : sourcespan program) : sourcespan program =
     size_check_bind::(List.flatten (List.mapi tupleBind binds))
   and helpE e =
     match e with
-    | ESeq(e1, e2, tag) -> ELet([(BBlank(tag), helpE e1, tag)], helpE e2, tag)
+    (* Desugar sequences into let-bindings to ensure CLambdas get handled
+       by the ALet compile_aexpr case (they need names currently) *)
+    | ESeq(e1, e2, tag) ->
+      let new_right_name = gensym "?desugar_seq_right" in
+      helpE (ELet(
+        [
+          (BName(gensym "?desugar_seq_left", false, tag), helpE e1, tag);
+          (BName(new_right_name, false, tag), helpE e2, tag);
+        ],
+        EId(new_right_name, tag),
+        tag
+      ))
     | ETuple(exprs, tag) -> ETuple(List.map helpE exprs, tag)
     | EGetItem(e, idx, tag) -> EGetItem(helpE e, helpE idx, tag)
     | ESetItem(e, idx, newval, tag) -> ESetItem(helpE e, helpE idx, helpE newval, tag)

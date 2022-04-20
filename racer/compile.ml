@@ -292,15 +292,7 @@ let rec compile_aexpr (e : tag aexpr) (curr_env_name : string) (env : arg name_e
     @ [IMov((find sub_env id), Reg(RAX))]
     @ compiled_body
   | ACExpr(expr) -> (compile_cexpr expr curr_env_name env)
-  | ASeq(left, right, tag) ->
-    let seq_left_txt = sprintf "seq_left_%d" tag in
-    let seq_right_txt = sprintf "seq_right_%d" tag in
-    let compiled_left = (compile_cexpr left curr_env_name env) in
-    let compiled_right = (compile_aexpr right curr_env_name env) in
-    [ILineComment(seq_left_txt)]
-    @ compiled_left
-    @ [ILineComment(seq_right_txt)]
-    @ compiled_right
+  | ASeq(left, right, tag) -> raise (InternalCompilerError "ASeqs should currently be desugared away")
   | ALetRec(bindings, body, tag) ->
     let compiled_bindings =
       List.fold_left (
