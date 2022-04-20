@@ -27,8 +27,31 @@ let callee_saved_regs : arg list =
 (* IMPLEMENT THE BELOW *)
 
 let interfere (e : StringSet.t aexpr) (live : StringSet.t) : grapht =
-  raise (NotYetImplemented "Generate interference graphs from expressions for racer")
-;;
+  let rec interfere_aexpr (e : StringSet.t aexpr) (live : StringSet.t) : grapht =
+    match e with
+    | ASeq(cexp, aexp, _) -> graph_union (interfere_cexpr cexp live) (interfere_aexpr aexp live)
+    | ALet(fname, CLambda(args, body, fvs), let_body, _) -> raise (NotYetImplemented "interference of lambda exprs")
+    | ALet(sym, bind, body, _) ->
+        let body_fvs = get_tag_A body in
+        let body_fvs_without_sym = StringSet.diff body_fvs (StringSet.singleton sym) in
+        print_string "body_fvs";
+        StringSet.iter print_string body_fvs;
+        print_string "\nbody_fvs_without_sym\n";
+        StringSet.iter print_string body_fvs_without_sym;
+        let outer = StringSet.fold (fun body_fv acc -> (add_edge acc sym body_fv)) body_fvs_without_sym empty in
+        graph_union outer (interfere_aexpr body live)
+    | ALetRec _ -> raise (NotYetImplemented "interference of letrec exprs")
+    (* | ALetRec((fname, CLambda(args, body, fvs))::bindings, let_rec_body, let_rec_fvs) ->
+    | ALetRec([], body, _) ->
+    | ALetRec _ -> raise (InternalCompilerError "LetRecs cannot have non-CLambda bindings") *)
+    | ACExpr(cexpr) -> interfere_cexpr cexpr live
+  and interfere_cexpr (e : StringSet.t cexpr) (live : StringSet.t) : grapht =
+    match e with
+    | CIf(_, thn, els, fvs) -> graph_union (interfere_aexpr thn live) (interfere_aexpr els live)
+    | CScIf(_, thn, els, fvs) -> graph_union (interfere_aexpr thn live) (interfere_aexpr els live)
+    | _ -> empty
+  in
+  interfere_aexpr e live
 
 let color_graph (g: grapht) (init_env: arg name_envt) : arg name_envt =
   raise (NotYetImplemented "Implement graph coloring for racer")

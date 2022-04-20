@@ -8,6 +8,8 @@ open Phases
 open Errors
 open Anf
 open Util
+open Graph
+open Register_allocation
 
 let t name program input expected = name>::test_run ~args:[] ~std_input:input Naive program name expected;;
 let tr name program input expected = name>::test_run ~args:[] ~std_input:input Register program name expected;;
@@ -42,6 +44,16 @@ let tfvs name program expected = name>::
     let anfed = anf (tag ast) in
     let fv_prog = free_vars_cache anfed in
     assert_equal expected (string_of_aprogram_with_fvs fv_prog) ~printer:(fun s -> s))
+
+let tint name program expected = name>::
+  (fun _ ->
+    let ast = parse_string name program in
+    let anfed = anf (tag ast) in
+    let fv_prog = free_vars_cache anfed in
+    let int =
+      match fv_prog with
+      | AProgram(body, _) -> interfere body StringSet.empty in
+    assert_equal expected (string_of_graph int) ~printer:(fun s -> s))
 
 let builtins_size = 4 (* arity + 0 vars + codeptr + padding *) * 1 (* TODO FIXME (List.length Compile.native_fun_bindings) *)
 
@@ -121,6 +133,11 @@ let racer = [
 
   t "lambda_seq_left" "(lambda(x): x + 5);8" "" "8";
   t "lambda_seq_right" "8;(lambda(x): x + 5)" "" "<function arity 1, fn-ptr 0x401f70, closed 0>";
+
+  tint "interfere1" "let a = 3 in a" "";
+  tint "interfere2" "let x = 3, y = 4 in (x + y)" "fds";
+  tint "interfere3" "let x = 3 in (let y = 4 in (x + y))" "fds";
+
 ]
 
 let fvs_tests = [
@@ -143,7 +160,7 @@ let racer_tr = [
 
 let suite =
 "unit_tests">:::
-  pair_tests @ (*oom @ gc*) @ input @ racer @ fvs_tests @ racer_tr
+  pair_tests @ (* oom @ gc @ *) input @ racer @ fvs_tests @ racer_tr
 
 
 

@@ -45,3 +45,9 @@ let string_of_graph (g: grapht): string =
   in
   ExtString.String.join "\n" (List.map (fun k -> sprintf "%s: %s" k (string_of_neighbors k)) (get_vertices g))
 ;;
+
+let graph_union (g1 : grapht) (g2 : grapht) : grapht =
+  Graph.union (fun key nbrs1 nbrs2 -> (Some(NeighborSet.union nbrs1 nbrs2))) g1 g2
+
+let graph_union_all : (grapht list -> grapht) =
+  List.fold_left graph_union empty
