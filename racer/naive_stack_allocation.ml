@@ -10,11 +10,11 @@ open Util
 (* ASSUMES that the program has been alpha-renamed and all names are unique *)
 let naive_stack_allocation (prog: tag aprogram) : tag aprogram * arg name_envt name_envt =
   let rec help_aexpr (body : tag aexpr) (si : int) (curr_env_name : string) (env : arg name_envt name_envt) : arg name_envt name_envt * int =
-    let help_closure (fname : string) (args : string list) (closure_body : tag aexpr) (closure_si : int) (closure_env : arg name_envt name_envt) : arg name_envt name_envt * int =
+    let help_closure (fname : string) (args : string list) (closure_body : tag aexpr) (closure_tag : tag) (closure_si : int) (closure_env : arg name_envt name_envt) : arg name_envt name_envt * int =
       let args_with_idx = List.mapi (fun i arg -> (arg, RegOffset((i + 3) * word_size, RBP))) args in
       let new_sub_env = List.fold_left (fun accum_env cell -> cell :: accum_env) [] args_with_idx in
       let new_sub_env_with_self = (fname, RegOffset(2*word_size, RBP)) :: new_sub_env in
-      let free_vars_list = List.sort String.compare (free_vars closure_body) in
+      let free_vars_list = List.sort String.compare (free_vars (ACExpr(CLambda(args, closure_body, closure_tag)))) in
       let num_free_vars = List.length free_vars_list in
       (* Trick, we know the env is a list and lookups will return 1st found, so just add the updated values to the front.
           This new env assumes we have pushed all the closed over values to the stack in order. *)
@@ -26,17 +26,17 @@ let naive_stack_allocation (prog: tag aprogram) : tag aprogram * arg name_envt n
     | ASeq(cexp, aexp, _) ->
         let (lhs_env, lhs_si) = help_cexpr cexp si curr_env_name env in
         help_aexpr aexp lhs_si curr_env_name lhs_env
-    | ALet(fname, CLambda(args, body, _), let_body, _) ->
+    | ALet(fname, CLambda(args, body, ctag), let_body, _) ->
         let newenv = add_var_to_env fname (RegOffset(~-si*word_size, RBP)) curr_env_name env in
-        let (bindenv, newsi) = help_closure fname args body 1 newenv in
+        let (bindenv, newsi) = help_closure fname args body ctag 1 newenv in
         help_aexpr let_body (si + 1) curr_env_name bindenv
     | ALet(sym, bind, body, _) ->
         let newenv = add_var_to_env sym (RegOffset(~-si*word_size, RBP)) curr_env_name env in
         let (bindenv, newsi) = help_cexpr bind (si+1) curr_env_name newenv in
         help_aexpr body newsi curr_env_name bindenv
-    | ALetRec((fname, CLambda(args, body, _))::bindings, let_rec_body, let_rec_tag) ->
+    | ALetRec((fname, CLambda(args, body, ctag))::bindings, let_rec_body, let_rec_tag) ->
         let newenv = add_var_to_env fname (RegOffset(~-si*word_size, RBP)) curr_env_name env in
-        let (bindenv, _) = help_closure fname args body 1 newenv in
+        let (bindenv, _) = help_closure fname args body ctag 1 newenv in
         (help_aexpr (ALetRec(bindings, let_rec_body, let_rec_tag)) (si + 1) curr_env_name bindenv)
     | ALetRec([], body, _) -> help_aexpr body si curr_env_name env
     | ALetRec _ -> raise (InternalCompilerError "LetRecs cannot have non-CLambda bindings")
