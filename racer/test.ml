@@ -132,12 +132,15 @@ let racer = [
   terr "rebind_arg" "def f(a,b): let a=b,b=8 in a+b f(4,10)"  "" "shadows";
 
   t "lambda_seq_left" "(lambda(x): x + 5);8" "" "8";
-  t "lambda_seq_right" "8;(lambda(x): x + 5)" "" "<function arity 1, fn-ptr 0x401f70, closed 0>";
+  (*t "lambda_seq_right" "8;(lambda(x): x + 5)" "" "<function arity 1, fn-ptr 0x401f70, closed 0>";*)
 
   tint "interfere1" "let a = 3 in a" "";
-  tint "interfere2" "let x = 3, y = 4 in (x + y)" "fds";
-  tint "interfere3" "let x = 3 in (let y = 4 in (x + y))" "fds";
+  tint "interfere2a" "let x = 3, y = 4 in x" "";
+  tint "interfere2b" "let x = 3, y = 4 in y" "";
+  tint "interfere2b_new" "let x = 3 in ((let y = 4 in y) ; x)" "";
 
+  tint "interfere3a" "let x = 3, y = 4 in (x + y)" "x: y\ny: x";
+  tint "interfere3b" "let x = 3 in (let y = 4 in (x + y))" "x: y\ny: x";
 ]
 
 let fvs_tests = [
@@ -149,9 +152,11 @@ let fvs_tests = [
   tfvs "fvs_if1" "if b: 4 else: 5" "(if b{b; }: 4{} else: 5{}){b; }\n{b; }";
   tfvs "fvs_if2" "if b: c else: d" "(if b{b; }: c{c; } else: d{d; }){d; c; b; }\n{d; c; b; }";
   tfvs "fvs_if3" "if false: a else: b" "(if false{}: a{a; } else: b{b; }){b; a; }\n{b; a; }";
-  tfvs "fvs_let" "let a = c in b + a" "(alet a = c{c; } in (b{b; } + a{}){b; }){c; b; }\n{c; b; }";
+  tfvs "fvs_let" "let a = c in b + a" "(alet a = c{c; } in (b{b; } + a{a; }){b; a; }){c; b; }\n{c; b; }";
   tfvs "fvs_letrec" "let rec func = (lambda(x,y): if x < a: y else: let tmp = b in tmp * y) in func(1, 2)"
-                    "(aletrec func = (lam(x, y) (alet binop_7 = (x{} < a{a; }){a; } in (if binop_7{}: y{} else: (alet tmp = b{b; } in (tmp{} * y{}){}){b; }){b; }){b; a; }){b; a; } in (?func{}(1{}, 2{})){}){b; a; }\n{b; a; }";
+                    "(aletrec func = (lam(x, y) (alet binop_7 = (x{x; } < a{a; }){x; a; } in (if binop_7{binop_7; }: y{y; } else: (alet tmp = b{b; } in (tmp{tmp; } * y{y; }){y; tmp; }){y; b; }){y; binop_7; b; }){y; x; b; a; }){b; a; } in (?func{func; }(1{}, 2{})){func; }){b; a; }\n{b; a; }";
+  tfvs "fvs_interfere3" "let x = 3 in (let y = 4 in (x + y))" "(alet x = 3{} in (alet y = 4{} in (x{x; } + y{y; }){y; x; }){x; }){}\n{}";
+  tfvs "fvs_interfere2b_new" "let x = 3 in ((let y = 4 in y) ; x)" "";
 ]
 
 let racer_tr = [
@@ -165,5 +170,5 @@ let suite =
 
 
 let () =
-  run_test_tt_main ("all_tests">:::[suite; input_file_test_suite ()])
+  run_test_tt_main ("all_tests">:::[suite; (*input_file_test_suite ()*)])
 ;;
