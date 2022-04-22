@@ -10,6 +10,8 @@ open Anf
 open Util
 open Graph
 open Register_allocation
+open Desugar
+open Rename_and_tag
 
 let t name program input expected = name>::test_run ~args:[] ~std_input:input Naive program name expected;;
 let tr name program input expected = name>::test_run ~args:[] ~std_input:input Register program name expected;;
@@ -41,14 +43,20 @@ let teq name actual expected = name>::fun _ ->
 let tfvs name program expected = name>::
   (fun _ ->
     let ast = parse_string name program in
-    let anfed = anf (tag ast) in
+    let desug = desugar ast in
+    let tagged = tag desug in
+    let renamed = rename_and_tag tagged in
+    let anfed = anf (tag renamed) in
     let fv_prog = free_vars_cache anfed in
     assert_equal expected (string_of_aprogram_with_fvs fv_prog) ~printer:(fun s -> s))
 
 let tint name program expected = name>::
   (fun _ ->
     let ast = parse_string name program in
-    let anfed = anf (tag ast) in
+    let desug = desugar ast in
+    let tagged = tag desug in
+    let renamed = rename_and_tag tagged in
+    let anfed = anf (tag renamed) in
     let fv_prog = free_vars_cache anfed in
     let int =
       match fv_prog with
@@ -135,12 +143,19 @@ let racer = [
   (*t "lambda_seq_right" "8;(lambda(x): x + 5)" "" "<function arity 1, fn-ptr 0x401f70, closed 0>";*)
 
   tint "interfere1" "let a = 3 in a" "";
-  tint "interfere2a" "let x = 3, y = 4 in x" "";
-  tint "interfere2b" "let x = 3, y = 4 in y" "";
-  tint "interfere2b_new" "let x = 3 in ((let y = 4 in y) ; x)" "";
+  tint "interfere2a" "let x = 3, y = 4 in x" "x_4: y_8\ny_8: x_4";
+  tint "interfere2b" "let x = 3, y = 4 in y" "x_4: y_8\ny_8: x_4";
+  tint "interfere2b_new" "let x = 3 in ((let y = 4 in y) ; x)" "?desugar_seq_left_2_8: y_11, x_4, ?desugar_seq_right_1_16\n?desugar_seq_right_1_16: y_11, x_4, ?desugar_seq_left_2_8\nx_4: y_11, ?desugar_seq_right_1_16, ?desugar_seq_left_2_8\ny_11: x_4, ?desugar_seq_right_1_16, ?desugar_seq_left_2_8";
 
-  tint "interfere3a" "let x = 3, y = 4 in (x + y)" "x: y\ny: x";
-  tint "interfere3b" "let x = 3 in (let y = 4 in (x + y))" "x: y\ny: x";
+  tint "interfere3a" "let x = 3, y = 4 in (x + y)" "x_4: y_8\ny_8: x_4";
+  tint "interfere3b" "let x = 3 in (let y = 4 in (x + y))" "x_4: y_8\ny_8: x_4";
+  tint "interfere_from_class"
+       "let x = true in
+          let y = if true: (let b = 5 in b) else: 6 in
+            x"
+       "b_13: x_4\nx_4: y_8, b_13\ny_8: x_4";
+  
+  terr "seq_desugar" "(let x = 3 in true); x" "" "The identifier x, used at <seq_desugar, 1:21-1:22>, is not in scope";
 ]
 
 let fvs_tests = [
@@ -152,11 +167,21 @@ let fvs_tests = [
   tfvs "fvs_if1" "if b: 4 else: 5" "(if b{b; }: 4{} else: 5{}){b; }\n{b; }";
   tfvs "fvs_if2" "if b: c else: d" "(if b{b; }: c{c; } else: d{d; }){d; c; b; }\n{d; c; b; }";
   tfvs "fvs_if3" "if false: a else: b" "(if false{}: a{a; } else: b{b; }){b; a; }\n{b; a; }";
-  tfvs "fvs_let" "let a = c in b + a" "(alet a = c{c; } in (b{b; } + a{a; }){b; a; }){c; b; }\n{c; b; }";
+  tfvs "fvs_let" "let a = c in b + a" "(alet a_4 = c{c; } in (b{b; } + a_4{a_4; }){b; a_4; }){c; b; }\n{c; b; }";
   tfvs "fvs_letrec" "let rec func = (lambda(x,y): if x < a: y else: let tmp = b in tmp * y) in func(1, 2)"
-                    "(aletrec func = (lam(x, y) (alet binop_7 = (x{x; } < a{a; }){x; a; } in (if binop_7{binop_7; }: y{y; } else: (alet tmp = b{b; } in (tmp{tmp; } * y{y; }){y; tmp; }){y; b; }){y; binop_7; b; }){y; x; b; a; }){b; a; } in (?func{func; }(1{}, 2{})){func; }){b; a; }\n{b; a; }";
-  tfvs "fvs_interfere3" "let x = 3 in (let y = 4 in (x + y))" "(alet x = 3{} in (alet y = 4{} in (x{x; } + y{y; }){y; x; }){x; }){}\n{}";
-  tfvs "fvs_interfere2b_new" "let x = 3 in ((let y = 4 in y) ; x)" "";
+                    "(aletrec func_4 = (lam(x_20, y_21) (alet binop_9 = (x_20{x_20; } < a{a; }){x_20; a; } in (if binop_9{binop_9; }: y_21{y_21; } else: (alet tmp_15 = b{b; } in (tmp_15{tmp_15; } * y_21{y_21; }){y_21; tmp_15; }){y_21; b; }){y_21; binop_9; b; }){y_21; x_20; b; a; }){b; a; } in (func_4{func_4; }(1{}, 2{})){func_4; }){b; a; }\n{b; a; }";
+  tfvs "fvs_interfere3" "let x = 3 in (let y = 4 in (x + y))" "(alet x_4 = 3{} in (alet y_8 = 4{} in (x_4{x_4; } + y_8{y_8; }){y_8; x_4; }){x_4; }){}\n{}";
+  tfvs "fvs_interfere2b_new" "let x = 3 in ((let y = 4 in y) ; x)" "(alet x_4 = 3{} in (alet y_11 = 4{} in (alet ?desugar_seq_left_2_8 = y_11{y_11; } in (alet ?desugar_seq_right_1_16 = x_4{x_4; } in ?desugar_seq_right_1_16{?desugar_seq_right_1_16; }){x_4; }){y_11; x_4; }){x_4; }){}\n{}";
+  tfvs "fvs_from_class"
+       "let x = true in
+          let y = if true: (let b = 5 in b) else: 6 in
+            x"
+       "(alet x_4 = true{} in (alet y_8 = (if true{}: (alet b_13 = 5{} in b_13{b_13; }){} else: 6{}){} in x_4{x_4; }){x_4; }){}\n{}";
+  tfvs "fvs_from_class_tup"
+       "let x = true in
+          let y = if true: (let b = (5,) in b[1]) else: 6 in
+            x"
+       "(alet x_4 = true{} in (alet y_8 = (if true{}: (alet b_13 = (5{}){} in b_13{b_13; }[1{}]{b_13; }){} else: 6{}){} in x_4{x_4; }){x_4; }){}\n{}";
 ]
 
 let racer_tr = [

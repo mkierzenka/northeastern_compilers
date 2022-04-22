@@ -34,12 +34,11 @@ let interfere (e : StringSet.t aexpr) (live : StringSet.t) : grapht =
     | ALet(sym, bind, body, _) ->
         let body_fvs = get_tag_A body in
         let body_fvs_without_sym = StringSet.diff body_fvs (StringSet.singleton sym) in
-        print_string "body_fvs";
-        StringSet.iter print_string body_fvs;
-        print_string "\nbody_fvs_without_sym\n";
-        StringSet.iter print_string body_fvs_without_sym;
+        let bind_conflicts = interfere_cexpr bind live in
         let outer = StringSet.fold (fun body_fv acc -> (add_edge acc sym body_fv)) body_fvs_without_sym empty in
-        graph_union outer (interfere_aexpr body live)
+        let body_conflicts = interfere_aexpr body (StringSet.add sym live) in
+        let live_conflicts = StringSet.fold (fun neighbor acc -> add_edge acc sym neighbor) live empty in
+        graph_union_all [outer; body_conflicts; live_conflicts; bind_conflicts]
     | ALetRec _ -> raise (NotYetImplemented "interference of letrec exprs")
     (* | ALetRec((fname, CLambda(args, body, fvs))::bindings, let_rec_body, let_rec_fvs) ->
     | ALetRec([], body, _) ->
@@ -47,8 +46,8 @@ let interfere (e : StringSet.t aexpr) (live : StringSet.t) : grapht =
     | ACExpr(cexpr) -> interfere_cexpr cexpr live
   and interfere_cexpr (e : StringSet.t cexpr) (live : StringSet.t) : grapht =
     match e with
-    | CIf(_, thn, els, fvs) -> graph_union (interfere_aexpr thn live) (interfere_aexpr els live)
-    | CScIf(_, thn, els, fvs) -> graph_union (interfere_aexpr thn live) (interfere_aexpr els live)
+    | CIf(_, thn, els, _) -> graph_union (interfere_aexpr thn live) (interfere_aexpr els live)
+    | CScIf(_, thn, els, _) -> graph_union (interfere_aexpr thn live) (interfere_aexpr els live)
     | _ -> empty
   in
   interfere_aexpr e live
