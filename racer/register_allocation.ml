@@ -25,6 +25,53 @@ let callee_saved_regs : arg list =
 
 
 (* IMPLEMENT THE BELOW *)
+(* TODO- expand this set. Problem is that we were sloppy and used a bit too many registers
+   in our codegen. Also can put the x64 calling convention regs into this list. *)
+let reg_colors : arg list =
+  [ Reg RDI
+  ; Reg RSI
+  ; Reg RDX
+  ; Reg RCX
+  ; Reg R10
+  ]
+
+let rec get_minimum_unused_color (colors : arg list) (nbrs : arg list) : arg =
+  match colors with
+  | head::tail ->
+      begin
+      match (List.find_opt ((=) head) nbrs) with
+      | (Some(_)) -> get_minimum_unused_color tail nbrs
+      | None -> head
+      end
+  | [] ->
+      let descending_reg_offsets =
+        List.sort (
+          fun nbr1 nbr2 ->
+            match (nbr1, nbr2) with
+            | (RegOffset(off1, RBP), RegOffset(off2, RBP)) -> off1 - off2 (* descending offset is increasing value because stack direction *)
+            | _ -> raise (InternalCompilerError "Registers with same offset allocated")
+        ) (List.filter (function (RegOffset(_, RBP)) -> true | _ -> false) nbrs) in
+      match (List.hd descending_reg_offsets) with
+      | RegOffset(off, RBP) -> RegOffset(off - 8, RBP)
+      | _ -> raise (
+        InternalCompilerError "RegOffset sorting failed to raise error when encountering non-RegOffset register"
+      )
+
+let min_unused_color (nbrs_colors : arg list) : arg =
+  let rec min_unused_reg (regs : arg list) (nbrs_colors : arg list) : arg option =
+    match regs with
+    | reg::rest -> if not (List.mem reg nbrs_colors) then Some(reg) else (min_unused_reg rest nbrs_colors)
+    | _ -> None
+  and min_unused_reg_offset (curr_offset : int) (nbrs_colors : arg list) : arg =
+    match nbrs_colors with
+    | RegOffset(found_offset, RBP)::rest -> if found_offset < curr_offset then (min_unused_reg_offset curr_offset rest) else (min_unused_reg_offset (found_offset - word_size) rest)
+    | RegOffset(_, _)::rest -> raise (InternalCompilerError "Coloring found offset not from RBP")
+    | Reg(_)::rest -> (min_unused_reg_offset curr_offset rest)
+    | _ -> RegOffset(curr_offset, RBP)
+  in
+  match (min_unused_reg reg_colors nbrs_colors) with
+  | Some(arg) -> arg
+  | None -> (min_unused_reg_offset ~-8 nbrs_colors)
 
 let interfere (e : StringSet.t aexpr) (live : StringSet.t) : grapht =
   let rec interfere_aexpr (e : StringSet.t aexpr) (live : StringSet.t) : grapht =
@@ -53,15 +100,41 @@ let interfere (e : StringSet.t aexpr) (live : StringSet.t) : grapht =
   interfere_aexpr e live
 
 let color_graph (g: grapht) (init_env: arg name_envt) : arg name_envt =
-  raise (NotYetImplemented "Implement graph coloring for racer")
-;;
+  (* Create a worklist of nodes ordered by increasing degree (ie. top of stack is min-degree node of graph) *)
+  let rec create_worklist (g : grapht) : string list =
+    let rec create_worklist_helper (g : grapht) (init_list : string list) : string list =
+      (* find node with highest degree *)
+      let max_node_and_nbrs_ct = Graph.fold (
+        fun node neighbors acc ->
+          let node_card = NeighborSet.cardinal neighbors in
+            match acc with
+            | Some(max_node_so_far, max_card_so_far) -> if node_card > max_card_so_far then Some(node, node_card) else acc
+            | None -> Some(node, node_card)
+      ) g None in
+      match max_node_and_nbrs_ct with
+      | Some(max_node, _) -> (create_worklist_helper (remove_node g max_node) (max_node::init_list))
+      | None -> init_list in
+    create_worklist_helper g [] in
+    (* worklist is treated as a stack, first element is node with min degree & last elem is node with max degree *)
+  let rec color_worklist (g: grapht) (worklist : string list) (env: arg name_envt) : arg name_envt =
+    match worklist with
+    | head::rest ->
+      let nbrs = (get_neighbors g head) in
+      let nbrs_colors = List.fold_left (
+        fun colors_so_far nbr ->
+          match (find_opt env nbr) with
+          | None -> colors_so_far
+          | Some(color) -> color :: colors_so_far
+      ) [] nbrs in
+      (color_worklist g rest ((head, (min_unused_color nbrs_colors))::env))
+    | _ -> env in
+  let worklist = create_worklist g in
+  color_worklist g worklist init_env
+
+let assign_colors_to_aexpr (e : StringSet.t aexpr) (init_env : arg name_envt) : arg name_envt =
+  color_graph (interfere e StringSet.empty) init_env
 
 let register_allocation (prog: tag aprogram) : tag aprogram * arg name_envt name_envt =
-  let gensym =
-    let next = ref 0 in
-    (fun name ->
-      next := !next + 1;
-      sprintf "%s_%d" name (!next)) in
   let fv_prog = free_vars_cache prog in
   let rec help_aexpr (body : StringSet.t aexpr) (si : int) (curr_env_name : string) (env : arg name_envt name_envt) : arg name_envt name_envt * int =
     let help_closure (fname : string) (args : string list) (closure_body : StringSet.t aexpr) (fvs : StringSet.t) (closure_si : int) (closure_env : arg name_envt name_envt) : arg name_envt name_envt * int =

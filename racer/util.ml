@@ -37,6 +37,9 @@ let initial_fun_env = prim_bindings @ native_fun_bindings
 type 'a name_envt = (string * 'a) list
 type 'a tag_envt  = (tag * 'a) list
 
+let string_of_arg_env (env : arg name_envt) =
+  ExtString.String.join "\n\t" (List.map (fun (name, arg) -> name ^ "=>" ^ (arg_to_asm arg)) env)
+
 let rec find ls x =
   match ls with
   | [] -> raise (InternalCompilerError (sprintf "Name %s not found" x))

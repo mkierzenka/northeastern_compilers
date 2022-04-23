@@ -51,3 +51,6 @@ let graph_union (g1 : grapht) (g2 : grapht) : grapht =
 
 let graph_union_all : (grapht list -> grapht) =
   List.fold_left graph_union empty
+
+let remove_node (g : grapht) (name : string) =
+  Graph.map (fun neighbors -> NeighborSet.remove name neighbors) (Graph.remove name g)

@@ -63,6 +63,20 @@ let tint name program expected = name>::
       | AProgram(body, _) -> interfere body StringSet.empty in
     assert_equal expected (string_of_graph int) ~printer:(fun s -> s))
 
+let tcg name program expected = name>::
+  (fun _ ->
+    let ast = parse_string name program in
+    let desug = desugar ast in
+    let tagged = tag desug in
+    let renamed = rename_and_tag tagged in
+    let anfed = anf (tag renamed) in
+    let fv_prog = free_vars_cache anfed in
+    let int =
+      match fv_prog with
+      | AProgram(body, _) -> interfere body StringSet.empty in
+    let coloring = color_graph int [] in
+    assert_equal expected (string_of_arg_env coloring) ~printer:(fun s -> s))
+
 let builtins_size = 4 (* arity + 0 vars + codeptr + padding *) * 1 (* TODO FIXME (List.length Compile.native_fun_bindings) *)
 
 let pair_tests = [
@@ -182,6 +196,15 @@ let fvs_tests = [
           let y = if true: (let b = (5,) in b[1]) else: 6 in
             x"
        "(alet x_4 = true{} in (alet y_8 = (if true{}: (alet b_13 = (5{}){} in b_13{b_13; }[1{}]{b_13; }){} else: 6{}){} in x_4{x_4; }){x_4; }){}\n{}";
+
+  tcg "color_easy1" "add1(4)" "";
+  tcg "color_easy2" "add1(4 + 5)" "";
+  tcg "color_easy3" "if true: (1>2) else: (true && false)" "";
+  tcg "color_multi_let" "let x=1, y=5, z=true in z" "x_4=>RDX\n\ty_8=>RSI\n\tz_12=>RDI";
+  tcg "color_fvs_from_class"
+       "let x = true in
+          let y = if true: (let b = 5 in b) else: 6 in
+            x" "x_4=>RSI\n\tb_13=>RDI\n\ty_8=>RDI";
 ]
 
 let racer_tr = [
@@ -195,5 +218,5 @@ let suite =
 
 
 let () =
-  run_test_tt_main ("all_tests">:::[suite; (*input_file_test_suite ()*)])
+  run_test_tt_main ("all_tests">:::[suite; input_file_test_suite ()])
 ;;
