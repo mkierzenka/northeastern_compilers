@@ -225,9 +225,9 @@ let tests_from_cobra = [
   terr "let_unknown_var" "let x=1,s=2 in t"  "" "is not in scope";
   terr "let_backwards_binds" "let x=y,y=2 in 3"  "" "The identifier y, used at <let_backwards_binds, 1:6-1:7>, is not in scope";
   terr "let_bind_eval_first" "let x=true, y=add1(x) in x" ""  "arithmetic expected a number";
-  t "shadow_across_lets_allowed" "let x = 4 in let x = 2 in x" ""  "2";
-  terr "shadow_within_let_not_allowed_l" "let x = 4, x=2 in x" ""  "The identifier x, redefined at";
-  terr "shadow_within_let_not_allowed_r" "let x = 4, x=2 in x" ""  ", duplicates one at";
+  terr "shadow_across_lets" "let x = 4 in let x = 2 in x" ""  "shadows one";
+  terr "shadow_within_let_l" "let x = 4, x=2 in x" ""  "The identifier x, redefined at";
+  terr "shadow_within_let_r" "let x = 4, x=2 in x" ""  ", duplicates one at";
 
   (* order ops tests *)
   t "order_ops1" "let z=true in isbool(1) || z"  "" "true";

@@ -30,7 +30,7 @@ let tests_from_diamondback = [
   t "general_func_call4" "def f(x): x  let x=6 in f(8)" ""  "8";
   t "noarg_func_call" "def f(): (let a=23,b=true in b) f()" ""  "true";
 
-  t "fname_bind_in_body" "def fun(a,b,c): let fun=4 in add1(fun) \n fun(9,10,11)"  "" "5";
+  terr "fname_bind_in_body" "def fun(a,b,c): let fun=4 in add1(fun) \n fun(9,10,11)"  "" "shadows one";
   t "func_split_env" "def f(x,y): let z = x * y in sub1(z)   let z = 9 in f(z, add1(z))" ""  "89";
   t "func_from_func" "def f(x,y): let z = x * y in z + z  and def g(x): if isbool(x): 0 else: f(x,x) g(4)"  "" "32";
   terr "func_from_nonpreceding_func_dif_grp" "def g(x): if isbool(x): 0 else: f(x,x)  def f(x,y): let z = x * y in z + z g(4)"  "" "The identifier f";
@@ -38,7 +38,7 @@ let tests_from_diamondback = [
   terr "func_from_func_backwards_dif_grp" "def f(): g()  def g(): sub1(2 * 8)  f()"  "" "The identifier g";
   t "max_tail_1" "def max(x,y): if x > y: x else: max(y,x) max(1,9)"  "" "9";
   t "max_tail_2" "def max(x,y): if x > y: x else: max(y,x) max(9,1)"  "" "9";
-  t "rebind_arg" "def f(a,b): let a=b,b=8 in a+b f(4,10)"  "" "18";
+  terr "rebind_arg" "def f(a,b): let a=b,b=8 in a+b f(4,10)"  "" "shadows one";
 
   (* tail call testing *)
   t "tail_larger_arity_2_to_3" "def f(x,y): g(x,y,4) and def g(a,b,c): a - b + c  f(2,5)"  "" "1";
@@ -62,17 +62,18 @@ let tests_from_diamondback = [
   terr "func_split_env_err4d" "def f(x,y): let z=99 in x+y  def g(w): print(x)   let one=f(1,2) in f(1,2)" ""  "is not in scope";
 
   (* Arity errors *)
-  terr "arity_err0a" "def f(x): 2 f(4,5)"  "" "arity mismatch in call";
-  terr "arity_err0b" "def f(): (if isnum(12): 7 else: false)  f(4)"  "" "arity mismatch in call";
-  terr "arity_err1a" "def f(x): (if isnum(12): x else: false)  f()" ""  "arity mismatch in call";
-  terr "arity_err1b" "def f(x): (if isnum(12): x else: false)  f(4,8)"  "" "arity mismatch in call";
-  terr "arity_err2a" "def f(x,y): (if isnum(12): 7 else: false)  f(1)"  "" "arity mismatch in call";
-  terr "arity_err2b" "def f(x,y): (if isnum(12): 7 else: false)  f(1,3,4)"  "" "arity mismatch in call";
+  terr "arity_err0a" "def f(x): 2 f(4,5)"  "" "expected an arity of 1, but received 2 arguments";
+  terr "arity_err0b" "def f(): (if isnum(12): 7 else: false)  f(4)"  "" "expected an arity of 0, but received 1 arguments";
+  terr "arity_err1a" "def f(x): (if isnum(12): x else: false)  f()" ""  "expected an arity of 1, but received 0 arguments";
+  terr "arity_err1b" "def f(x): (if isnum(12): x else: false)  f(4,8)"  "" "expected an arity of 1, but received 2 arguments";
+  terr "arity_err2a" "def f(x,y): (if isnum(12): 7 else: false)  f(1)"  "" "expected an arity of 2, but received 1 arguments";
+  terr "arity_err2b" "def f(x,y): (if isnum(12): 7 else: false)  f(1,3,4)"  "" "expected an arity of 2, but received 3 arguments";
 
   (* Name resolution for vars vs. funcs (vars shadow function names) *)
-  terr "func_let_name" "def f(x,y): (if isnum(12): 7 else: false)  let f=99 in f(1,3)"  "" "tried to call a non-closure value";
-  terr "func_let_name2" "def f(x,y): (if isnum(12): 7 else: false)  let f=99 in f(1,3,4)"  "" "tried to call a non-closure value";
-  t "func_let_name3" "def f(x,y): (if isnum(12): 7 else: false)  let f=99 in add1(f)" ""  "100";
+  terr "func_let_name_l" "def f(x,y): (if isnum(12): 7 else: false)  let f=99 in f(1,3)"  "" "The identifier f";
+  terr "func_let_name_r" "def f(x,y): (if isnum(12): 7 else: false)  let f=99 in f(1,3)"  "" "shadows one";
+  terr "func_let_name2" "def f(x,y): (if isnum(12): 7 else: false)  let f=99 in f(1,3,4)"  "" "shadows one";
+  terr "func_let_name3" "def f(x,y): (if isnum(12): 7 else: false)  let f=99 in add1(f)" ""  "shadows one";
 
 
   (* UnboundFun errors *)
