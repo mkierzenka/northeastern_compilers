@@ -1,0 +1,259 @@
+Phase 0 (Source):
+(lambda: true); 3
+=================
+Phase 1 (Parsed):
+
+(lam() true); 3
+
+=================
+Phase 2 (Well-formed):
+
+(lam() true); 3
+
+=================
+Phase 3 (Natives Added):
+(def print(print_arg_0):
+  (*print(print_arg_0)))
+
+(def input():
+  (*input()))
+(lam() true); 3
+
+=================
+Phase 4 (Desugared):
+
+(let-rec print = (lam(print_arg_0) (*print(print_arg_0))) in (let-rec input = (lam() (*input())) in (let ?desugar_seq_left_1 = (lam() true) in 3)))
+
+=================
+Phase 5 (Tagged):
+
+(let-rec print = (lam(print_arg_0) (*print@8(print_arg_0@7))@6)@5 in (let-rec input = (lam() (*input@15())@14)@13 in (let ?desugar_seq_left_1 = (lam() true@20)@19 in 3@21)@16)@10)@2
+@1
+=================
+Phase 6 (Renamed):
+
+(let-rec print_4 = (lam(print_arg_0_9) (*print_4(print_arg_0_9))) in (let-rec input_12 = (lam() (*input_12())) in (let ?desugar_seq_left_1_18 = (lam() true) in 3)))
+
+=================
+Phase 7 (ANF'ed):
+(aletrec print_4 = (lam(print_arg_0_9) (*print_4@13(print_arg_0_9@12))@11)@10 in (aletrec input_12 = (lam() (*input_12@9())@8)@7 in (alet ?desugar_seq_left_1_18 = (lam() true@6)@5 in 3@4)@3)@2)@1
+@0
+=================
+Phase 8 (Located):
+(aletrec print_4 = (lam(print_arg_0_9) (*print_4@13(print_arg_0_9@12))@11)@10 in (aletrec input_12 = (lam() (*input_12@9())@8)@7 in (alet ?desugar_seq_left_1_18 = (lam() true@6)@5 in 3@4)@3)@2)@1
+@0
+Envs:
+?desugar_seq_left_1_18:
+	?desugar_seq_left_1_18=>[RBP+16]
+?our_code_starts_here:
+	?desugar_seq_left_1_18=>[RBP-24]
+	input_12=>[RBP-16]
+	print_4=>[RBP-8]
+input_12:
+	input_12=>[RBP-8]
+	input_12=>[RBP+16]
+?our_code_starts_here:
+	input_12=>[RBP-16]
+	print_4=>[RBP-8]
+print_4:
+	print_4=>[RBP-8]
+	print_4=>[RBP+16]
+	print_arg_0_9=>[RBP+24]
+?our_code_starts_here:
+	print_4=>[RBP-8]
+?our_code_starts_here:
+	
+=================
+Phase 9 (Result):
+section .text
+extern ?error
+extern ?input
+extern ?print
+extern ?print_stack
+extern ?equal
+extern ?try_gc
+extern ?HEAP
+extern ?HEAP_END
+extern ?set_stack_bottom
+global ?our_code_starts_here
+align 16
+?our_code_starts_here:
+  push RBP
+  mov RBP, RSP
+  mov R12, RDI
+  mov QWORD RDI, RBP
+  call ?set_stack_bottom
+  mov RDI, R12
+  ;; heap start
+  mov QWORD R15, RDI ; Load heap_reg with our argument, the heap pointer
+  add QWORD R15, 15 ; Align it to the nearest multiple of 16
+  mov R11, 0xfffffffffffffff0
+  and QWORD R15, R11 ; by adding no more than 15 to it
+  mov RAX, [RBP+16]
+  sub RAX, 0x5
+  add RSP, -24
+  ;; LetRec$1
+  jmp near print_4_done
+align 16
+print_4:
+  push RBP
+  mov RBP, RSP
+  mov RAX, [RBP+16]
+  sub RAX, 0x5
+  add RSP, -8
+  mov R11, [RAX+24]
+  mov [RBP-8], R11
+  ;; Native call: ?print (tag: 11)
+  mov QWORD RDI, [RBP+24]
+  call ?print
+  mov RSP, RBP
+  pop RBP
+  ret
+align 16
+print_4_done:
+  mov QWORD [R15+0], 1
+  mov QWORD [R15+8], print_4
+  mov QWORD [R15+16], 1
+  mov R11, [RBP-8]
+  mov QWORD [R15+24], R11
+  mov RAX, R15
+  add RAX, 0x5
+  add R15, 32
+  mov [RBP-8], RAX
+  ;; LetRec$1 patching with ptrs to mutually rec closures
+  mov R11, [RBP-8]
+  sub R11, 0x5
+  mov R12, [RBP-8]
+  mov [R11+24], R12
+  ;; LetRec$2
+  jmp near input_12_done
+align 16
+input_12:
+  push RBP
+  mov RBP, RSP
+  mov RAX, [RBP+16]
+  sub RAX, 0x5
+  add RSP, -8
+  mov R11, [RAX+24]
+  mov [RBP-8], R11
+  ;; Native call: ?input (tag: 8)
+  call ?input
+  mov RSP, RBP
+  pop RBP
+  ret
+align 16
+input_12_done:
+  mov QWORD [R15+0], 0
+  mov QWORD [R15+8], input_12
+  mov QWORD [R15+16], 1
+  mov R11, [RBP-16]
+  mov QWORD [R15+24], R11
+  mov RAX, R15
+  add RAX, 0x5
+  add R15, 32
+  mov [RBP-16], RAX
+  ;; LetRec$2 patching with ptrs to mutually rec closures
+  mov R11, [RBP-16]
+  sub R11, 0x5
+  mov R12, [RBP-16]
+  mov [R11+24], R12
+  ;; Let_?desugar_seq_left_1_18
+  jmp near ?desugar_seq_left_1_18_done
+align 16
+?desugar_seq_left_1_18:
+  push RBP
+  mov RBP, RSP
+  mov RAX, [RBP+16]
+  sub RAX, 0x5
+  add RSP, 0
+  mov RAX, 0xffffffffffffffff
+  mov RSP, RBP
+  pop RBP
+  ret
+align 16
+?desugar_seq_left_1_18_done:
+  mov QWORD [R15+0], 0
+  mov QWORD [R15+8], ?desugar_seq_left_1_18
+  mov QWORD [R15+16], 0
+  mov RAX, R15
+  add RAX, 0x5
+  add R15, 32
+  mov [RBP-24], RAX
+  mov [RBP-24], RAX
+  mov RAX, 6
+  mov RSP, RBP
+  pop RBP
+  ret
+?err_comp_not_num:
+  mov QWORD RDI, 1
+  mov QWORD RSI, R11
+  call ?error
+?err_arith_not_num:
+  mov QWORD RDI, 2
+  mov QWORD RSI, R11
+  call ?error
+?err_logic_not_bool:
+  mov QWORD RDI, 3
+  mov QWORD RSI, R11
+  call ?error
+?err_if_not_bool:
+  mov QWORD RDI, 4
+  mov QWORD RSI, R11
+  call ?error
+?err_overflow:
+  mov QWORD RDI, 5
+  mov QWORD RSI, RAX
+  call ?error
+?err_get_not_tuple:
+  mov QWORD RDI, 6
+  mov QWORD RSI, R11
+  call ?error
+?err_get_low_index:
+  mov QWORD RDI, 7
+  mov QWORD RSI, R11
+  call ?error
+?err_get_high_index:
+  mov QWORD RDI, 8
+  call ?error
+?err_nil_deref:
+  mov QWORD RDI, 9
+  mov QWORD RSI, R11
+  call ?error
+?err_out_of_memory:
+  mov QWORD RDI, 10
+  mov QWORD RSI, R11
+  call ?error
+?err_set_not_tuple:
+  mov QWORD RDI, 11
+  mov QWORD RSI, R11
+  call ?error
+?err_set_low_index:
+  mov QWORD RDI, 12
+  mov QWORD RSI, R11
+  call ?error
+?err_set_high_index:
+  mov QWORD RDI, 13
+  mov QWORD RSI, R11
+  call ?error
+?err_call_not_closure:
+  mov QWORD RDI, 14
+  mov QWORD RSI, R11
+  call ?error
+?err_call_arity_err:
+  mov QWORD RDI, 15
+  mov QWORD RSI, R11
+  call ?error
+?err_get_not_num:
+  mov QWORD RDI, 16
+  mov QWORD RSI, R11
+  call ?error
+?err_set_not_num:
+  mov QWORD RDI, 17
+  mov QWORD RSI, R11
+  call ?error
+?err_bad_input:
+  mov QWORD RDI, 18
+  mov QWORD RSI, R11
+  call ?error
+
+
