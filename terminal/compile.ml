@@ -720,24 +720,24 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
         if need_padding then []
         else
           let offs = tup_size + 1 in
-          [IMov(Reg(scratch_reg), padding_val); IMov(RegOffset(offs*word_size, R15), Reg(scratch_reg))] in
+          [IMov(Reg(scratch_reg), padding_val); IMov(RegOffset(offs*word_size, heap_reg), Reg(scratch_reg))] in
       let next_heap_loc = tup_size + 1 + ((1+tup_size) mod 2) in
 
       (* store the tuple size on the heap *)
-      [IMov(Reg(scratch_reg), Const(Int64.of_int tup_size)); IMov(RegOffset(0, R15), Reg(scratch_reg))]
+      [IMov(Reg(scratch_reg), Const(Int64.of_int tup_size)); IMov(RegOffset(0, heap_reg), Reg(scratch_reg))]
       (* store each tuple element on the heap *)
       @ List.flatten
           (List.mapi
             (fun i e ->
               let arg = compile_imm e sub_env in
               let offs = i + 1 in
-              [IMov(Reg(scratch_reg), Sized(QWORD_PTR, arg)); IMov(RegOffset(offs*word_size, R15), Reg(scratch_reg))])
+              [IMov(Reg(scratch_reg), Sized(QWORD_PTR, arg)); IMov(RegOffset(offs*word_size, heap_reg), Reg(scratch_reg))])
             elems)
       @ padding
       (* return the pointer to the tuple, make it a snakeval *)
-      @ [IMov(Reg(RAX), Reg(R15)); IAdd(Reg(RAX), Const(1L))]
+      @ [IMov(Reg(RAX), Reg(heap_reg)); IAdd(Reg(RAX), Const(1L))]
       (* increment the heap ptr *)
-      @ [IMov(Reg(scratch_reg), Const(Int64.of_int (next_heap_loc * word_size))); IAdd(Reg(R15), Reg(scratch_reg))]
+      @ [IMov(Reg(scratch_reg), Const(Int64.of_int (next_heap_loc * word_size))); IAdd(Reg(heap_reg), Reg(scratch_reg))]
   | CGetItem(tup, i, _) ->
       let tup_address = compile_imm tup sub_env in
       let idx = compile_imm i sub_env in
