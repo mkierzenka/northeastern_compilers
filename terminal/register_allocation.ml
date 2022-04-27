@@ -28,11 +28,15 @@ let callee_saved_regs : arg list =
 (* TODO- expand this set. Problem is that we were sloppy and used a bit too many registers
    in our codegen. Also can put the x64 calling convention regs into this list. *)
 let reg_colors : arg list =
-  [ Reg RDI
-  ; Reg RSI
-  ; Reg RDX
-  ; Reg RCX
-  ; Reg R10
+  [
+    Reg R10;
+    (* Reg R11; scratch_reg *)
+    (* Reg R12; scratch_reg_2 *)
+    Reg R13;
+    Reg R14;
+    Reg RBX;
+    (* TODO- possible include caller_saved_regs as colors,
+    may need to stack push/pop to save though *)
   ]
 
 let rec get_minimum_unused_color (colors : arg list) (nbrs : arg list) : arg =
