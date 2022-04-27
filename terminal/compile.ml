@@ -189,25 +189,25 @@ and call (closure : arg) args =
 (* Compiled Type Checking *)
 let check_rax_for_num (err_lbl : string) : instruction list =
   [
-   (* This "test" trick depends on num_tag being 0. R8 used because Test doesn't support imm64 *)
+   (* This "test" trick depends on num_tag being 0. Scratch reg used because Test doesn't support imm64 *)
    ILineComment("check_rax_for_num (" ^ err_lbl ^ ")");
-   IMov(Reg(R8), HexConst(num_tag_mask));
-   ITest(Reg(RAX), Reg(R8));
+   IMov(Reg(scratch_reg), HexConst(num_tag_mask));
+   ITest(Reg(RAX), Reg(scratch_reg));
    IJnz(Label(err_lbl));
   ]
 
 let check_rax_for_bool (err_lbl : string) : instruction list =
   [
-   (* Operate on temp register R8 instead of RAX. This is because we call AND
+   (* Operate on scratch register instead of RAX. This is because we call AND
     * on the register, which will alter the value. We want to preserve the value
-    * in RAX, hence we operate on R8 instead. R9 is used as intermediate because
-      And, Cmp don't work on imm64s *)
+    * in RAX, hence we operate on scratch reg instead. 2nd scratch reg is used
+    * as intermediate because And, Cmp don't work on imm64s *)
    ILineComment("check_rax_for_bool (" ^ err_lbl ^ ")");
-   IMov(Reg(R8), Reg(RAX));
-   IMov(Reg(R9), HexConst(bool_tag_mask));
-   IAnd(Reg(R8), Reg(R9));
-   IMov(Reg(R9), HexConst(bool_tag));
-   ICmp(Reg(R8), Reg(R9));
+   IMov(Reg(scratch_reg), Reg(RAX));
+   IMov(Reg(scratch_reg_2), HexConst(bool_tag_mask));
+   IAnd(Reg(scratch_reg), Reg(scratch_reg_2));
+   IMov(Reg(scratch_reg_2), HexConst(bool_tag));
+   ICmp(Reg(scratch_reg), Reg(scratch_reg_2));
    IJnz(Label(err_lbl));
   ]
 
@@ -216,24 +216,24 @@ let check_for_overflow = [IJo(Label(err_overflow_lbl))]
 
 let check_rax_for_tup (err_lbl : string) : instruction list =
   [
-   (* Operate on temp register R8 instead of RAX. This is because we call AND
+   (* Operate on scratch register instead of RAX. This is because we call AND
     * on the register, which will alter the value. We want to preserve the value
-    * in RAX, hence we operate on R8 instead. R9 is used as intermediate because
-      And, Cmp don't work on imm64s *)
+    * in RAX, hence we operate on scratch reg instead. 2nd scratch reg is used
+    * as intermediate because And, Cmp don't work on imm64s *)
    ILineComment("check_rax_for_tup (" ^ err_lbl ^ ")");
-   IMov(Reg(R8), Reg(RAX));
-   IMov(Reg(R9), HexConst(tuple_tag_mask));
-   IAnd(Reg(R8), Reg(R9));
-   IMov(Reg(R9), HexConst(tuple_tag));
-   ICmp(Reg(R8), Reg(R9));
+   IMov(Reg(scratch_reg), Reg(RAX));
+   IMov(Reg(scratch_reg_2), HexConst(tuple_tag_mask));
+   IAnd(Reg(scratch_reg), Reg(scratch_reg_2));
+   IMov(Reg(scratch_reg_2), HexConst(tuple_tag));
+   ICmp(Reg(scratch_reg), Reg(scratch_reg_2));
    IJne(Label(err_lbl));
   ]
 
 let check_rax_for_nil (err_lbl : string) : instruction list =
   [
    ILineComment("check_rax_for_nil (" ^ err_lbl ^ ")");
-   IMov(Reg(R8), const_nil);
-   ICmp(Reg(RAX), Reg(R8));
+   IMov(Reg(scratch_reg), const_nil);
+   ICmp(Reg(RAX), Reg(scratch_reg));
    IJe(Label(err_lbl));
   ]
 
@@ -244,7 +244,7 @@ let check_rax_for_tup_smaller (err_lbl : string) : instruction list =
   [
    ILineComment("check_rax_for_tup_smaller (" ^ err_lbl ^ ")");
    ICmp(Reg(RAX), Const(0L));
-   (* no temp register because imm32 0 will be "sign-extended to imm64", which should still be 0 *)
+   (* no scratch register because imm32 0 will be "sign-extended to imm64", which should still be 0 *)
    IJl(Label(err_lbl));
   ]
 
@@ -253,12 +253,12 @@ let check_rax_for_tup_smaller (err_lbl : string) : instruction list =
 (* DO NOT MODIFY RAX *)
 let check_rax_for_tup_bigger (tup_address : arg) (err_lbl : string) : instruction list =
   [
-   (* R8 is used as intermediate because Cmp don't work on imm64s *)
+   (* Scratch reg is used as intermediate because Cmp don't work on imm64s *)
    ILineComment("check_rax_for_tup_bigger (" ^ err_lbl ^ ")");
-   IMov(Reg(R8), tup_address);
-   ISub(Reg(R8), Const(1L)); (* convert from snake val address -> machine address *)
-   IMov(Reg(R8), RegOffset(0, R8)); (* load the tup length into RAX *)
-   ICmp(Reg(RAX), Reg(R8));
+   IMov(Reg(scratch_reg), tup_address);
+   ISub(Reg(scratch_reg), Const(1L)); (* convert from snake val address -> machine address *)
+   IMov(Reg(scratch_reg), RegOffset(0, scratch_reg)); (* load the tup length into RAX *)
+   ICmp(Reg(RAX), Reg(scratch_reg));
    IJge(Label(err_lbl));
   ]
 
@@ -376,9 +376,9 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
      @ [IMov(Reg(RAX), cond_reg)]
      @ (check_rax_for_bool err_if_not_bool_lbl) 
      (* test for RAX == true *)
-     (* need to use temp register R8 because Test cannot accept imm64 *)
-     @ [IMov(Reg(R8), bool_mask)]
-     @ [ITest(Reg(RAX), Reg(R8))]
+     (* need to use scratch register because Test cannot accept imm64 *)
+     @ [IMov(Reg(scratch_reg), bool_mask)]
+     @ [ITest(Reg(RAX), Reg(scratch_reg))]
      @ [IJz(Label(lbl_els))]
 
      @ [ILabel(lbl_thn)]
@@ -399,9 +399,9 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
      @ [IMov(Reg(RAX), cond_reg)]
      @ (check_rax_for_bool err_logic_not_bool_lbl)
      (* test for RAX == true *)
-     (* need to use temp register R8 because Test cannot accept imm64 *)
-     @ [IMov(Reg(R8), bool_mask)]
-     @ [ITest(Reg(RAX), Reg(R8))]
+     (* need to use scratch register because Test cannot accept imm64 *)
+     @ [IMov(Reg(scratch_reg), bool_mask)]
+     @ [ITest(Reg(RAX), Reg(scratch_reg))]
      @ [IJz(Label(lbl_els))]
 
      @ [ILabel(lbl_thn)]
@@ -435,11 +435,11 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
           [
            IMov(Reg(RAX), body_imm);
            (* Don't need to save RAX on the stack because we overwrite the
-            * value with true/false later. R8 used because And, Cmp don't support imm64 *)
-           IMov(Reg(R8), HexConst(bool_tag_mask));
-           IAnd(Reg(RAX), Reg(R8));
-           IMov(Reg(R8), HexConst(bool_tag));
-           ICmp(Reg(RAX), Reg(R8));
+            * value with true/false later. Scratch reg used because And, Cmp don't support imm64 *)
+           IMov(Reg(scratch_reg), HexConst(bool_tag_mask));
+           IAnd(Reg(RAX), Reg(scratch_reg));
+           IMov(Reg(scratch_reg), HexConst(bool_tag));
+           ICmp(Reg(RAX), Reg(scratch_reg));
            IJz(Label(true_lbl));
            (* case not bool *)
            ILabel(false_lbl);
@@ -457,9 +457,9 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
           let done_lbl = sprintf "is_num_done_%d" tag in
           [
            IMov(Reg(RAX), body_imm);
-           (* This "test" trick depends on num_tag being 0. R8 used because Test doesn't support imm64 *)
-           IMov(Reg(R8), HexConst(num_tag_mask));
-           ITest(Reg(RAX), Reg(R8));
+           (* This "test" trick depends on num_tag being 0. Scratch reg used because Test doesn't support imm64 *)
+           IMov(Reg(scratch_reg), HexConst(num_tag_mask));
+           ITest(Reg(RAX), Reg(scratch_reg));
            IJz(Label(true_lbl));
            (* case not num *)
            ILabel(false_lbl);
@@ -474,9 +474,9 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
         | Not ->
            [IMov(Reg(RAX), body_imm)]
            @ (check_rax_for_bool err_logic_not_bool_lbl)
-           (* need to use temp register R8 because Xor cannot accept imm64 *)
-           @ [IMov(Reg(R8), bool_mask)]
-           @ [IXor(Reg(RAX), Reg(R8))]
+           (* need to use scratch register because Xor cannot accept imm64 *)
+           @ [IMov(Reg(scratch_reg), bool_mask)]
+           @ [IXor(Reg(RAX), Reg(scratch_reg))]
         | PrintStack ->
             (* TODO Lerner provided this *)
             raise (NotYetImplemented "PrintStack not yet implemented")
@@ -487,11 +487,11 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
           [
            IMov(Reg(RAX), body_imm);
            (* Don't need to save RAX on the stack because we overwrite the
-            * value with true/false later. R8 used because And, Cmp don't support imm64 *)
-           IMov(Reg(R8), HexConst(tuple_tag_mask));
-           IAnd(Reg(RAX), Reg(R8));
-           IMov(Reg(R8), HexConst(tuple_tag));
-           ICmp(Reg(RAX), Reg(R8));
+            * value with true/false later. Scratch reg used because And, Cmp don't support imm64 *)
+           IMov(Reg(scratch_reg), HexConst(tuple_tag_mask));
+           IAnd(Reg(RAX), Reg(scratch_reg));
+           IMov(Reg(scratch_reg), HexConst(tuple_tag));
+           ICmp(Reg(RAX), Reg(scratch_reg));
            IJz(Label(true_lbl));
            (* case not tup *)
            ILabel(false_lbl);
@@ -515,9 +515,9 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
          (* check lhs for numerical val *)
          @ [IMov(Reg(RAX), lhs_reg)]
          @ (check_rax_for_num err_arith_not_num_lbl)
-         (* need to use a temp register because ADD does not properly handle imm64 (for overflow) *)
-         @ [IMov(Reg(R8), rhs_reg)]
-         @ [IAdd(Reg(RAX), Reg(R8))]
+         (* need to use a scratch register because ADD does not properly handle imm64 (for overflow) *)
+         @ [IMov(Reg(scratch_reg), rhs_reg)]
+         @ [IAdd(Reg(RAX), Reg(scratch_reg))]
          @ check_for_overflow
       | Minus ->
          (* check rhs for numerical val *)
@@ -526,9 +526,9 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
          (* check lhs for numerical val *)
          @ [IMov(Reg(RAX), lhs_reg)]
          @ (check_rax_for_num err_arith_not_num_lbl)
-         (* need to use a temp register because SUB does not properly handle imm64 (for overflow) *)
-         @ [IMov(Reg(R8), rhs_reg)]
-         @ [ISub(Reg(RAX), Reg(R8))]
+         (* need to use a scratch register because SUB does not properly handle imm64 (for overflow) *)
+         @ [IMov(Reg(scratch_reg), rhs_reg)]
+         @ [ISub(Reg(RAX), Reg(scratch_reg))]
          @ check_for_overflow
       | Times ->
          (* check rhs for numerical val *)
@@ -538,9 +538,9 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
          @ [IMov(Reg(RAX), lhs_reg)]
          @ (check_rax_for_num err_arith_not_num_lbl)
          @ [ISar(Reg(RAX), Const(1L))]
-         (* need to use a temp register because IMUL does not properly handle imm64 (for overflow) *)
-         @ [IMov(Reg(R8), rhs_reg)]
-         @ [IMul(Reg(RAX), Reg(R8))]
+         (* need to use a scratch register because IMUL does not properly handle imm64 (for overflow) *)
+         @ [IMov(Reg(scratch_reg), rhs_reg)]
+         @ [IMul(Reg(RAX), Reg(scratch_reg))]
          @ check_for_overflow
       | And -> raise (InternalCompilerError "Impossible: 'and' should be rewritten")
       | Or -> raise (InternalCompilerError "Impossible: 'or' should be rewritten")
@@ -555,9 +555,9 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
          @ [IMov(Reg(RAX), lhs_reg)]
          @ (check_rax_for_num err_comp_not_num_lbl)
 
-         (* need to use temp register R8 because Test cannot accept imm64 *)
-         @ [IMov(Reg(R8), rhs_reg)]
-         @ [ICmp(Reg(RAX), Reg(R8))]
+         (* need to use scratch register because Test cannot accept imm64 *)
+         @ [IMov(Reg(scratch_reg), rhs_reg)]
+         @ [ICmp(Reg(RAX), Reg(scratch_reg))]
          @ [IMov(Reg(RAX), const_true)]
          @ [IJg(Label(lbl_done))]
 
@@ -576,9 +576,9 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
          @ [IMov(Reg(RAX), lhs_reg)]
          @ (check_rax_for_num err_comp_not_num_lbl)
 
-         (* need to use temp register R8 because Test cannot accept imm64 *)
-         @ [IMov(Reg(R8), rhs_reg)]
-         @ [ICmp(Reg(RAX), Reg(R8))]
+         (* need to use scratch register because Test cannot accept imm64 *)
+         @ [IMov(Reg(scratch_reg), rhs_reg)]
+         @ [ICmp(Reg(RAX), Reg(scratch_reg))]
          @ [IMov(Reg(RAX), const_true)]
          @ [IJge(Label(lbl_done))]
 
@@ -597,9 +597,9 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
          @ [IMov(Reg(RAX), lhs_reg)]
          @ (check_rax_for_num err_comp_not_num_lbl)
 
-         (* need to use temp register R8 because Test cannot accept imm64 *)
-         @ [IMov(Reg(R8), rhs_reg)]
-         @ [ICmp(Reg(RAX), Reg(R8))]
+         (* need to use scratch register because Test cannot accept imm64 *)
+         @ [IMov(Reg(scratch_reg), rhs_reg)]
+         @ [ICmp(Reg(RAX), Reg(scratch_reg))]
          @ [IMov(Reg(RAX), const_true)]
          @ [IJl(Label(lbl_done))]
 
@@ -618,9 +618,9 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
          @ [IMov(Reg(RAX), lhs_reg)]
          @ (check_rax_for_num err_comp_not_num_lbl)
 
-         (* need to use temp register R8 because Test cannot accept imm64 *)
-         @ [IMov(Reg(R8), rhs_reg)]
-         @ [ICmp(Reg(RAX), Reg(R8))]
+         (* need to use scratch register because Test cannot accept imm64 *)
+         @ [IMov(Reg(scratch_reg), rhs_reg)]
+         @ [ICmp(Reg(RAX), Reg(scratch_reg))]
          @ [IMov(Reg(RAX), const_true)]
          @ [IJle(Label(lbl_done))]
 
@@ -634,9 +634,9 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
 
          [IMov(Reg(RAX), lhs_reg)]
 
-         (* need to use temp register R8 because Test cannot accept imm64 *)
-         @ [IMov(Reg(R8), rhs_reg)]
-         @ [ICmp(Reg(RAX), Reg(R8))]
+         (* need to use scratch register because Test cannot accept imm64 *)
+         @ [IMov(Reg(scratch_reg), rhs_reg)]
+         @ [ICmp(Reg(RAX), Reg(scratch_reg))]
          @ [IMov(Reg(RAX), const_true)]
          @ [IJe(Label(lbl_done))]
 
@@ -651,7 +651,7 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
     let num_args = (List.length args) in
     (* we add 1 below because we will also push the closure itself before making the call *)
     let needs_padding = (num_args + 1) mod 2 == 1 in
-    let padding = (if needs_padding then [IMov(Reg(R8), HexConst(0xF0F0F0F0L)); IPush(Reg(R8))] else []) in
+    let padding = (if needs_padding then [IMov(Reg(scratch_reg), HexConst(0xF0F0F0F0L)); IPush(Reg(scratch_reg))] else []) in
     let num_pushes = num_args + 1 (* the closure *) + (if needs_padding then 1 else 0) in
     let args_rev = List.rev args in
     let compiled_func = compile_imm func sub_env in
@@ -662,18 +662,18 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
         let push_compiled_args = List.fold_left
                        (fun accum_instrs arg ->
                           let compiled_imm = (compile_imm arg sub_env) in
-                          (* Use temp register because can't push imm64 directly *)
-                          accum_instrs @ [IMov(Reg(R8), compiled_imm);
-                                          IPush(Sized(QWORD_PTR, Reg(R8)))])
+                          (* Use scratch register because can't push imm64 directly *)
+                          accum_instrs @ [IMov(Reg(scratch_reg), compiled_imm);
+                                          IPush(Sized(QWORD_PTR, Reg(scratch_reg)))])
                        []
                        args_rev
                        in
         let check_rax_for_closure =
         [ILineComment(sprintf "check_rax_for_closure (%s)" err_call_not_closure_lbl);
-         IMov(Reg(R9), HexConst(closure_tag_mask));
-         IAnd(Reg(RAX), Reg(R9));
-         IMov(Reg(R9), HexConst(closure_tag));
-         ICmp(Reg(RAX), Reg(R9));
+         IMov(Reg(scratch_reg_2), HexConst(closure_tag_mask));
+         IAnd(Reg(RAX), Reg(scratch_reg_2));
+         IMov(Reg(scratch_reg_2), HexConst(closure_tag));
+         ICmp(Reg(RAX), Reg(scratch_reg_2));
          IJne(Label(err_call_not_closure_lbl));] in
         let check_closure_for_arity =
         [ILineComment(sprintf "check_closure_for_arity (%s)" err_call_arity_err_lbl);
@@ -681,7 +681,7 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
          IMov(Reg(RAX), compiled_func);
          ISub(Reg(RAX), HexConst(closure_tag)); (* now RAX is heap addr to closure *)
          IMov(Reg(RAX), RegOffset(0,RAX)); (* get the arity (machine int) *)
-         ICmp(Reg(RAX), Const(Int64.of_int num_args)); (* no temp reg, assume won't have that many args *)
+         ICmp(Reg(RAX), Const(Int64.of_int num_args)); (* no scratch reg, assume won't have that many args *)
          IJne(Label(err_call_arity_err_lbl));] in
         let padded_comp_args = padding @ push_compiled_args in
         [IMov(Reg(RAX), compiled_func);]
@@ -694,7 +694,7 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
           ISub(Reg(RAX), HexConst(closure_tag)); (* now RAX is heap addr to closure *)
           IMov(Reg(RAX), RegOffset(1*word_size,RAX)); (* get the code ptr (machine addr) *)
           ICall(Reg(RAX));
-          (* Don't use temp register here because we assume the RHS will never be very big *)
+          (* Don't use scratch register here because we assume the RHS will never be very big *)
           IAdd(Reg(RSP), Const(Int64.of_int (word_size * num_pushes)));
           ]
     | Native ->
@@ -720,24 +720,24 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
         if need_padding then []
         else
           let offs = tup_size + 1 in
-          [IMov(Reg(R8), padding_val); IMov(RegOffset(offs*word_size, R15), Reg(R8))] in
+          [IMov(Reg(scratch_reg), padding_val); IMov(RegOffset(offs*word_size, R15), Reg(scratch_reg))] in
       let next_heap_loc = tup_size + 1 + ((1+tup_size) mod 2) in
 
       (* store the tuple size on the heap *)
-      [IMov(Reg(R8), Const(Int64.of_int tup_size)); IMov(RegOffset(0, R15), Reg(R8))]
+      [IMov(Reg(scratch_reg), Const(Int64.of_int tup_size)); IMov(RegOffset(0, R15), Reg(scratch_reg))]
       (* store each tuple element on the heap *)
       @ List.flatten
           (List.mapi
             (fun i e ->
               let arg = compile_imm e sub_env in
               let offs = i + 1 in
-              [IMov(Reg(R8), Sized(QWORD_PTR, arg)); IMov(RegOffset(offs*word_size, R15), Reg(R8))])
+              [IMov(Reg(scratch_reg), Sized(QWORD_PTR, arg)); IMov(RegOffset(offs*word_size, R15), Reg(scratch_reg))])
             elems)
       @ padding
       (* return the pointer to the tuple, make it a snakeval *)
       @ [IMov(Reg(RAX), Reg(R15)); IAdd(Reg(RAX), Const(1L))]
       (* increment the heap ptr *)
-      @ [IMov(Reg(R8), Const(Int64.of_int (next_heap_loc * word_size))); IAdd(Reg(R15), Reg(R8))]
+      @ [IMov(Reg(scratch_reg), Const(Int64.of_int (next_heap_loc * word_size))); IAdd(Reg(R15), Reg(scratch_reg))]
   | CGetItem(tup, i, _) ->
       let tup_address = compile_imm tup sub_env in
       let idx = compile_imm i sub_env in
@@ -755,10 +755,10 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
       (* passed checks, now do actual 'get' *)
       @ [IMov(Reg(RAX), tup_address)] (* move tuple address back into RAX *)
       @ [ISub(Reg(RAX), Const(1L))] (* convert from snake val address -> machine address *)
-      @ [IMov(Reg(R8), idx)] (* move the idx (snakeval) into R8 *)
-      @ [ISar(Reg(R8), Const(1L))] (* convert from snake val -> int *)
-      @ [IAdd(Reg(R8), Const(1L))] (* add 1 to the offset to bypass the tup size *)
-      @ [IMov(Reg(RAX), RegOffsetReg(RAX,R8,word_size,0))]
+      @ [IMov(Reg(scratch_reg), idx)] (* move the idx (snakeval) into scratch reg *)
+      @ [ISar(Reg(scratch_reg), Const(1L))] (* convert from snake val -> int *)
+      @ [IAdd(Reg(scratch_reg), Const(1L))] (* add 1 to the offset to bypass the tup size *)
+      @ [IMov(Reg(RAX), RegOffsetReg(RAX,scratch_reg,word_size,0))]
   | CSetItem(tup, i, r, _) ->
       let tup_address = compile_imm tup sub_env in
       let idx = compile_imm i sub_env in
@@ -777,11 +777,11 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
       (* passed checks, now do actual 'set' *)
       @ [IMov(Reg(RAX), tup_address)] (* move tuple address (snakeval) into RAX *)
       @ [ISub(Reg(RAX), Const(1L))] (* convert from snake val -> address *)
-      @ [IMov(Reg(R8), idx)] (* move the idx (* snakeval *) into R8 *)
-      @ [ISar(Reg(R8), Const(1L))] (* convert from snake val -> int *)
-      @ [IAdd(Reg(R8), Const(1L))] (* add 1 to the offset to bypass the tup size *)
-      @ [IMov(Reg(R11), rhs)]
-      @ [IMov(RegOffsetReg(RAX,R8,word_size,0), Reg(R11))]
+      @ [IMov(Reg(scratch_reg), idx)] (* move the idx (* snakeval *) into scratch reg *)
+      @ [ISar(Reg(scratch_reg), Const(1L))] (* convert from snake val -> int *)
+      @ [IAdd(Reg(scratch_reg), Const(1L))] (* add 1 to the offset to bypass the tup size *)
+      @ [IMov(Reg(scratch_reg_2), rhs)]
+      @ [IMov(RegOffsetReg(RAX,scratch_reg,word_size,0), Reg(scratch_reg_2))]
       @ [IAdd(Reg(RAX), Const(1L))] (* convert the tuple address back to a snakeval *)
 and compile_imm e (sub_env : arg name_envt) : arg =
   match e with
@@ -823,7 +823,7 @@ and compile_fun (name : string) (params : string list) (body : tag aexpr) (env :
       [IMov(Reg(RAX), RegOffset(2 * word_size, RBP))] (* Now RAX has the (tagged) func value *)
       @ [ISub(Reg(RAX), HexConst(closure_tag))] (* now RAX is heap addr to closure *)
       
-      (* Don't use temp register here because we assume the RHS will never be very big *)
+      (* Don't use scratch register here because we assume the RHS will never be very big *)
       (* allocates stack space for all free and local vars *)
       @ [IAdd(Reg(RSP), Const(Int64.of_int (min_slot_addr sub_env)))]
       @ load_free_vars
@@ -914,11 +914,11 @@ global ?our_code_starts_here" in
        ] in
      let set_stack_bottom =
        [
-         IMov(Reg R12, Reg RDI);
+         IMov(Reg scratch_reg_2, Reg RDI);
        ]
        @ (native_call (Label "?set_stack_bottom") [Reg(RBP)])
        @ [
-           IMov(Reg RDI, Reg R12)
+           IMov(Reg RDI, Reg scratch_reg_2)
          ] in
      let main = (ocsh_prelude @ set_stack_bottom @ heap_start @ ocsh_body @ ocsh_postlude) in
      sprintf "%s%s%s\n" prelude (to_asm main) suffix
