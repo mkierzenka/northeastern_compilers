@@ -2,7 +2,6 @@ open Printf
 open Exprs
 open Pretty
 
-(* TODO: Define any additional exceptions you want *)
 exception ParseError of string (* parse-error message *)
 exception UnboundId of string * sourcespan (* name, where used *)
 exception UnboundFun of string * sourcespan (* name of fun, where used *)
@@ -17,6 +16,8 @@ exception InternalCompilerError of string (* Major failure: message to show *)
 exception LetRecNonFunction of sourcespan bind * sourcespan (* name binding, where defined *)
 exception ShouldBeFunction of string * sourcespan (* name, where defined, actual typ *)
 exception DeclArity of string * int * int * sourcespan (* name, num args, num types, where defined *)
+exception RecordFieldNotName of string * sourcespan
+exception RecordDuplicateField of string * sourcespan
 
 
   
@@ -59,6 +60,12 @@ let print_errors (exns : exn list) : string list =
       | LetRecNonFunction(bind, loc) ->
          sprintf "Binding error at %s: Let-rec expected a name binding to a lambda; got %s"
            (string_of_sourcespan loc) (string_of_bind bind)
+      | RecordFieldNotName(field, loc) ->
+         sprintf "Binding error at %s: Record fields must be named; got %s"
+           (string_of_sourcespan loc) field
+      | RecordDuplicateField(field_name, loc) ->
+         sprintf "Binding error at %s: Record field names must be unique, duplicate found for: %s"
+           (string_of_sourcespan loc) field_name
       | _ ->
          sprintf "%s" (Printexc.to_string e)
     ) exns
