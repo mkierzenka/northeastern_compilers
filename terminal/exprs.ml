@@ -60,6 +60,7 @@ and 'a expr =
   | EApp of 'a expr * 'a expr list * call_type * 'a
   | ELambda of 'a bind list * 'a expr * 'a
   | ELetRec of 'a binding list * 'a expr * 'a
+  | ERecord of 'a binding list * 'a
 
 type 'a decl =
   | DFun of string * 'a bind list * 'a expr * 'a
