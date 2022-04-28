@@ -123,6 +123,10 @@ and string_of_expr_with (depth : int) (print_a : 'a -> string) (e : 'a expr) : s
      let binds_strs = List.map string_of_bind binds in
      let binds_str = List.fold_left (^) "" (intersperse binds_strs ", ") in
      sprintf "(lam(%s) %s)%s" binds_str (string_of_expr body) (print_a a)
+  | ERecord(binds, a) ->
+     let binds_strs = List.map (string_of_binding_with (depth - 1) print_a) binds in
+     let binds_str = List.fold_left (^) "" (intersperse binds_strs ", ") in
+     sprintf "(record %s)%s" binds_str (print_a a)
 
 let string_of_expr (e : 'a expr) : string =
   string_of_expr_with 1000 (fun _ -> "") e
@@ -358,6 +362,18 @@ let rec format_expr (fmt : Format.formatter) (print_a : 'a -> string) (e : 'a ex
      open_paren fmt; print_list fmt (fun fmt -> format_bind fmt print_a) binds print_comma_sep; close_paren fmt;
      pp_print_string fmt ":"; pp_print_space fmt ();
      help body;
+     close_paren fmt
+  | ERecord(binds, a) ->
+     let print_item fmt (b, e, a) =
+       open_paren fmt;
+       format_bind fmt print_a b;
+       print_comma_sep fmt;
+       help e;
+       close_paren fmt;
+       pp_print_string fmt (maybe_angle (print_a a)) in
+     open_label fmt "ERecord" (print_a a);
+     open_paren fmt; print_list fmt print_item binds print_comma_sep; close_paren fmt;
+     print_comma_sep fmt;
      close_paren fmt
 ;;
 let format_decl (fmt : Format.formatter) (print_a : 'a -> string) (d : 'a decl) : unit =

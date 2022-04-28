@@ -120,6 +120,7 @@ let get_tag_E e = match e with
   | ESetItem(_, _, _, t) -> t
   | ESeq(_, _, t) -> t
   | ELambda(_, _, t) -> t
+  | ERecord(_, t) -> t
 ;;
 
 let get_tag_D d = match d with
@@ -208,6 +209,15 @@ let rec map_tag_E (f : 'a -> 'b) (e : 'a expr) =
   | ELambda(binds, body, a) ->
      let tag_lam = f a in
      ELambda(List.map (map_tag_B f) binds, map_tag_E f body, tag_lam)
+  | ERecord(binds, a) ->
+     let tag_record = f a in
+     let tag_binding (b, e, t) =
+       let tag_bind = f t in
+       let tag_b = map_tag_B f b in
+       let tag_e = map_tag_E f e in
+       (tag_b, tag_e, tag_bind) in
+     let tag_binds = List.map tag_binding binds in
+     ERecord(tag_binds, tag_record)
 and map_tag_B (f : 'a -> 'b) b =
   match b with
   | BBlank tag -> BBlank(f tag)
@@ -285,6 +295,8 @@ and untagE e =
      ELetRec(List.map (fun (b, e, _) -> (untagB b, untagE e, ())) binds, untagE body, ())
   | ELambda(binds, body, _) ->
      ELambda(List.map untagB binds, untagE body, ())
+  | ERecord(binds, _) ->
+     ERecord(List.map (fun (b, e, _) -> (untagB b, untagE e, ())) binds, ())
 and untagB b =
   match b with
   | BBlank _ -> BBlank ()
