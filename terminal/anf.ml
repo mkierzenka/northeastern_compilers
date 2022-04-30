@@ -86,24 +86,14 @@ let anf (p : tag program) : unit aprogram =
            bindings
       in (body_ans, bindings_setups @ [BLetRec(new_bindings)] @ body_setup)
     | ERecord(bindings, tag) ->
-      let (new_bindings, bindings_setups, src_to_fresh_names, _) =
-        List.fold_left
-          (fun (let_rec_acc_bindings, let_rec_acc_setups, src_to_fresh_acc, field_num) (bind, exp, _) ->
-              begin
-              match bind with
-              | BName(name, _, _) ->
-                let freshened_name = sprintf "?rec_%d_field_%d_%s" tag field_num name in
-                let (exp_ans, exp_setup) = helpC exp in (
-                  (freshened_name, exp_ans)::let_rec_acc_bindings,
-                  exp_setup @ let_rec_acc_setups,
-                  (name, ImmId(freshened_name, ()))::src_to_fresh_acc,
-                  field_num + 1
-                )
-              | _ -> raise (InternalCompilerError "ANF-ing failed, record must only have BName bindings")
-              end)
-           ([], [], [], 0)
-           bindings in
-      (CRecord(List.rev src_to_fresh_names, ()), (List.rev bindings_setups) @ (List.map (fun (s, c) -> BLet(s, c)) (List.rev new_bindings)))
+      let (field_names_and_val_anses, val_setups) = List.split (List.map (
+         fun (field_bind, e, _) ->
+            let (val_ans, val_setup) = helpI e in
+            match field_bind with
+            | BName(field_name, _, _) -> ((field_name, val_ans), val_setup)
+            | _ -> raise (InternalCompilerError "Non-name field binds should have been caught in well-formedness checking")
+      ) bindings) in
+      (CRecord(field_names_and_val_anses, ()), List.concat val_setups)
     | _ -> let (imm, setup) = helpI e in (CImmExpr imm, setup)
 
   and helpI (e : tag expr) : (unit immexpr * unit anf_bind list) =

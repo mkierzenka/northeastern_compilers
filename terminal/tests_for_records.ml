@@ -3,6 +3,7 @@ open Test_funcs
 
 let test_records_wf = [
   terr "dup_names" "{fieldA = 736, fieldB = true, fieldC = 1 + 2, fieldA = 736}" "" "Record field names must be unique, duplicate found for: fieldA";
+  terr "shadow" "let a = 5 in { x = (let a = 3 in a) }" "" "??shadow";
 ]
 
 let test_records_valid = [
@@ -10,6 +11,8 @@ let test_records_valid = [
   t "nested" "{outerfield = -12, nest={innerfield=9000, if2=false}}" "" "{outerfield=-12, nest ={innerfield=9000, if2=false}}";
   t "dup_names_mixcase" "let a = {fieldA = 736, fieldB = true, fielda = 736} in 8" "" "8";
   t "let_field" "let var=160, rec1 = {f1 = var}, rec2 = {inner = rec1} in (rec1 == rec2) || (var == rec1)" "" "false";
+  t "ok_shadow" "let a = 5 in { a = 3 }" "" "{a = 3}";
+  t "inner_shadow" "{ a = { a = 3 } }" "" "{a = {a = 3}}"
 ]
 
 let test_records_anf = [

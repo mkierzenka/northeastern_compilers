@@ -3,5 +3,6 @@ let a = { a = 1, b = 2, fieldy = true },
     c = { too_true = true, truie = true, falsie = false },
     blah = 1337,
     d = { blah_blah_blah = blah, test = c, whoa = c },
-    e = { a = true, many_fields_present = 17, truie = false, blah_blah_blah = d } in
+    e = { a = true, many_fields_present = 17, truie = false, blah_blah_blah = d },
+    f = { a = 100, inner = { inner = 3, a = 5, f = true } } in
 3

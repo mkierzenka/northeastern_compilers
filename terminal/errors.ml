@@ -17,7 +17,7 @@ exception LetRecNonFunction of sourcespan bind * sourcespan (* name binding, whe
 exception ShouldBeFunction of string * sourcespan (* name, where defined, actual typ *)
 exception DeclArity of string * int * int * sourcespan (* name, num args, num types, where defined *)
 exception RecordFieldNotName of string * sourcespan
-exception RecordDuplicateField of string * sourcespan
+exception RecordDuplicateField of string * sourcespan * sourcespan (* name, where used, where defined *)
 
 
   
@@ -63,9 +63,9 @@ let print_errors (exns : exn list) : string list =
       | RecordFieldNotName(field, loc) ->
          sprintf "Binding error at %s: Record fields must be named; got %s"
            (string_of_sourcespan loc) field
-      | RecordDuplicateField(field_name, loc) ->
-         sprintf "Binding error at %s: Record field names must be unique, duplicate found for: %s"
-           (string_of_sourcespan loc) field_name
+      | RecordDuplicateField(field_name, loc, existing) ->
+         sprintf "The field %s, redefined at <%s>, duplicates one at <%s>"
+           field_name (string_of_sourcespan loc) (string_of_sourcespan existing)
       | _ ->
          sprintf "%s" (Printexc.to_string e)
     ) exns

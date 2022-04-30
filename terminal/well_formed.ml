@@ -164,54 +164,43 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
        (process_args binds) @ wf_E body (merge_envs (List.concat (List.map flatten_bind binds)) env)
     | ERecord(binds, _) ->
       (* TODO- clean/refactor this in combination with ELetRec's case above *)
+      (* Examples of issues caught here *)
+      (* let a = 5 in { x = (let a = 3 in a) } => ShadowId because of let shadowing *)
+      (* let a = 5 in { a = 3 } => no ShadowId, one is a field name *)
+      (* { a = 3, a = 5 } => ShadowId because field shadowing *)
       let rec find_locs x (binds : 'a bind list) : 'a list =
         match binds with
         | [] -> []
-        | BBlank _::rest -> find_locs x rest
         | BName(y, _, loc)::rest ->
           if x = y then loc :: find_locs x rest
-          else  find_locs x rest
+          else find_locs x rest
+        (* Blank and Tuples are not well-formed, but we still recur through them to potentially collect other errors *)
+        | BBlank _::rest -> find_locs x rest
         | BTuple(binds, _)::rest -> find_locs x binds @ find_locs x rest in
       let rec find_dupes (binds : 'a bind list) : exn list =
         match binds with
         | [] -> []
+        | (BName(x, _, def)::rest) -> List.map (fun use -> RecordDuplicateField(x, use, def)) (find_locs x rest)
+        (* Blank and Tuples are not well-formed, but we still recur through them to potentially collect other errors *)
         | (BBlank _::rest) -> find_dupes rest
-        | (BName(x, _, def)::rest) -> List.map (fun use -> RecordDuplicateField(x, def)) (find_locs x rest)
         | (BTuple(binds, _)::rest) -> find_dupes (binds @ rest) in
       let dupeIds = find_dupes (List.map (fun (b, _, _) -> b) binds) in
-      let rec process_binds (rem_binds : sourcespan bind list) (env : scope_info name_envt) =
-        match rem_binds with
-        | [] -> (env, [])
-        | BName(x, _, xloc)::rest ->
-          let shadow =
-            match (find_opt env x) with
-              | None -> []
-              (* TODO- unsure if the ShadowId below should be converted to a RecordDuplicateField *)
-              | Some (existing, _, _) -> if xloc = existing then [] else [ShadowId(x, xloc, existing)] in
-          let (newer_env, errs) = process_binds rest env in
-          (newer_env, (shadow @ errs))
-        | BBlank(loc)::rest ->
-          let (rest_env, rest_exns) = process_binds rest env in
-          (* TODO- here and below, should we pass the bind itself to the error, rather than a string? *)
-          (rest_env, RecordFieldNotName("<blank>", loc)::rest_exns)
-        | BTuple(_, loc)::rest ->
-          let (rest_env, rest_exns) = process_binds rest env in
-          (rest_env, RecordFieldNotName("<tuple>", loc)::rest_exns) in
-
-      let (env, bind_errs) = process_binds (List.map (fun (b, _, _) -> b) binds) env in
-      
+      let rec process_bind (bind : sourcespan bind) (env : scope_info name_envt) : exn option =
+        match bind with
+        | BName(x, _, xloc) -> None
+        | BBlank(loc) ->
+          Some(RecordFieldNotName("<blank>", loc))
+        | BTuple(_, loc) -> Some(RecordFieldNotName("<tuple>", loc)) in
       let rec process_bindings bindings env =
         match bindings with
         | [] -> (env, [])
         | (b, e, loc)::rest ->
-          let (env, errs) = process_binds [b] env in
+          let bind_err = process_bind b env in
           let errs_e = wf_E e env in
           let (env', errs') = process_bindings rest env in
-          (env', errs @ errs_e @ errs') in
+          (env', ((function None -> [] | Some e -> [e]) bind_err) @ errs_e @ errs') in
       let (new_env, binding_errs) = process_bindings binds env in
-
-      let rhs_problems = List.map (fun (_, rhs, _) -> wf_E rhs new_env) binds in
-      dupeIds @ bind_errs @ binding_errs @ (List.flatten rhs_problems)
+      dupeIds @ binding_errs
 
   and wf_D d (env : scope_info name_envt) (tyenv : StringSet.t) =
     match d with
