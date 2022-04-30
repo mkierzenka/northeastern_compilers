@@ -79,4 +79,6 @@ let rename_and_tag (p : tag program) : tag program =
        let (binds', env') = helpBS env binds in
        let body' = helpE env' body in
        ELambda(binds', body', tag)
+    | ERecord(bindings, tag) ->
+        ERecord(List.map (fun (bnd, bexp, tag) -> (bnd, helpE env bexp, tag)) bindings, tag)
   in (rename [] p)

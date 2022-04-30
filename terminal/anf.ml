@@ -85,6 +85,25 @@ let anf (p : tag program) : unit aprogram =
            ([], [])
            bindings
       in (body_ans, bindings_setups @ [BLetRec(new_bindings)] @ body_setup)
+    | ERecord(bindings, tag) ->
+      let (new_bindings, bindings_setups, src_to_fresh_names, _) =
+        List.fold_left
+          (fun (let_rec_acc_bindings, let_rec_acc_setups, src_to_fresh_acc, field_num) (bind, exp, _) ->
+              begin
+              match bind with
+              | BName(name, _, _) ->
+                let freshened_name = sprintf "?rec_%d_field_%d_%s" tag field_num name in
+                let (exp_ans, exp_setup) = helpC exp in (
+                  (freshened_name, exp_ans)::let_rec_acc_bindings,
+                  exp_setup @ let_rec_acc_setups,
+                  (name, ImmId(freshened_name, ()))::src_to_fresh_acc,
+                  field_num + 1
+                )
+              | _ -> raise (InternalCompilerError "ANF-ing failed, record must only have BName bindings")
+              end)
+           ([], [], [], 0)
+           bindings in
+      (CRecord(List.rev src_to_fresh_names, ()), (List.rev bindings_setups) @ (List.map (fun (s, c) -> BLet(s, c)) (List.rev new_bindings)))
     | _ -> let (imm, setup) = helpI e in (CImmExpr imm, setup)
 
   and helpI (e : tag expr) : (unit immexpr * unit anf_bind list) =
@@ -163,8 +182,11 @@ let anf (p : tag program) : unit aprogram =
                end)
             ([], [])
             binds in
-       (* TODO- how to convert ELetRec into a CExpr for binding...? *)
        (body_ans, bindings_setups @ [BLetRec(new_bindings)] @ body_setup)
+    | ERecord(bindings, tag) ->
+       let tmp = sprintf "?record_%d" tag in
+       let (ans, setup) = helpC e in
+       (ImmId(tmp, ()), setup @ [BLet(tmp, ans)])
   and helpA e : unit aexpr = 
     let (ans, ans_setup) = helpC e in
     List.fold_right

@@ -848,7 +848,7 @@ let add_native_lambdas (p : sourcespan program) =
   | Program(declss, body, tag) ->
     Program((List.fold_left (fun declss (name, (_, _, arity)) -> (wrap_native name arity)::declss) declss native_fun_bindings), body, tag)
 
-let compile_prog (anfed, (env : arg name_envt name_envt)) =
+let compile_prog (anfed, (env : arg name_envt name_envt), _) =
   let prelude =
     "section .text
 extern ?error
@@ -931,7 +931,8 @@ let run_if should_run f =
 let pick_alloc_strategy (strat : alloc_strategy) =
   match strat with
   | Naive -> naive_stack_allocation
-  | Register -> register_allocation
+  (* | Register -> register_allocation *)
+  | Register -> raise (InternalCompilerError "Register allocation not complete")
 ;;
 
 let compile_to_string ?no_builtins:(no_builtins=false) (alloc_strat : alloc_strategy) (prog : sourcespan program pipeline) : string pipeline =

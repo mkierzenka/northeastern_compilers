@@ -26,7 +26,7 @@ type phase =
   | AddedNatives of sourcespan program
   | Tagged of tag program
   | ANFed of tag aprogram
-  | Located of tag aprogram * arg name_envt name_envt
+  | Located of tag aprogram * arg name_envt name_envt * int name_envt
   | Result of string
 ;;
 (* These functions simply apply a phase constructor, because OCaml
@@ -39,7 +39,7 @@ let desugared p = Desugared p
 let tagged p = Tagged p
 let anfed p = ANFed p
 let add_natives p = AddedNatives p
-let locate_bindings(p, e) = Located(p, e)
+let locate_bindings(p, e, f) = Located(p, e, f)
 let result s = Result s
 ;;
 
@@ -123,7 +123,7 @@ let print_trace (trace : phase list) : string list =
     | AddedNatives p -> string_of_program p
     | Tagged p -> string_of_program_with 1000 (fun tag -> sprintf "@%d" tag) p
     | ANFed p -> string_of_aprogram_with 1000 (fun tag -> sprintf "@%d" tag)  p
-    | Located(p, e) ->
+    | Located(p, e, f) ->
       string_of_aprogram_with 1000 (fun tag -> sprintf "@%d" tag) p
       ^ "\nEnvs:\n"
       ^ ExtString.String.join "\n"
@@ -134,6 +134,10 @@ let print_trace (trace : phase list) : string list =
             ^ (ExtString.String.join
                "\n\t"
                (List.map (fun (name, arg) -> name ^ "=>" ^ (arg_to_asm arg)) env))) e)
+      ^ "\nField indices:\n"
+      ^ (ExtString.String.join
+          "\n"
+          (List.map (fun (name, idx) -> name ^ "=>" ^ (string_of_int idx)) f))
     | Result s -> s in
   List.mapi (fun n p -> sprintf "Phase %d (%s):\n%s" n (phase_name p) (string_of_phase p)) (List.rev trace)
 ;;

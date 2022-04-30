@@ -84,6 +84,7 @@ and 'a cexpr = (* compound expressions *)
   | CGetItem of 'a immexpr * 'a immexpr * 'a
   | CSetItem of 'a immexpr * 'a immexpr * 'a immexpr * 'a
   | CLambda of string list * 'a aexpr * 'a
+  | CRecord of (string * 'a immexpr) list * 'a
 and 'a aexpr = (* anf expressions *)
   | ASeq of 'a cexpr * 'a aexpr * 'a
   | ALet of string * 'a cexpr * 'a aexpr * 'a
@@ -145,6 +146,7 @@ and get_tag_C (c : 'a cexpr) : 'a =
   | CGetItem(_, _, t) -> t
   | CSetItem(_, _, _, t) -> t
   | CLambda(_, _, t) -> t
+  | CRecord(_, t) -> t
 and get_tag_A (a : 'a aexpr) : 'a =
   match a with
   | ASeq(_, _, t) -> t
@@ -355,6 +357,9 @@ let atag (p : 'a aprogram) : tag aprogram =
     | CLambda(args, body, _) ->
        let lam_tag = tag() in
        CLambda(args, helpA body, lam_tag)
+    | CRecord(binds, _) ->
+       let rec_tag = tag() in
+       CRecord(List.map (fun (x, i) -> (x, helpI i)) binds, rec_tag)
   and helpI (i : 'a immexpr) : tag immexpr =
     match i with
     | ImmNil(_) -> ImmNil(tag())

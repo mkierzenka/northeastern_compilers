@@ -125,5 +125,7 @@ let desugar (p : sourcespan program) : sourcespan program =
        let (params, newbinds) = List.split (List.map expandBind binds) in
        let newbody = List.fold_right (fun binds body -> ELet(binds, body, tag)) newbinds (helpE body) in
        ELambda(params, newbody, tag)
+    | ERecord(bindings, tag) ->
+       ERecord(List.map (fun (bnd, bexp, tag) -> (bnd, helpE bexp, tag)) bindings, tag)
 
   in helpP p

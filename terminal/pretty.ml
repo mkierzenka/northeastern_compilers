@@ -199,6 +199,10 @@ and string_of_cexpr_with (depth : int) (print_a : 'a -> string) (c : 'a cexpr) :
   | CLambda(args, body, a) ->
      sprintf "(lam(%s) %s)%s" (ExtString.String.join ", " args) (string_of_aexpr body) (print_a a)
   | CImmExpr i -> string_of_immexpr i
+  | CRecord(bindings, a) ->
+    let string_of_binding ((old_name, fresh_name_immexpr) : string * 'a immexpr) : string =
+      sprintf "%s = %s" old_name (string_of_immexpr_with print_a fresh_name_immexpr) in
+    sprintf "{ %s }%s" (ExtString.String.join ", " (List.map string_of_binding bindings)) (print_a a)
 and string_of_immexpr_with (print_a : 'a -> string) (i : 'a immexpr) : string =
   match i with
   | ImmNil(a) -> "nil" ^ (print_a a)
