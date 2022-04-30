@@ -6,7 +6,10 @@ let test_records_wf = [
 ]
 
 let test_records_valid = [
+  t "basic" "{a=1234, b=(if input() < 990: 990 / 2 else: -100 ), c=(false && 7)}" "8" "{a=1234, b=495, c=false}";
+  t "nested" "{outerfield = -12, nest={innerfield=9000, if2=false}}" "" "{outerfield=-12, nest ={innerfield=9000, if2=false}}";
   t "dup_names_mixcase" "let a = {fieldA = 736, fieldB = true, fielda = 736} in 8" "" "8";
+  t "let_field" "let var=160, rec1 = {f1 = var}, rec2 = {inner = rec1} in (rec1 == rec2) || (var == rec1)" "" "false";
 ]
 
 let test_records_anf = [
@@ -25,7 +28,8 @@ let test_records_anf = [
         ("?rec_0_field_0_x", ImmNum(17))
       ])
   ) *)
-  t "fields_dont_shadow" "let x = 17 in { x = 3, y = x }" "" "{ x = 3, y = 17 }"
+  terr "no_field_ref" "{ x = 3, y = x }" "" "Unbound id";
+  t "fields_dont_shadow" "let x = 17 in { x = 3, y = x }" "" "{ x = 3, y = 17 }";
 ]
 
 let tests_for_records = test_records_wf @ test_records_valid @ test_records_anf

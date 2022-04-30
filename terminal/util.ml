@@ -102,6 +102,7 @@ let free_vars (e: 'a aexpr) : string list =
       let args_set = StringSet.of_list args in
       let seen_with_args = StringSet.union args_set seen in
       help_aexpr body seen_with_args
+    | CRecord(binds, _) ->  List.fold_left (fun free_acc (_, bind_expr) -> StringSet.union free_acc (help_imm bind_expr seen)) StringSet.empty binds
   and help_imm (expr : 'a immexpr) (seen : StringSet.t) : StringSet.t =
     match expr with
     | ImmNum _ -> StringSet.empty
@@ -185,6 +186,10 @@ let free_vars_cache (prog : 'a aprogram) : StringSet.t aprogram =
       let new_body = help_aexpr body in
       let new_body_fvs = get_tag_A new_body in
       CLambda(args, new_body, (StringSet.diff new_body_fvs args_set))
+    | CRecord(binds, _) ->
+      let new_binds = List.map (fun (bname, bexpr) -> (bname, (help_imm bexpr))) binds in
+      let new_free = List.fold_left (fun free_acc (bname, bexpr) -> StringSet.union free_acc (get_tag_I bexpr)) StringSet.empty new_binds in
+      CRecord(new_binds, new_free)
   and help_imm (expr : 'a immexpr): StringSet.t immexpr =
     match expr with
     | ImmNum(i, _) -> ImmNum(i, StringSet.empty)
