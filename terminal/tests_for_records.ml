@@ -2,12 +2,12 @@ open Test_funcs
 
 
 let test_records_wf = [
-  terr "dup_names" "{fieldA = 736, fieldB = true, fieldC = 1 + 2, fieldA = 736}" "" "Record field names must be unique, duplicate found for: fieldA";
-  terr "shadow" "let a = 5 in { x = (let a = 3 in a) }" "" "??shadow";
+  terr "dup_names" "{fieldA = 736, fieldB = true, fieldC = 1 + 2, fieldA = 736}" "" "The field fieldA, redefined at <dup_names, 1:46-1:52>, duplicates one at <dup_names, 1:1-1:7>";
+  terr "shadow" "let a = 5 in { x = (let a = 3 in a) }" "" "The identifier a, defined at <shadow, 1:24-1:25>, shadows one defined at <shadow, 1:4-1:5>";
 ]
 
 let test_records_valid = [
-  t "basic" "{a=1234, b=(if input() < 990: 990 / 2 else: -100 ), c=(false && 7)}" "8" "{a=1234, b=495, c=false}";
+  t "basic" "{a=1234, b=(if input() < 990: 990 * 2 else: -100 ), c=(false && 7)}" "8" "{a=1234, b=1980, c=false}";
   t "nested" "{outerfield = -12, nest={innerfield=9000, if2=false}}" "" "{outerfield=-12, nest ={innerfield=9000, if2=false}}";
   t "dup_names_mixcase" "let a = {fieldA = 736, fieldB = true, fielda = 736} in 8" "" "8";
   t "let_field" "let var=160, rec1 = {f1 = var}, rec2 = {inner = rec1} in (rec1 == rec2) || (var == rec1)" "" "false";
@@ -31,7 +31,7 @@ let test_records_anf = [
         ("?rec_0_field_0_x", ImmNum(17))
       ])
   ) *)
-  terr "no_field_ref" "{ x = 3, y = x }" "" "Unbound id";
+  terr "no_field_ref" "{ x = 3, y = x }" "" "The identifier x, used at <no_field_ref, 1:13-1:14>, is not in scope";
   t "fields_dont_shadow" "let x = 17 in { x = 3, y = x }" "" "{ x = 3, y = 17 }";
 ]
 

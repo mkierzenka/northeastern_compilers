@@ -1,0 +1,15 @@
+from runtime:
+need field number to name for exceptions/printing
+since fields: [ field_num_1 | field_val_1 | field_num_2 | field_val_2 | ... ]
+                 ^- convert to field name ------^
+
+____________________________________________________________
+
+for generated asm (in OCaml for codegen):
+need field name to number for creation and access of records and tables
+so we can take { a = ..., b = ..., ... } and turn into
+[ field_num_1 | ... | field_num_2 | ... ] on the heap
+
+need field number to name for codegen of symbol table that C can use
+^ this is the only case of number to name so just do that in its own part of compile_prog, no need to carry
+number to name through compile_fun/compile_...expr (name to number mapping is still needed in those funcs though)

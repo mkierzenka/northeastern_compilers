@@ -1,4 +1,4 @@
-SNAKE_EXT=racer
+SNAKE_EXT=term
 UNAME := $(shell uname)
 ifeq ($(UNAME), Linux)
   NASM_FORMAT=elf64

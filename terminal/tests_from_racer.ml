@@ -99,4 +99,4 @@ let racer_tr = [
   tr "reg_let1" "let a = input(), b=4*5 in (if a > b: false else: a + a)" "444" "false";
 ]
 
-let tests_from_racer = pair_tests @ (* oom @ gc @ *) input @ racer (*@ fvs_tests*) @ racer_tr
+let tests_from_racer = pair_tests @ (* oom @ gc @ *) input @ racer (*@ fvs_tests*) (* @ racer_tr *)

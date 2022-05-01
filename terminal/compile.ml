@@ -277,28 +277,28 @@ let compile_fun_postlude : instruction list =
     IRet;
   ]
 
-let rec compile_aexpr (e : tag aexpr) (curr_env_name : string) (env : arg name_envt name_envt) : instruction list =
+let rec compile_aexpr (e : tag aexpr) (curr_env_name : string) (env : arg name_envt name_envt) (field_nums : int name_envt) : instruction list =
   let sub_env = (find env curr_env_name) in
   match e with
   | ALet(id, bind, body, _) ->
     let compiled_bind =
       match bind with
-      | CLambda(params, lambda_body, tag) -> (compile_clambda id params lambda_body tag sub_env env)
-      | _ -> (compile_cexpr bind curr_env_name env)
+      | CLambda(params, lambda_body, tag) -> (compile_clambda id params lambda_body tag sub_env env field_nums)
+      | _ -> (compile_cexpr bind curr_env_name env field_nums)
       in
-    let compiled_body = compile_aexpr body curr_env_name env in
+    let compiled_body = compile_aexpr body curr_env_name env field_nums in
     [ILineComment(sprintf "Let_%s" id)]
     @ compiled_bind
     @ [IMov((find sub_env id), Reg(RAX))]
     @ compiled_body
-  | ACExpr(expr) -> (compile_cexpr expr curr_env_name env)
+  | ACExpr(expr) -> (compile_cexpr expr curr_env_name env field_nums)
   | ASeq(left, right, tag) -> raise (InternalCompilerError "ASeqs should currently be desugared away")
   | ALetRec(bindings, body, tag) ->
     let compiled_bindings =
       List.fold_left (
         fun cb_acc (name, bound_body) ->
           match bound_body with
-          | CLambda(params, body, tag) -> (compile_clambda name params body tag sub_env env) @ cb_acc
+          | CLambda(params, body, tag) -> (compile_clambda name params body tag sub_env env field_nums) @ cb_acc
           | _ -> raise (InternalCompilerError "LetRecs cannot have non-CLambda bindings")
       ) [] bindings in
     let bound_names = List.map (fun (name, _) -> name) bindings in
@@ -327,8 +327,8 @@ let rec compile_aexpr (e : tag aexpr) (curr_env_name : string) (env : arg name_e
     @ compiled_bindings
     @ [ILineComment(sprintf "LetRec$%d patching with ptrs to mutually rec closures" tag)]
     @ second_pass
-    @ (compile_aexpr body curr_env_name env)
-and compile_clambda (name : string) (params : string list) (lambda_body : tag aexpr) (tag : tag) (sub_env : arg name_envt) (env : arg name_envt name_envt) : instruction list = 
+    @ (compile_aexpr body curr_env_name env field_nums)
+and compile_clambda (name : string) (params : string list) (lambda_body : tag aexpr) (tag : tag) (sub_env : arg name_envt) (env : arg name_envt name_envt) (field_nums : int name_envt) : instruction list = 
   let arity = List.length params in
   let closure_lbl = name in
   let closure_done_lbl = sprintf "%s_done" name in
@@ -344,7 +344,7 @@ and compile_clambda (name : string) (params : string list) (lambda_body : tag ae
               free_vars_list) in
   let true_heap_size = 3 + num_free_vars in
   let reserved_heap_size = true_heap_size + (true_heap_size mod 2) in
-  let (prelude, lambda_body, postlude) = compile_fun closure_lbl params lambda_body env free_vars_list in
+  let (prelude, lambda_body, postlude) = compile_fun closure_lbl params lambda_body env free_vars_list field_nums in
   [IJmp(Label(closure_done_lbl))]
   @ prelude
   @ lambda_body
@@ -362,7 +362,7 @@ and compile_clambda (name : string) (params : string list) (lambda_body : tag ae
     IAdd(Reg(heap_reg), Const(Int64.of_int (reserved_heap_size * word_size)));
     ]
   @ [IMov(find sub_env name, Reg(RAX))]
-and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt name_envt) =
+and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt name_envt) (field_nums : int name_envt) =
   let sub_env = find env curr_env_name in
   match e with
   | CIf(cond, thn, els, tag) ->
@@ -382,11 +382,11 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
      @ [IJz(Label(lbl_els))]
 
      @ [ILabel(lbl_thn)]
-     @ (compile_aexpr thn curr_env_name env)
+     @ (compile_aexpr thn curr_env_name env field_nums)
      @ [IJmp(Label(lbl_done))]
 
      @ [ILabel(lbl_els)]
-     @ (compile_aexpr els curr_env_name env)
+     @ (compile_aexpr els curr_env_name env field_nums)
      @ [ILabel(lbl_done)]
   | CScIf(cond, thn, els, tag) ->
      let cond_reg = compile_imm cond sub_env in
@@ -406,12 +406,12 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
 
      @ [ILabel(lbl_thn)]
      (* LHS is compiled before RHS, so definitely not tail position *)
-     @ (compile_aexpr thn curr_env_name env)
+     @ (compile_aexpr thn curr_env_name env field_nums)
      @ [IJmp(Label(lbl_done))]
 
      @ [ILabel(lbl_els)]
      (* Since we check that result is bool, RHS is also not in tail position *)
-     @ (compile_aexpr els curr_env_name env)
+     @ (compile_aexpr els curr_env_name env field_nums)
      @ (check_rax_for_bool err_logic_not_bool_lbl) 
      @ [ILabel(lbl_done)]
   | CPrim1(op, body, tag) ->
@@ -783,6 +783,7 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
       @ [IMov(Reg(scratch_reg_2), rhs)]
       @ [IMov(RegOffsetReg(RAX,scratch_reg,word_size,0), Reg(scratch_reg_2))]
       @ [IAdd(Reg(RAX), Const(1L))] (* convert the tuple address back to a snakeval *)
+  | CRecord(binds, _) -> [] (* raise (NotYetImplemented "Records not yet supported") *)
 and compile_imm e (sub_env : arg name_envt) : arg =
   match e with
   | ImmNum(n, _) -> Const(Int64.shift_left n 1)
@@ -798,7 +799,7 @@ and compile_imm e (sub_env : arg name_envt) : arg =
    below for one way to use this ability... *)
 
 (* Compile a function, returns tuple of prelude,body,postlude *)
-and compile_fun (name : string) (params : string list) (body : tag aexpr) (env : arg name_envt name_envt) (free_var_list : string list) :
+and compile_fun (name : string) (params : string list) (body : tag aexpr) (env : arg name_envt name_envt) (free_var_list : string list) (field_nums : int name_envt) :
   (instruction list * instruction list * instruction list) =
     let rec min_slot_addr (sub_env : arg name_envt) : int =
       let get_bytes (arg : arg) : int =
@@ -817,7 +818,7 @@ and compile_fun (name : string) (params : string list) (body : tag aexpr) (env :
       ]
     ) free_var_list) in
     let prelude = compile_fun_prelude name in
-    let compiled_body = compile_aexpr body name env in
+    let compiled_body = compile_aexpr body name env field_nums in
     let postlude = compile_fun_postlude in (
       prelude,
       [IMov(Reg(RAX), RegOffset(2 * word_size, RBP))] (* Now RAX has the (tagged) func value *)
@@ -848,7 +849,7 @@ let add_native_lambdas (p : sourcespan program) =
   | Program(declss, body, tag) ->
     Program((List.fold_left (fun declss (name, (_, _, arity)) -> (wrap_native name arity)::declss) declss native_fun_bindings), body, tag)
 
-let compile_prog (anfed, (env : arg name_envt name_envt), _) =
+let compile_prog (anfed, (env : arg name_envt name_envt), (field_nums : int name_envt)) =
   let prelude =
     "section .text
 extern ?error
@@ -861,6 +862,36 @@ extern ?HEAP
 extern ?HEAP_END
 extern ?set_stack_bottom
 global ?our_code_starts_here" in
+  let field_names_table =
+    "section .data\n" ^ (
+      if field_nums = []
+      then "global ?num_fields\n?num_fields: dd 0\nglobal ?fields\n?fields: db ?"
+      else
+        (* field_nums looks like [("field_name_1" : str, field_num : int), ("field_name_2" : str, field_num_2 : int)] *)
+        (* first, order the list: *)
+        let ordered_fields = List.sort (fun (_, i) (_, j) -> i - j) field_nums in
+        (* then, for each field in ascending order, generate its lines:
+          global ?field_name_x
+          ?field_name_x: db `{field name}\000`
+        *)
+        let labels_and_names = List.map (fun (name, num) -> (sprintf "?field_%s_%d" name num, name)) ordered_fields in
+        let lines_per_field = List.map (
+          fun (label, name) -> sprintf "global %s\n%s: db '%s', 0" label label name
+        ) labels_and_names in
+        (* lastly, generate the final lines:
+          global ?num_fields
+          ?num_fields: dd {number of fields in the program}
+          global ?fields
+          ?fields: %(?field_name_0, ?field_name_1, ..., ?field_name_n)
+        *)
+        let final_lines = [
+          "global ?num_fields";
+          sprintf "?num_fields: dd %d" (List.length field_nums);
+          "global ?fields";
+          sprintf "?fields: dq %%(%s)" (ExtString.String.join ", " (List.map (fun (l, _) -> l) labels_and_names));
+        ] in
+        ExtString.String.join "\n" (lines_per_field @ final_lines)
+    ) ^ "\n" in
   let suffix = sprintf "
 ?err_comp_not_num:%s
 ?err_arith_not_num:%s
@@ -903,7 +934,7 @@ global ?our_code_starts_here" in
   match anfed with
   | AProgram(body, _) ->
   (* $heap and $size are mock parameter names, just so that compile_fun knows our_code_starts_here takes in 2 parameters *)
-     let (ocsh_prelude, ocsh_body, ocsh_postlude) = compile_fun "?our_code_starts_here" ["$heap"; "$size"] body env [] in
+     let (ocsh_prelude, ocsh_body, ocsh_postlude) = compile_fun "?our_code_starts_here" ["$heap"; "$size"] body env [] field_nums in
      let heap_start =
        [
          ILineComment("heap start");
@@ -921,7 +952,7 @@ global ?our_code_starts_here" in
            IMov(Reg RDI, Reg scratch_reg_2)
          ] in
      let main = (ocsh_prelude @ set_stack_bottom @ heap_start @ ocsh_body @ ocsh_postlude) in
-     sprintf "%s%s%s\n" prelude (to_asm main) suffix
+     sprintf "%s%s%s%s\n" field_names_table prelude (to_asm main) suffix
 ;;
 
 let run_if should_run f =

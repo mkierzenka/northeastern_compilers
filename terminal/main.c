@@ -16,6 +16,8 @@ extern SNAKEVAL equal(SNAKEVAL val1, SNAKEVAL val2) asm("?equal");
 extern uint64_t* try_gc(uint64_t* alloc_ptr, uint64_t amount_needed, uint64_t* first_frame, uint64_t* stack_top) asm("?try_gc");
 extern uint64_t* HEAP_END asm("?HEAP_END");
 extern uint64_t* HEAP asm("?HEAP");
+extern char *FIELDS_CONCAT asm("?fields");
+extern int NUM_FIELDS asm("?num_fields");
 
 const uint64_t NUM_TAG_MASK     = 0x0000000000000001;
 const uint64_t BOOL_TAG_MASK    = 0x0000000000000007;
@@ -355,6 +357,25 @@ uint64_t* try_gc(uint64_t* alloc_ptr, uint64_t bytes_needed, uint64_t* cur_frame
 }
 
 int main(int argc, char** argv) {
+  // Generate malloc'd FIELDS array of field names
+  char **FIELDS = malloc(NUM_FIELDS * sizeof(char *));
+  char *ptr = FIELDS_CONCAT;
+  for (int i = 0; i < NUM_FIELDS; ++i) {
+    FIELDS[i] = ptr;
+    ptr += strlen(FIELDS[i]) + 1;
+  }
+
+  // // Print out FIELDS array
+  // printf("Fields:\n");
+  // if (NUM_FIELDS != 0) {
+  //   for (int i = 0; i < NUM_FIELDS; ++i) {
+  //     printf("%s\n", FIELDS[i]);
+  //   }
+  // } else {
+  //   printf("No fields");
+  // }
+  // printf("\n");
+
   HEAP_SIZE = 100000;
   if (argc > 1) { HEAP_SIZE = atoi(argv[1]); }
   if (HEAP_SIZE < 0 || HEAP_SIZE > 1000000) { HEAP_SIZE = 0; }
