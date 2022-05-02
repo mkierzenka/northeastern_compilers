@@ -23,10 +23,12 @@ const uint64_t NUM_TAG_MASK     = 0x0000000000000001;
 const uint64_t BOOL_TAG_MASK    = 0x0000000000000007;
 const uint64_t TUPLE_TAG_MASK   = 0x0000000000000007;
 const uint64_t CLOSURE_TAG_MASK = 0x0000000000000007;
+const uint64_t RECORD_TAG_MASK  = 0x0000000000000007;
 const uint64_t NUM_TAG          = 0x0000000000000000;
 const uint64_t BOOL_TAG         = 0x0000000000000007;
 const uint64_t TUPLE_TAG        = 0x0000000000000001;
 const uint64_t CLOSURE_TAG      = 0x0000000000000005;
+const uint64_t RECORD_TAG       = 0x0000000000000003;
 const uint64_t BOOL_TRUE        = 0xFFFFFFFFFFFFFFFF;
 const uint64_t BOOL_FALSE       = 0x7FFFFFFFFFFFFFFF;
 const uint64_t NIL              = ((uint64_t)NULL | TUPLE_TAG);
@@ -65,6 +67,8 @@ uint64_t* FROM_S;
 uint64_t* FROM_E;
 uint64_t* TO_S;
 uint64_t* TO_E;
+
+char **FIELDS;
 
 SNAKEVAL equal(SNAKEVAL val1, SNAKEVAL val2) {
   if (val1 == val2) { return BOOL_TRUE; }
@@ -151,6 +155,20 @@ void printHelp(FILE *out, SNAKEVAL val) {
     fprintf(out, ")");
     // Unmark this tuple: restore its length
     *(addr) = len;
+  }
+  else if ((val & RECORD_TAG_MASK) == RECORD_TAG) {
+    // [ num fields | field 1 num | field 1 data | field 2 num | field 2 data | ... | field n num | field n data | padding ]
+    // addr [0]            [1]           [2]            [3]           [4]       ...
+    uint64_t* addr = (uint64_t*)(val - RECORD_TAG);
+    uint64_t len = addr[0];
+    fprintf(out, "{ ");
+    for (uint64_t i = 0; i < len; i++) {
+      if (i > 0) fprintf(out, ", ");
+      uint64_t field_num = addr[(i * 2) + 1];
+      fprintf(out, "%s = ", FIELDS[field_num]);
+      printHelp(out, addr[(i * 2) + 2]);
+    }
+    fprintf(out, " }");
   }
   else {
     fprintf(out, "Unknown value: %#018lx", val);
@@ -358,7 +376,7 @@ uint64_t* try_gc(uint64_t* alloc_ptr, uint64_t bytes_needed, uint64_t* cur_frame
 
 int main(int argc, char** argv) {
   // Generate malloc'd FIELDS array of field names
-  char **FIELDS = malloc(NUM_FIELDS * sizeof(char *));
+  FIELDS = malloc(NUM_FIELDS * sizeof(char *));
   char *ptr = FIELDS_CONCAT;
   for (int i = 0; i < NUM_FIELDS; ++i) {
     FIELDS[i] = ptr;

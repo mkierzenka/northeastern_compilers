@@ -43,6 +43,8 @@ let closure_tag_mask = 0x0000000000000007L
 let tuple_tag        = 0x0000000000000001L
 let tuple_tag_mask   = 0x0000000000000007L
 let const_nil        = HexConst(tuple_tag)
+let record_tag       = 0x0000000000000003L
+let record_tag_mask  = 0x0000000000000007L
 
 let err_COMP_NOT_NUM     = 1L
 let err_ARITH_NOT_NUM    = 2L
@@ -783,7 +785,35 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
       @ [IMov(Reg(scratch_reg_2), rhs)]
       @ [IMov(RegOffsetReg(RAX,scratch_reg,word_size,0), Reg(scratch_reg_2))]
       @ [IAdd(Reg(RAX), Const(1L))] (* convert the tuple address back to a snakeval *)
-  | CRecord(binds, _) -> [] (* raise (NotYetImplemented "Records not yet supported") *)
+  | CRecord(binds, _) ->
+      (* [ num fields | field 1 num | field 1 data | field 2 num | field 2 data | ... | field n num | field n data ] *)
+      let rec_size = List.length binds in
+      (* We know the record on the heap will need padding, because 2 words for every field + 1 word for the size = odd *)
+      let padding_val = HexConst(0xF0F0F0F0L) in
+      let set_up_rec = [
+        IMov(Reg(scratch_reg), Const(Int64.of_int rec_size));
+        IMov(RegOffset(0, heap_reg), Reg(scratch_reg));
+      ] in
+      let (field_data_set_instrs, padding_dest_offset) =
+        List.fold_left (
+          fun (instr_acc, heap_offset) (bind_name, bind_immexpr) -> (
+            instr_acc @ [
+              IMov(Reg(scratch_reg), Const(Int64.of_int (find field_nums bind_name)));
+              IMov(RegOffset(heap_offset * word_size, heap_reg), Reg(scratch_reg));
+              IMov(Reg(scratch_reg), compile_imm bind_immexpr sub_env);
+              IMov(RegOffset((heap_offset + 1) * word_size, heap_reg), Reg(scratch_reg));
+            ],
+            heap_offset + 2
+          )
+        ) ([], 1) binds in
+      let add_padding = [IMov(Reg(scratch_reg), padding_val)] in
+      let finish_up = [
+        IMov(RegOffset(padding_dest_offset * word_size, heap_reg), Reg(scratch_reg));
+        IMov(Reg(RAX), Reg(heap_reg));
+        IAdd(Reg(RAX), Const(record_tag));
+        IAdd(Reg(heap_reg), Const(Int64.of_int (word_size * (padding_dest_offset + 1))));
+      ] in
+      set_up_rec @ field_data_set_instrs @ add_padding @ finish_up
 and compile_imm e (sub_env : arg name_envt) : arg =
   match e with
   | ImmNum(n, _) -> Const(Int64.shift_left n 1)

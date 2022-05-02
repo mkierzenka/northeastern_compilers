@@ -1,0 +1,7 @@
+{ a = 1, b = 2, fieldy = true }
+{ many_fields_present = (1,), we_have_many_fields = 1 }
+{ too_true = true, truie = true, falsie = false }
+{ blah_blah_blah = blah, test = c, whoa = c }
+{ a = true, many_fields_present = 17, truie = false, blah_blah_blah = d }
+{ a = 100, inner = { inner = 3, a = 5, f = true } }
+()
