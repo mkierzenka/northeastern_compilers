@@ -17,5 +17,12 @@ let records_suite = "records_suite">:::tests_for_records
 
 
 let () =
-  run_test_tt_main ("all_tests">:::[cobra_suite; diamondback_suite; fdl_suite; racer_suite; records_suite; input_file_test_suite ()])
+  run_test_tt_main ("all_tests">:::[
+    cobra_suite;
+    diamondback_suite;
+    fdl_suite;
+    racer_suite;
+    records_suite;
+    input_file_test_suite ();
+  ])
 ;;

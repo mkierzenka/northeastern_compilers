@@ -876,7 +876,7 @@ global ?our_code_starts_here" in
         *)
         let labels_and_names = List.map (fun (name, num) -> (sprintf "?field_%s_%d" name num, name)) ordered_fields in
         let lines_per_field = List.map (
-          fun (label, name) -> sprintf "global %s\n%s: db '%s', 0" label label name
+          fun (label, name) -> sprintf "%s: db '%s', 0" label name
         ) labels_and_names in
         (* lastly, generate the final lines:
           global ?num_fields
