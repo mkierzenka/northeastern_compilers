@@ -35,7 +35,7 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
     | EId (x, loc) -> if (find_one (List.map fst env) x) then [] else [UnboundId(x, loc)]
     | EPrim1(_, e, _) -> wf_E e env
     | EPrim2(_, l, r, _) -> wf_E l env @ wf_E r env
-    | EScIf(cond, thn, els, _) -> raise (InternalCompilerError "EScIf is not in the Racer syntax")
+    | EScIf(cond, thn, els, _) -> raise (InternalCompilerError "EScIf is not in the Trinket syntax")
     | EIf(c, t, f, _) -> wf_E c env @ wf_E t env @ wf_E f env
     | ELet(bindings, body, _) ->
        let rec find_locs x (binds : 'a bind list) : 'a list =

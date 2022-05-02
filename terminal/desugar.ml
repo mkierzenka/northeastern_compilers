@@ -112,7 +112,7 @@ let desugar (p : sourcespan program) : sourcespan program =
        ELetRec(newbinds, helpE body, tag)
     | EIf(cond, thn, els, tag) ->
        EIf(helpE cond, helpE thn, helpE els, tag)
-    | EScIf _ -> raise (InternalCompilerError "EScIf is not in the egg-eater syntax")
+    | EScIf _ -> raise (InternalCompilerError "EScIf is not in the Trinket syntax")
     | EApp(name, args, native, tag) ->
        EApp(helpE name, List.map helpE args, native, tag)
     | ELambda(binds, body, tag) ->

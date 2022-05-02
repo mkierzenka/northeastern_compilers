@@ -1,4 +1,4 @@
-SNAKE_EXT=term
+SNAKE_EXT=trinket
 UNAME := $(shell uname)
 ifeq ($(UNAME), Linux)
   NASM_FORMAT=elf64

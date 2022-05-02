@@ -263,7 +263,7 @@ let chomp str =
 
 let test_does_run filename test_ctxt =
   let filename = Filename.remove_extension filename in
-  let progfile = sprintf "input/do_pass/%s.racer" filename in
+  let progfile = sprintf "input/do_pass/%s.trinket" filename in
   let argsfile = sprintf "input/do_pass/%s.args" filename in
   let outfile  = sprintf "input/do_pass/%s.out" filename in
   let infile   = sprintf "input/do_pass/%s.in" filename in
@@ -283,7 +283,7 @@ let test_does_run filename test_ctxt =
 
 let test_does_err filename test_ctxt =
   let filename = Filename.remove_extension filename in
-  let progfile = sprintf "input/do_err/%s.racer" filename in
+  let progfile = sprintf "input/do_err/%s.trinket" filename in
   let argsfile = sprintf "input/do_err/%s.args" filename in
   let errfile  = sprintf "input/do_err/%s.err" filename in
   let infile   = sprintf "input/do_err/%s.in" filename in
@@ -299,7 +299,7 @@ let test_does_err filename test_ctxt =
 
 let test_doesnt_run filename test_ctxt =
   let filename = Filename.remove_extension filename in
-  let progfile = sprintf "input/dont_pass/%s.racer" filename in
+  let progfile = sprintf "input/dont_pass/%s.trinket" filename in
   let argsfile = sprintf "input/dont_pass/%s.args" filename in
   let infile   = sprintf "input/dont_pass/%s.in" filename in
   let opts     = read_options (sprintf "input/dont_pass/%s.options" filename) in
@@ -323,7 +323,7 @@ let test_doesnt_run filename test_ctxt =
 
 let test_doesnt_err filename test_ctxt =
   let filename = Filename.remove_extension filename in
-  let progfile = sprintf "input/dont_err/%s.racer" filename in
+  let progfile = sprintf "input/dont_err/%s.trinket" filename in
   let argsfile = sprintf "input/dont_err/%s.args" filename in
   let infile   = sprintf "input/dont_err/%s.in" filename in
   let opts     = read_options (sprintf "input/dont_err/%s.options" filename) in
@@ -351,8 +351,8 @@ let input_file_test_suite () =
       List.filter (fun f -> Filename.check_suffix f ext) (Array.to_list (Sys.readdir dir))
     with _ -> [] in
   "input-file-suite">:::[
-      "do_pass"  >:::(List.map (fun f -> f>::test_does_run f)   (safe_readdir "input/do_pass"   ".racer"));
-      "do_err"   >:::(List.map (fun f -> f>::test_does_err f)   (safe_readdir "input/do_err"    ".racer"));
-      "dont_pass">:::(List.map (fun f -> f>::test_doesnt_run f) (safe_readdir "input/dont_pass" ".racer"));
-      "dont_err" >:::(List.map (fun f -> f>::test_doesnt_err f) (safe_readdir "input/dont_err"  ".racer"))
+      "do_pass"  >:::(List.map (fun f -> f>::test_does_run f)   (safe_readdir "input/do_pass"   ".trinket"));
+      "do_err"   >:::(List.map (fun f -> f>::test_does_err f)   (safe_readdir "input/do_err"    ".trinket"));
+      "dont_pass">:::(List.map (fun f -> f>::test_doesnt_run f) (safe_readdir "input/dont_pass" ".trinket"));
+      "dont_err" >:::(List.map (fun f -> f>::test_doesnt_err f) (safe_readdir "input/dont_err"  ".trinket"))
     ]
