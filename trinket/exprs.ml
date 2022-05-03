@@ -63,6 +63,7 @@ and 'a expr =
   | ELetRec of 'a binding list * 'a expr * 'a
   | ERecord of 'a binding list * 'a
   | EGetField of 'a expr * string * 'a
+  | ETable of 'a expr list * 'a
 
 type 'a decl =
   | DFun of string * 'a bind list * 'a expr * 'a

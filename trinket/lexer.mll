@@ -61,6 +61,8 @@ rule token = parse
   | "in" { IN }
   | "=" { EQUAL }
   | "," { COMMA }
+  | "(|" { LPPIPE }
+  | "|)" { RPPIPE }
   | "(" { LPARENNOSPACE }
   | ")" { RPAREN }
   | "[" { LBRACK }
