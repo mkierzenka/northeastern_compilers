@@ -127,5 +127,6 @@ let desugar (p : sourcespan program) : sourcespan program =
        ELambda(params, newbody, tag)
     | ERecord(bindings, tag) ->
        ERecord(List.map (fun (bnd, bexp, tag) -> (bnd, helpE bexp, tag)) bindings, tag)
+    | EGetField(r, field, tag) -> EGetField(helpE r, field, tag)
 
   in helpP p

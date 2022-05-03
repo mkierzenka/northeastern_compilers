@@ -8,11 +8,11 @@ let tok_span(start, endtok) = (Parsing.rhs_start_pos start, Parsing.rhs_end_pos 
 
 %token <int64> NUM
 %token <string> ID
-%token DEF ANDDEF ADD1 SUB1 LPARENSPACE LPARENNOSPACE RPAREN LBRACK RBRACK LCURLY RCURLY LET IN EQUAL COMMA PLUS MINUS TIMES IF COLON ELSECOLON EOF PRINT PRINTSTACK TRUE FALSE ISBOOL ISNUM ISTUPLE EQEQ LESSSPACE GREATER LESSEQ GREATEREQ AND OR NOT COLONEQ SEMI NIL LAMBDA BEGIN END SHADOW REC UNDERSCORE
+%token DEF ANDDEF ADD1 SUB1 LPARENSPACE LPARENNOSPACE RPAREN LBRACK RBRACK LCURLY RCURLY LET IN EQUAL COMMA PLUS MINUS TIMES IF COLON ELSECOLON EOF PRINT PRINTSTACK TRUE FALSE ISBOOL ISNUM ISTUPLE EQEQ LESSSPACE GREATER LESSEQ GREATEREQ AND OR NOT COLONEQ SEMI NIL LAMBDA BEGIN END SHADOW REC UNDERSCORE DOT
 
 %right SEMI
 %left COLON COLONEQ
-%left PLUS MINUS TIMES GREATER LESSSPACE GREATEREQ LESSEQ EQEQ AND OR
+%left PLUS MINUS TIMES GREATER LESSSPACE GREATEREQ LESSEQ EQEQ AND OR DOT
 %left LPARENNOSPACE
 
 
@@ -49,7 +49,6 @@ namebindings :
 expr :
   | LET bindings IN expr { ELet($2, $4, full_span()) }
   | LET REC namebindings IN expr { ELetRec($3, $5, full_span()) }
-  | LCURLY namebindings RCURLY { ERecord($2, full_span()) }
   | IF expr COLON expr ELSECOLON expr { EIf($2, $4, $6, full_span()) }
   | BEGIN expr END { $2 }
   | binop_expr SEMI expr { ESeq($1, $3, full_span()) }
@@ -111,6 +110,9 @@ binop_operand :
   | LPARENSPACE LAMBDA LPARENNOSPACE binds RPAREN COLON expr RPAREN { ELambda($4, $7, full_span()) }
   | LPARENSPACE LAMBDA LPARENSPACE binds RPAREN COLON expr RPAREN { ELambda($4, $7, full_span()) }
   | LPARENSPACE LAMBDA COLON expr RPAREN { ELambda([], $4, full_span()) }
+  // Records
+  | LCURLY namebindings RCURLY { ERecord($2, full_span()) }
+  | binop_operand DOT ID { EGetField($1, $3, full_span()) }
   // Simple cases
   | const { $1 }
   | id { $1 }

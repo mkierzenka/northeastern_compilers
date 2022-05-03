@@ -61,6 +61,7 @@ and 'a expr =
   | ELambda of 'a bind list * 'a expr * 'a
   | ELetRec of 'a binding list * 'a expr * 'a
   | ERecord of 'a binding list * 'a
+  | EGetField of 'a expr * string * 'a
 
 type 'a decl =
   | DFun of string * 'a bind list * 'a expr * 'a
@@ -85,6 +86,7 @@ and 'a cexpr = (* compound expressions *)
   | CSetItem of 'a immexpr * 'a immexpr * 'a immexpr * 'a
   | CLambda of string list * 'a aexpr * 'a
   | CRecord of (string * 'a immexpr) list * 'a
+  | CGetField of 'a immexpr * string * 'a
 and 'a aexpr = (* anf expressions *)
   | ASeq of 'a cexpr * 'a aexpr * 'a
   | ALet of string * 'a cexpr * 'a aexpr * 'a
@@ -122,6 +124,7 @@ let get_tag_E e = match e with
   | ESeq(_, _, t) -> t
   | ELambda(_, _, t) -> t
   | ERecord(_, t) -> t
+  | EGetField(_, _, t) -> t
 ;;
 
 let get_tag_D d = match d with
@@ -147,6 +150,7 @@ and get_tag_C (c : 'a cexpr) : 'a =
   | CSetItem(_, _, _, t) -> t
   | CLambda(_, _, t) -> t
   | CRecord(_, t) -> t
+  | CGetField(_, _, t) -> t
 and get_tag_A (a : 'a aexpr) : 'a =
   match a with
   | ASeq(_, _, t) -> t
@@ -220,6 +224,7 @@ let rec map_tag_E (f : 'a -> 'b) (e : 'a expr) =
        (tag_b, tag_e, tag_bind) in
      let tag_binds = List.map tag_binding binds in
      ERecord(tag_binds, tag_record)
+  | EGetField(r, field, a) -> EGetField(map_tag_E f r, field, f a)
 and map_tag_B (f : 'a -> 'b) b =
   match b with
   | BBlank tag -> BBlank(f tag)
@@ -299,6 +304,7 @@ and untagE e =
      ELambda(List.map untagB binds, untagE body, ())
   | ERecord(binds, _) ->
      ERecord(List.map (fun (b, e, _) -> (untagB b, untagE e, ())) binds, ())
+  | EGetField(r, field, _) -> EGetField(untagE r, field, ())
 and untagB b =
   match b with
   | BBlank _ -> BBlank ()
@@ -360,6 +366,9 @@ let atag (p : 'a aprogram) : tag aprogram =
     | CRecord(binds, _) ->
        let rec_tag = tag() in
        CRecord(List.map (fun (x, i) -> (x, helpI i)) binds, rec_tag)
+    | CGetField(r, field, _) ->
+       let get_field_tag = tag() in
+       CGetField(helpI r, field, get_field_tag)
   and helpI (i : 'a immexpr) : tag immexpr =
     match i with
     | ImmNil(_) -> ImmNil(tag())

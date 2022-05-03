@@ -33,24 +33,26 @@ const uint64_t BOOL_TRUE        = 0xFFFFFFFFFFFFFFFF;
 const uint64_t BOOL_FALSE       = 0x7FFFFFFFFFFFFFFF;
 const uint64_t NIL              = ((uint64_t)NULL | TUPLE_TAG);
 
-const uint64_t ERR_COMP_NOT_NUM     = 1;
-const uint64_t ERR_ARITH_NOT_NUM    = 2;
-const uint64_t ERR_LOGIC_NOT_BOOL   = 3;
-const uint64_t ERR_IF_NOT_BOOL      = 4;
-const uint64_t ERR_OVERFLOW         = 5;
-const uint64_t ERR_GET_NOT_TUPLE    = 6;
-const uint64_t ERR_GET_LOW_INDEX    = 7;
-const uint64_t ERR_GET_HIGH_INDEX   = 8;
-const uint64_t ERR_NIL_DEREF        = 9;
-const uint64_t ERR_OUT_OF_MEMORY    = 10;
-const uint64_t ERR_SET_NOT_TUPLE    = 11;
-const uint64_t ERR_SET_LOW_INDEX    = 12;
-const uint64_t ERR_SET_HIGH_INDEX   = 13;
-const uint64_t ERR_CALL_NOT_CLOSURE = 14;
-const uint64_t ERR_CALL_ARITY_ERR   = 15;
-const uint64_t ERR_GET_NOT_NUM      = 16;
-const uint64_t ERR_SET_NOT_NUM      = 17;
-const uint64_t ERR_BAD_INPUT        = 18;
+const uint64_t ERR_COMP_NOT_NUM         = 1;
+const uint64_t ERR_ARITH_NOT_NUM        = 2;
+const uint64_t ERR_LOGIC_NOT_BOOL       = 3;
+const uint64_t ERR_IF_NOT_BOOL          = 4;
+const uint64_t ERR_OVERFLOW             = 5;
+const uint64_t ERR_GET_NOT_TUPLE        = 6;
+const uint64_t ERR_GET_LOW_INDEX        = 7;
+const uint64_t ERR_GET_HIGH_INDEX       = 8;
+const uint64_t ERR_NIL_DEREF            = 9;
+const uint64_t ERR_OUT_OF_MEMORY        = 10;
+const uint64_t ERR_SET_NOT_TUPLE        = 11;
+const uint64_t ERR_SET_LOW_INDEX        = 12;
+const uint64_t ERR_SET_HIGH_INDEX       = 13;
+const uint64_t ERR_CALL_NOT_CLOSURE     = 14;
+const uint64_t ERR_CALL_ARITY_ERR       = 15;
+const uint64_t ERR_GET_NOT_NUM          = 16;
+const uint64_t ERR_SET_NOT_NUM          = 17;
+const uint64_t ERR_BAD_INPUT            = 18;
+const uint64_t ERR_GET_FIELD_NOT_RECORD = 19;
+const uint64_t ERR_GET_FIELD_NOT_FOUND  = 20;
 // TODO- Add error checking to input() for ERR_BAD_INPUT
 
 size_t HEAP_SIZE;
@@ -283,6 +285,12 @@ void error(uint64_t code, SNAKEVAL val) {
     break;
   case ERR_BAD_INPUT:
     fprintf(stderr, "Error: bad input, input must be a number\n");
+    break;
+  case ERR_GET_FIELD_NOT_RECORD:
+    fprintf(stderr, "Error: record-get expected record, got "); printHelp(stderr, val);
+    break;
+  case ERR_GET_FIELD_NOT_FOUND:
+    fprintf(stderr, "Error: record-get failed to find field of name %s\n", FIELDS[(uint64_t) val]);
     break;
   default:
     fprintf(stderr, "Error: Unknown error code: %ld, val: \n", code); printHelp(stderr, val);

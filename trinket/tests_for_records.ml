@@ -35,4 +35,15 @@ let test_records_anf = [
   t "fields_dont_shadow" "let x = 17 in { x = 3, y = x }" "" "{ x = 3, y = 17 }";
 ]
 
+(*
+
+let a = (1, 2, 3),
+    test = 1 in
+    {test = true}.test
+
+
+add test(s) to show left associative field access, not right associative
+
+*)
+
 let tests_for_records = test_records_wf @ test_records_valid @ test_records_anf

@@ -81,4 +81,5 @@ let rename_and_tag (p : tag program) : tag program =
        ELambda(binds', body', tag)
     | ERecord(bindings, tag) ->
         ERecord(List.map (fun (bnd, bexp, tag) -> (bnd, helpE env bexp, tag)) bindings, tag)
+    | EGetField(r, field, tag) -> EGetField(helpE env r, field, tag)
   in (rename [] p)

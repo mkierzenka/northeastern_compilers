@@ -94,6 +94,9 @@ let anf (p : tag program) : unit aprogram =
             | _ -> raise (InternalCompilerError "Non-name field binds should have been caught in well-formedness checking")
       ) bindings) in
       (CRecord(field_names_and_val_anses, ()), List.concat val_setups)
+    | EGetField(r, field, tag) ->
+      let (r_imm, r_setup) = helpI r in
+      (CGetField(r_imm, field, ()), r_setup)
     | _ -> let (imm, setup) = helpI e in (CImmExpr imm, setup)
 
   and helpI (e : tag expr) : (unit immexpr * unit anf_bind list) =
@@ -177,6 +180,10 @@ let anf (p : tag program) : unit aprogram =
        let tmp = sprintf "?record_%d" tag in
        let (ans, setup) = helpC e in
        (ImmId(tmp, ()), setup @ [BLet(tmp, ans)])
+    | EGetField(r, field, tag) ->
+       let tmp = sprintf "get_field_%s_%d" field tag in
+       let (r_imm, r_setup) = helpI r in
+       (ImmId(tmp, ()), r_setup @ [BLet(tmp, CGetField(r_imm, field, ()))])
   and helpA e : unit aexpr = 
     let (ans, ans_setup) = helpC e in
     List.fold_right

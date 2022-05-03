@@ -82,6 +82,7 @@ let naive_stack_allocation (prog: tag aprogram) : tag aprogram * arg name_envt n
                 else (name, max_so_far + 1)::field_nums_acc
         ) field_nums bindings in
       (env, new_field_nums, si)
+    | CGetField(_, _, _) -> (env, field_nums, si)
   in
   match prog with
   | AProgram(aexp, tag) ->

@@ -78,6 +78,7 @@ rule token = parse
   | "||" { OR }
   | "!" { NOT }
   | ";" { SEMI }
+  | "." { DOT }
   | "begin" { BEGIN }
   | "end" { END }
   | "rec" { REC }

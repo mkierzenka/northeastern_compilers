@@ -1,0 +1,4 @@
+let record = { a = 3, b = true } in
+    print(record.a);
+    print(record.b);
+    record.a

@@ -102,7 +102,8 @@ let free_vars (e: 'a aexpr) : string list =
       let args_set = StringSet.of_list args in
       let seen_with_args = StringSet.union args_set seen in
       help_aexpr body seen_with_args
-    | CRecord(binds, _) ->  List.fold_left (fun free_acc (_, bind_expr) -> StringSet.union free_acc (help_imm bind_expr seen)) StringSet.empty binds
+    | CRecord(binds, _) -> List.fold_left (fun free_acc (_, bind_expr) -> StringSet.union free_acc (help_imm bind_expr seen)) StringSet.empty binds
+    | CGetField(r, _, _) -> help_imm r seen
   and help_imm (expr : 'a immexpr) (seen : StringSet.t) : StringSet.t =
     match expr with
     | ImmNum _ -> StringSet.empty
@@ -190,6 +191,9 @@ let free_vars_cache (prog : 'a aprogram) : StringSet.t aprogram =
       let new_binds = List.map (fun (bname, bexpr) -> (bname, (help_imm bexpr))) binds in
       let new_free = List.fold_left (fun free_acc (bname, bexpr) -> StringSet.union free_acc (get_tag_I bexpr)) StringSet.empty new_binds in
       CRecord(new_binds, new_free)
+    | CGetField(r, field, _) ->
+      let new_r = help_imm r in
+      CGetField(new_r, field, get_tag_I new_r)
   and help_imm (expr : 'a immexpr): StringSet.t immexpr =
     match expr with
     | ImmNum(i, _) -> ImmNum(i, StringSet.empty)

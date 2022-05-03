@@ -201,6 +201,7 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
           (env', ((function None -> [] | Some e -> [e]) bind_err) @ errs_e @ errs') in
       let (new_env, binding_errs) = process_bindings binds env in
       dupeIds @ binding_errs
+    | EGetField(r, field, _) -> wf_E r env
 
   and wf_D d (env : scope_info name_envt) (tyenv : StringSet.t) =
     match d with

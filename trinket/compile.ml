@@ -12,24 +12,26 @@ open Naive_stack_allocation
 open Register_allocation
 open Util
 
-let err_comp_not_num_lbl     = "?err_comp_not_num"
-let err_arith_not_num_lbl    = "?err_arith_not_num"
-let err_logic_not_bool_lbl   = "?err_logic_not_bool"
-let err_if_not_bool_lbl      = "?err_if_not_bool"
-let err_overflow_lbl         = "?err_overflow"
-let err_get_not_tuple_lbl    = "?err_get_not_tuple"
-let err_get_low_index_lbl    = "?err_get_low_index"
-let err_get_high_index_lbl   = "?err_get_high_index"
-let err_nil_deref_lbl        = "?err_nil_deref"
-let err_out_of_memory_lbl    = "?err_out_of_memory"
-let err_set_not_tuple_lbl    = "?err_set_not_tuple"
-let err_set_low_index_lbl    = "?err_set_low_index"
-let err_set_high_index_lbl   = "?err_set_high_index"
-let err_call_not_closure_lbl = "?err_call_not_closure"
-let err_call_arity_err_lbl   = "?err_call_arity_err"
-let err_get_not_num_lbl      = "?err_get_not_num"
-let err_set_not_num_lbl      = "?err_set_not_num"
-let err_bad_input_lbl        = "?err_bad_input"
+let err_comp_not_num_lbl         = "?err_comp_not_num"
+let err_arith_not_num_lbl        = "?err_arith_not_num"
+let err_logic_not_bool_lbl       = "?err_logic_not_bool"
+let err_if_not_bool_lbl          = "?err_if_not_bool"
+let err_overflow_lbl             = "?err_overflow"
+let err_get_not_tuple_lbl        = "?err_get_not_tuple"
+let err_get_low_index_lbl        = "?err_get_low_index"
+let err_get_high_index_lbl       = "?err_get_high_index"
+let err_nil_deref_lbl            = "?err_nil_deref"
+let err_out_of_memory_lbl        = "?err_out_of_memory"
+let err_set_not_tuple_lbl        = "?err_set_not_tuple"
+let err_set_low_index_lbl        = "?err_set_low_index"
+let err_set_high_index_lbl       = "?err_set_high_index"
+let err_call_not_closure_lbl     = "?err_call_not_closure"
+let err_call_arity_err_lbl       = "?err_call_arity_err"
+let err_get_not_num_lbl          = "?err_get_not_num"
+let err_set_not_num_lbl          = "?err_set_not_num"
+let err_bad_input_lbl            = "?err_bad_input"
+let err_get_field_not_record_lbl = "?err_get_field_not_record"
+let err_get_field_not_found_lbl  = "?err_get_field_not_found"
 
 let const_true       = HexConst(0xFFFFFFFFFFFFFFFFL)
 let const_false      = HexConst(0x7FFFFFFFFFFFFFFFL)
@@ -46,24 +48,26 @@ let const_nil        = HexConst(tuple_tag)
 let record_tag       = 0x0000000000000003L
 let record_tag_mask  = 0x0000000000000007L
 
-let err_COMP_NOT_NUM     = 1L
-let err_ARITH_NOT_NUM    = 2L
-let err_LOGIC_NOT_BOOL   = 3L
-let err_IF_NOT_BOOL      = 4L
-let err_OVERFLOW         = 5L
-let err_GET_NOT_TUPLE    = 6L
-let err_GET_LOW_INDEX    = 7L
-let err_GET_HIGH_INDEX   = 8L
-let err_NIL_DEREF        = 9L
-let err_OUT_OF_MEMORY    = 10L
-let err_SET_NOT_TUPLE    = 11L
-let err_SET_LOW_INDEX    = 12L
-let err_SET_HIGH_INDEX   = 13L
-let err_CALL_NOT_CLOSURE = 14L
-let err_CALL_ARITY_ERR   = 15L
-let err_GET_NOT_NUM      = 16L
-let err_SET_NOT_NUM      = 17L
-let err_BAD_INPUT        = 18L
+let err_COMP_NOT_NUM         = 1L
+let err_ARITH_NOT_NUM        = 2L
+let err_LOGIC_NOT_BOOL       = 3L
+let err_IF_NOT_BOOL          = 4L
+let err_OVERFLOW             = 5L
+let err_GET_NOT_TUPLE        = 6L
+let err_GET_LOW_INDEX        = 7L
+let err_GET_HIGH_INDEX       = 8L
+let err_NIL_DEREF            = 9L
+let err_OUT_OF_MEMORY        = 10L
+let err_SET_NOT_TUPLE        = 11L
+let err_SET_LOW_INDEX        = 12L
+let err_SET_HIGH_INDEX       = 13L
+let err_CALL_NOT_CLOSURE     = 14L
+let err_CALL_ARITY_ERR       = 15L
+let err_GET_NOT_NUM          = 16L
+let err_SET_NOT_NUM          = 17L
+let err_BAD_INPUT            = 18L
+let err_GET_FIELD_NOT_RECORD = 19L
+let err_GET_FIELD_NOT_FOUND  = 20L
 
 let first_six_args_registers = [RDI; RSI; RDX; RCX; R8; R9]
 let heap_reg = R15
@@ -264,6 +268,21 @@ let check_rax_for_tup_bigger (tup_address : arg) (err_lbl : string) : instructio
    IJge(Label(err_lbl));
   ]
 
+let check_rax_for_rec (err_lbl : string) : instruction list =
+  [
+   (* Operate on scratch register instead of RAX. This is because we call AND
+    * on the register, which will alter the value. We want to preserve the value
+    * in RAX, hence we operate on scratch reg instead. 2nd scratch reg is used
+    * as intermediate because And, Cmp don't work on imm64s *)
+   ILineComment("check_rax_for_rec (" ^ err_lbl ^ ")");
+   IMov(Reg(scratch_reg), Reg(RAX));
+   IMov(Reg(scratch_reg_2), HexConst(record_tag_mask));
+   IAnd(Reg(scratch_reg), Reg(scratch_reg_2));
+   IMov(Reg(scratch_reg_2), HexConst(record_tag));
+   ICmp(Reg(scratch_reg), Reg(scratch_reg_2));
+   IMov(Reg(scratch_reg), Reg(RAX)); (* Copy value back into scratch reg in case it is an error *)
+   IJne(Label(err_lbl));
+  ]
 
 let compile_fun_prelude (fun_name : string) : instruction list =
   [
@@ -814,6 +833,40 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
         IAdd(Reg(heap_reg), Const(Int64.of_int (word_size * (padding_dest_offset + 1))));
       ] in
       set_up_rec @ field_data_set_instrs @ add_padding @ finish_up
+  | CGetField(r, field, tag) ->
+    let rec_address = compile_imm r sub_env in
+    let field_id = (find field_nums field) in
+    let check_rec = check_rax_for_rec err_get_field_not_record_lbl in
+    let strip_tag = [ISub(Reg(RAX), HexConst(record_tag))] in
+    let while_remain_fields_lbl = sprintf "while_remain_fields_field_%s_%d_lbl_%d" field field_id tag in 
+    let no_match_lbl = sprintf "no_match_field_%s_%d_lbl_%d" field field_id tag in
+    let found_match_lbl = sprintf "found_match_%s_%d_lbl_%d" field field_id tag in
+    [IMov(Reg(RAX), rec_address)] @ (* move record address (snakeval) into RAX *)
+    check_rec @
+    strip_tag @ [
+      (* Move desired field id into scratch_reg, keep decreasing counter of remaining fields in scratch_reg_2 *)
+      IMov(Reg(scratch_reg), Const(1L)); (* scratch_reg has the current offset within the record on heap *)
+      IMov(Reg(scratch_reg_2), RegOffset(0, RAX)); (* scratch_reg_2 is number of words left to search in this record *)
+      IMul(Reg(scratch_reg_2), Const(2L)); (* Initialized to size * 2 *)
+
+      ILabel(while_remain_fields_lbl);
+      ICmp(Reg(scratch_reg), Reg(scratch_reg_2));
+      IJge(Label(no_match_lbl));
+      ICmp(Sized(QWORD_PTR, RegOffsetReg(RAX, scratch_reg, word_size, 0)), Const(Int64.of_int field_id));
+      IJe(Label(found_match_lbl));
+      IAdd(Reg(scratch_reg), Const(2L));
+      IJmp(Label(while_remain_fields_lbl));
+
+      ILabel(no_match_lbl);
+      (* error behavior *)
+      IMov(Reg(scratch_reg), Const(Int64.of_int field_id));
+      IJmp(Label(err_get_field_not_found_lbl));
+
+      ILabel(found_match_lbl);
+      (* TODO: check that this doesn't sign-extend [RAX + scratch_reg * 8 + 8] *)
+      (* If it does, split into add and mov *)
+      IMov(Reg(RAX), RegOffsetReg(RAX, scratch_reg, word_size, (1 * word_size)));
+    ]
 and compile_imm e (sub_env : arg name_envt) : arg =
   match e with
   | ImmNum(n, _) -> Const(Int64.shift_left n 1)
@@ -941,6 +994,8 @@ global ?our_code_starts_here" in
 ?err_get_not_num:%s
 ?err_set_not_num:%s
 ?err_bad_input:%s
+?err_get_field_not_record:%s
+?err_get_field_not_found:%s
 "
                        (to_asm (native_call (Label "?error") [Const(err_COMP_NOT_NUM); Reg(scratch_reg)]))
                        (to_asm (native_call (Label "?error") [Const(err_ARITH_NOT_NUM); Reg(scratch_reg)]))
@@ -960,6 +1015,8 @@ global ?our_code_starts_here" in
                        (to_asm (native_call (Label "?error") [Const(err_GET_NOT_NUM); Reg(scratch_reg)]))
                        (to_asm (native_call (Label "?error") [Const(err_SET_NOT_NUM); Reg(scratch_reg)]))
                        (to_asm (native_call (Label "?error") [Const(err_BAD_INPUT); Reg(scratch_reg)]))
+                       (to_asm (native_call (Label "?error") [Const(err_GET_FIELD_NOT_RECORD); Reg(scratch_reg)]))
+                       (to_asm (native_call (Label "?error") [Const(err_GET_FIELD_NOT_FOUND); Reg(scratch_reg)]))
   in
   match anfed with
   | AProgram(body, _) ->

@@ -14,6 +14,7 @@ Need at least [v2.15](https://nasm.us/doc/nasmdocc.html#section-C.1.6) because w
 ## Design decisions/notes
 ### Records
 * New SNAKEVAL, tag `0x0000000000000003`
+* Immutable
 * Did same trick as `ELetRec` -> use the `binding` expr type but in `is_well_formed` restrict it to only `BName`s
 * Well-formedness also ensures:
   * No duplicate field names within a record
@@ -22,3 +23,7 @@ Need at least [v2.15](https://nasm.us/doc/nasmdocc.html#section-C.1.6) because w
 * Extended `naive_stack_allocation` to also return an env mapping field names to ids (integers),
     had to change code gen to take in this information
 * Changed `print` in runtime to support printing records, including the string field names
+* Can access a field of a record by field name with the "dot-fieldname" syntax: "let zz = {afield = 1, b = 2} in zz.afield"
+* The field access operator is left-associative
+* Runtime error err_GET_FIELD_NOT_RECORD (19) if try to access field of a non-record SNAKEVAL
+* Runtime error err_GET_FIELD_NOT_FOUND (20) if try to get the value of a field which is not present in the record

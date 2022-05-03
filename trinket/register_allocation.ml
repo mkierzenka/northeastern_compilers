@@ -189,6 +189,7 @@ let register_allocation (prog: tag aprogram) : tag aprogram * arg name_envt name
     | CSetItem _ -> (env, si)
     | CLambda(_, _, _) -> raise (InternalCompilerError ("CLambda allocation should be handled by specific help_aexpr ALet/ALetRec cases"))
     | CRecord _ -> (env, si)
+    | CGetField _ -> (env, si)
   in
   match fv_prog with
   | AProgram(aexp, fvs) ->
