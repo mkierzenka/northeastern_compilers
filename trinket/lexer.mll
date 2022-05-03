@@ -49,6 +49,7 @@ rule token = parse
   | "istuple" { ISTUPLE }
   | "isbool" { ISBOOL }
   | "isnum" { ISNUM }
+  | "isrecord" { ISRECORD }
   | "add1" { ADD1 }
   | "sub1" { SUB1 }
   | "lambda" { LAMBDA }

@@ -18,6 +18,9 @@ let test_records_valid = [
                      a_almost = {f1=a.f1, f2=a.f2, f3=a.f3, f4=a.f4 + 1}
                  in (a == a) && (a == a_alias) && !(a == a_copy) && !(a == a_almost) && !({blah = 44} == 44)"
                 "" "true";
+  t "is_record" "let r1 = {field = 14, red = if true: true else: false} in
+                  print(isrecord(r1)); print(isrecord(add1(6))); print(isrecord(true)) ; print(isrecord((lambda(x): add1(x))))"
+                "" "true\nfalse\nfalse\nfalse\nfalse";
 ]
 
 let test_records_anf = [

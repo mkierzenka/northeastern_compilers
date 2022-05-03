@@ -22,6 +22,7 @@ let string_of_op1 op =
   | IsNum -> "isnum"
   | IsBool -> "isbool"
   | IsTuple -> "istuple"
+  | IsRecord -> "isrecord"
 
 let name_of_op1 op =
   match op with
@@ -33,6 +34,7 @@ let name_of_op1 op =
   | IsNum -> "IsNum"
   | IsBool -> "IsBool"
   | IsTuple -> "IsTuple"
+  | IsRecord -> "IsRecord"
 
 let string_of_op2 op =
   match op with

@@ -524,6 +524,29 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
            (* done *)
            ILabel(done_lbl);
           ]
+        | IsRecord ->
+          let true_lbl = sprintf "is_record_true_%d" tag in
+          let false_lbl = sprintf "is_record_false_%d" tag in
+          let done_lbl = sprintf "is_record_done_%d" tag in
+          [
+           IMov(Reg(RAX), body_imm);
+           (* Don't need to save RAX on the stack because we overwrite the
+            * value with true/false later. Scratch reg used because And, Cmp don't support imm64 *)
+           IMov(Reg(scratch_reg), HexConst(record_tag_mask));
+           IAnd(Reg(RAX), Reg(scratch_reg));
+           IMov(Reg(scratch_reg), HexConst(record_tag));
+           ICmp(Reg(RAX), Reg(scratch_reg));
+           IJz(Label(true_lbl));
+           (* case not tup *)
+           ILabel(false_lbl);
+           IMov(Reg(RAX), const_false);
+           IJmp(Label(done_lbl));
+           (* case is a tup *)
+           ILabel(true_lbl);
+           IMov(Reg(RAX), const_true);
+           (* done *)
+           ILabel(done_lbl);
+          ]
      end
   | CPrim2(op, lhs, rhs, tag) ->
      let lhs_reg = compile_imm lhs sub_env in

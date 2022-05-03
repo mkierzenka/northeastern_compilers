@@ -28,3 +28,4 @@ Need at least [v2.15](https://nasm.us/doc/nasmdocc.html#section-C.1.6) because w
 * Runtime error err_GET_FIELD_NOT_RECORD (19) if try to access field of a non-record SNAKEVAL
 * Runtime error err_GET_FIELD_NOT_FOUND (20) if try to get the value of a field which is not present in the record
 * Structural (ie. equal(), runtime) equality of 2 records means: same fields in same order with same values
+* isrecord() built-in, with the usual behavior/semantics
