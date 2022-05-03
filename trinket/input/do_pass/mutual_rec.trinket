@@ -1,0 +1,15 @@
+def funcA(x, y):
+    let biggerX = x + 2, doubleY = 2 * y in
+    if x < y: biggerX else: doubleY
+
+and def funcB(x, y):
+    let step1 = funcA(x, y) in
+    let step2 = funcC(y) in
+    step1 + step2
+
+and def funcC(y):
+    let dblY = y + y in
+    let try1 = funcA(y, y) in
+    if dblY == try1: 1 else: 0
+
+funcB(2, 10)

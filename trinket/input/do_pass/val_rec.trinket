@@ -1,0 +1,12 @@
+let get_value = (
+    lambda (r): {
+      age = r.age,
+      model = r.model,
+      totaled = r.totaled,
+      value = (if r.totaled: 0 else: r.model - r.age)
+    }
+), val_rec = get_value(
+    { age = 3, model = 1337, totaled = false }
+) in
+    print(val_rec.value);
+    val_rec

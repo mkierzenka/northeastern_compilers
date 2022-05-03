@@ -1,0 +1,21 @@
+(library
+  (name trinket_impl)
+  (modules assembly compile errors exprs phases pretty runner lexer parser graph)
+  (libraries ounit2 extlib unix)
+  (wrapped false))
+
+(ocamllex (modules lexer))
+(menhir (modules parser))
+
+(executable
+  (name main)
+  (modules main)
+  (libraries trinket_impl))
+
+(test
+  (name test)
+  (modules test)
+  (libraries trinket_impl))
+
+(env (dev (flags (:standard -warn-error -A))))
+

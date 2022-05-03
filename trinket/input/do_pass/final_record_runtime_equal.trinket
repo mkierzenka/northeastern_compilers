@@ -1,0 +1,14 @@
+let a = {f1=-100, f2=false, f3={inner = 7}, f4=-97},
+     a_alias = a,
+     a_copy = {f1=a.f1, f2=a.f2, f3=a.f3, f4=a.f4},
+     a_almost = {f1=a.f1, f2=a.f2, f3=a.f3, f4=a.f4 + 1},
+     a_shortened = {f1=a.f1, f2=a.f2},
+     a_lengthened = {f1=a.f1, f2=a.f2, f3=a.f3, f4=a.f4, f5=true},
+     same_fields_dif_values = {f1=a.f4, f2=a.f3, f3=a.f2, f4=a.f1},
+     same_fields_dif_inner = {f1=a.f1, f2=a.f2, f3={inner = 8}, f4=a.f4},
+     totally_dif = {g1=false, g2=true, lastone=1000000}
+
+in print(equal(a, a)); print(equal(a_alias, a)); print(equal(a, a_copy));
+   print(!(equal(a, a_almost))); print(!(equal(a, a_shortened))); print(!(equal(a, a_lengthened)));
+   print(!(equal(a, same_fields_dif_values))); print(!(equal(a, same_fields_dif_inner))); print(!(equal(a, totally_dif)));
+   print(!(equal(a.f1, a))); print(!(equal({blah = 34}, 34)))
