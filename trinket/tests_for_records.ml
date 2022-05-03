@@ -12,7 +12,12 @@ let test_records_valid = [
   t "dup_names_mixcase" "let a = {fieldA = 736, fieldB = true, fielda = 736} in 8" "" "8";
   t "let_field" "let var=160, rec1 = {f1 = var}, rec2 = {inner = rec1} in (rec1 == rec2) || (var == rec1)" "" "false";
   t "ok_shadow" "let a = 5 in { a = 3 }" "" "{ a = 3 }";
-  t "inner_shadow" "{ a = { a = 3 } }" "" "{ a = { a = 3 } }"
+  t "inner_shadow" "{ a = { a = 3 } }" "" "{ a = { a = 3 } }";
+  t "raw_equal" "let a = {f1=-100, f2=-99, f3=-98, f4=-97},
+                     a_alias = a, a_copy = {f1=a.f1, f2=a.f2, f3=a.f3, f4=a.f4},
+                     a_almost = {f1=a.f1, f2=a.f2, f3=a.f3, f4=a.f4 + 1}
+                 in (a == a) && (a == a_alias) && !(a == a_copy) && !(a == a_almost) && !({blah = 44} == 44)"
+                "" "true";
 ]
 
 let test_records_anf = [

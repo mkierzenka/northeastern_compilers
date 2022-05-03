@@ -85,6 +85,17 @@ SNAKEVAL equal(SNAKEVAL val1, SNAKEVAL val2) {
     }
     return BOOL_TRUE;
   }
+  if ((val1 & RECORD_TAG_MASK) == RECORD_TAG && (val2 & RECORD_TAG_MASK) == RECORD_TAG) {
+    uint64_t *rec1 = (uint64_t*)(val1 - RECORD_TAG);
+    uint64_t *rec2 = (uint64_t*)(val2 - RECORD_TAG);
+    if (rec1[0] != rec2[0]) { return BOOL_FALSE; }
+    // Multiply by 2 to go through all fieldId-value pairs
+    for (uint64_t i = 1; i <= rec1[0] * 2; i++) {
+      if (equal(rec1[i], rec2[i]) == BOOL_FALSE)
+        return BOOL_FALSE;
+    }
+    return BOOL_TRUE;
+  }
   return BOOL_FALSE;
 }
 
