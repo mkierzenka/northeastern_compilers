@@ -12,6 +12,7 @@ let dummy_span = (Lexing.dummy_pos, Lexing.dummy_pos)
 let prim_bindings = []
 
 let native_fun_bindings = [
+  ("equal", (dummy_span, Some 2, Some 2));
   ("input", (dummy_span, Some 0, Some 0));
   ("print", (dummy_span, Some 1, Some 1));
 ]
