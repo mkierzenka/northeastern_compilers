@@ -128,5 +128,6 @@ let desugar (p : sourcespan program) : sourcespan program =
     | ERecord(bindings, tag) ->
        ERecord(List.map (fun (bnd, bexp, tag) -> (bnd, helpE bexp, tag)) bindings, tag)
     | EGetField(r, field, tag) -> EGetField(helpE r, field, tag)
+    | ETable(recs, tag) -> ETable(List.map helpE recs, tag)
 
   in helpP p

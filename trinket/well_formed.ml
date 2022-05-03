@@ -202,6 +202,7 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
       let (new_env, binding_errs) = process_bindings binds env in
       dupeIds @ binding_errs
     | EGetField(r, field, _) -> wf_E r env
+    | ETable(recs, _) -> List.concat (List.map (fun r -> wf_E r env) recs)
 
   and wf_D d (env : scope_info name_envt) (tyenv : StringSet.t) =
     match d with

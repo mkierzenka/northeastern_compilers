@@ -1,0 +1,1 @@
+if true: (lambda: true) else: (lambda: false)

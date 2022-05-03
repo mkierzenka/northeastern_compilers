@@ -6,7 +6,6 @@ open Assembly
 open Errors
 open Util
 
-(* TODO- explain/justify our env choice (see assignment) *)
 (* ASSUMES that the program has been alpha-renamed and all names are unique *)
 let naive_stack_allocation (prog: tag aprogram) : tag aprogram * arg name_envt name_envt * int name_envt =
   let rec help_aexpr (body : tag aexpr) (si : int) (curr_env_name : string) (env : arg name_envt name_envt) (field_nums : int name_envt) : arg name_envt name_envt * int name_envt * int =
@@ -83,6 +82,7 @@ let naive_stack_allocation (prog: tag aprogram) : tag aprogram * arg name_envt n
         ) field_nums bindings in
       (env, new_field_nums, si)
     | CGetField(_, _, _) -> (env, field_nums, si)
+    | CTable(_, _) -> (env, field_nums, si)
   in
   match prog with
   | AProgram(aexp, tag) ->

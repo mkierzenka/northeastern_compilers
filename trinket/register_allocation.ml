@@ -25,8 +25,7 @@ let callee_saved_regs : arg list =
 
 
 (* IMPLEMENT THE BELOW *)
-(* TODO- expand this set. Problem is that we were sloppy and used a bit too many registers
-   in our codegen. Also can put the x64 calling convention regs into this list. *)
+(* TODO- expand this set. Perhaps can put the x64 calling convention regs into this list. *)
 let reg_colors : arg list =
   [
     Reg R10;
@@ -187,9 +186,10 @@ let register_allocation (prog: tag aprogram) : tag aprogram * arg name_envt name
     | CTuple _ -> (env, si)
     | CGetItem _ -> (env, si)
     | CSetItem _ -> (env, si)
-    | CLambda(_, _, _) -> raise (InternalCompilerError ("CLambda allocation should be handled by specific help_aexpr ALet/ALetRec cases"))
+    | CLambda _ -> raise (InternalCompilerError ("CLambda allocation should be handled by specific help_aexpr ALet/ALetRec cases"))
     | CRecord _ -> (env, si)
     | CGetField _ -> (env, si)
+    | CTable _ -> (env, si)
   in
   match fv_prog with
   | AProgram(aexp, fvs) ->

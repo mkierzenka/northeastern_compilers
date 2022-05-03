@@ -61,8 +61,6 @@ rule token = parse
   | "in" { IN }
   | "=" { EQUAL }
   | "," { COMMA }
-  | "(|" { LPPIPE }
-  | "|)" { RPPIPE }
   | "(" { LPARENNOSPACE }
   | ")" { RPAREN }
   | "[" { LBRACK }
@@ -82,6 +80,7 @@ rule token = parse
   | "!" { NOT }
   | ";" { SEMI }
   | "." { DOT }
+  | "|" { PIPE }
   | "begin" { BEGIN }
   | "end" { END }
   | "rec" { REC }
