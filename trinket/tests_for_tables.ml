@@ -4,10 +4,18 @@ let valid_tables = [
   t "empty" "(| |)" "" "(empty table)";
   (* t "empty_recs" "(| {} {} {} {} |)" "" "zz"; *)
   t "basic" "let val = 7, mytrue = true, myfalse = false in (| {c1 = 3, c2 = myfalse}, {c1 = val, c2 = (myfalse || mytrue)}, {c1 = input(), c2 = -1} |)" "999" "table:\n\tc1\tc2\n0\t3\tfalse\n1\t7\ttrue\n2\t999\t-1";
-  t "eq_operator" "let tab1 = (| {a=1, b=2}, {a=3, b=4} |), tab2 = (| {a=1, b=2}, {a=3, b=4} |) in print(tab1 == tab1); (tab1 == tab2)" "" "true\nfalse";
+  t "eq_operator" "let tab1 = (| {a=1, b=2}, {a=3, b=4} |), tab2 = tab1, tab3 = (| {a=1, b=2}, {a=3, b=4} |) in print(tab1 == tab1); print(tab1 == tab2); (tab1 == tab3)" "" "true\ntrue\nfalse";
   t "checking_types" "let tab1 = (| {a=1, b=2}, {a=3, b=4} |), empty = (| |) in
                         print(istuple(tab1)); print(istuple(empty)); print(isrecord(tab1)); print(isrecord(empty)); isbool(tab1)"
                       ""  "false\nfalse\nfalse\nfalse\nfalse";
+  t "equal" "let tab1 = (| {a=1, b=2}, {a=3, b=4} |), tab2 = tab1, tab3 = (| {a=1, b=2}, {a=3, b=4} |) in print(equal(tab1, tab1)); print(equal(tab2, tab1)); print(equal(tab1, tab3)); equal(tab3, tab1)" "" "true\ntrue\ntrue\ntrue";
+  t "unequal_values" "let tab1 = (| {a=1, b=2}, {a=3, b=4} |), tab1small = (| {a=1}, {a=3} |),
+                          tab1a = (| {a=-9, b=2}, {a=3, b=4} |), tab1b = (| {a=1, b=1000}, {a=3, b=4} |),
+                          tab1c = (| {a=1, b=2}, {a=false, b=4} |), tab1d = (| {a=1, b=2}, {a=3, b=444} |) in
+                        print(equal(tab1, 1)); print(equal(tab1, {a=1, b=2})); print(equal(tab1, tab1small)); print(equal(tab1, tab1a));
+                        print(equal(tab1, tab1b)); print(equal(tab1, tab1c)); equal(tab1, tab1d)"
+                      "" "false\nfalse\nfalse\nfalse\nfalse\nfalse\nfalse";
+  t "unequal_fieldids" "let tab1 = (| {a=1, b=2}, {a=3, b=4} |), tab2 = (| {aa=1, bb=2}, {aa=3, bb=4} |) in equal(tab1, tab2)" "" "false";
 ]
 
 let invalid_tables = [

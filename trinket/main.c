@@ -102,6 +102,16 @@ SNAKEVAL equal(SNAKEVAL val1, SNAKEVAL val2) {
     }
     return BOOL_TRUE;
   }
+  if ((val1 & TABLE_TAG_MASK) == TABLE_TAG && (val2 & TABLE_TAG_MASK) == TABLE_TAG) {
+    uint64_t *table1 = (uint64_t*)(val1 - TABLE_TAG);
+    uint64_t *table2 = (uint64_t*)(val2 - TABLE_TAG);
+    if (table1[0] != table2[0]) { return BOOL_FALSE; }
+    for (uint64_t i = 1; i <= table1[0]; i++) {
+      if (equal(table1[i], table2[i]) == BOOL_FALSE)
+        return BOOL_FALSE;
+    }
+    return BOOL_TRUE;
+  }
   return BOOL_FALSE;
 }
 
