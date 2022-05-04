@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdbool.h>
 #include "gc.h"
 
 typedef uint64_t SNAKEVAL;
@@ -18,17 +19,20 @@ extern uint64_t* HEAP_END asm("?HEAP_END");
 extern uint64_t* HEAP asm("?HEAP");
 extern char *FIELDS_CONCAT asm("?fields");
 extern int NUM_FIELDS asm("?num_fields");
+extern bool checkFields(SNAKEVAL first, SNAKEVAL second) asm("?check_fields");
 
 const uint64_t NUM_TAG_MASK     = 0x0000000000000001;
-const uint64_t BOOL_TAG_MASK    = 0x0000000000000007;
-const uint64_t TUPLE_TAG_MASK   = 0x0000000000000007;
-const uint64_t CLOSURE_TAG_MASK = 0x0000000000000007;
-const uint64_t RECORD_TAG_MASK  = 0x0000000000000007;
+const uint64_t BOOL_TAG_MASK    = 0x000000000000000F;
+const uint64_t TUPLE_TAG_MASK   = 0x000000000000000F;
+const uint64_t CLOSURE_TAG_MASK = 0x000000000000000F;
+const uint64_t RECORD_TAG_MASK  = 0x000000000000000F;
+const uint64_t TABLE_TAG_MASK   = 0x000000000000000F;
 const uint64_t NUM_TAG          = 0x0000000000000000;
 const uint64_t BOOL_TAG         = 0x0000000000000007;
 const uint64_t TUPLE_TAG        = 0x0000000000000001;
 const uint64_t CLOSURE_TAG      = 0x0000000000000005;
 const uint64_t RECORD_TAG       = 0x0000000000000003;
+const uint64_t TABLE_TAG        = 0x0000000000000009;
 const uint64_t BOOL_TRUE        = 0xFFFFFFFFFFFFFFFF;
 const uint64_t BOOL_FALSE       = 0x7FFFFFFFFFFFFFFF;
 const uint64_t NIL              = ((uint64_t)NULL | TUPLE_TAG);
@@ -53,6 +57,8 @@ const uint64_t ERR_SET_NOT_NUM          = 17;
 const uint64_t ERR_BAD_INPUT            = 18;
 const uint64_t ERR_GET_FIELD_NOT_RECORD = 19;
 const uint64_t ERR_GET_FIELD_NOT_FOUND  = 20;
+const uint64_t ERR_TABLE_OF_NOT_RECORD  = 21;
+const uint64_t ERR_TABLE_OF_HET_RECORDS = 22;
 // TODO- Add error checking to input() for ERR_BAD_INPUT
 
 size_t HEAP_SIZE;
@@ -96,11 +102,70 @@ SNAKEVAL equal(SNAKEVAL val1, SNAKEVAL val2) {
     }
     return BOOL_TRUE;
   }
+  if ((val1 & TABLE_TAG_MASK) == TABLE_TAG && (val2 & TABLE_TAG_MASK) == TABLE_TAG) {
+    uint64_t *table1 = (uint64_t*)(val1 - TABLE_TAG);
+    uint64_t *table2 = (uint64_t*)(val2 - TABLE_TAG);
+    if (table1[0] != table2[0]) { return BOOL_FALSE; }
+    for (uint64_t i = 1; i <= table1[0]; i++) {
+      if (equal(table1[i], table2[i]) == BOOL_FALSE)
+        return BOOL_FALSE;
+    }
+    return BOOL_TRUE;
+  }
   return BOOL_FALSE;
 }
 
+bool checkFields(SNAKEVAL first, SNAKEVAL second) {
+  // Assume that both have been tag-checked already
+  uint64_t *first_ptr = (uint64_t *) (first & (~RECORD_TAG_MASK));
+  uint64_t *second_ptr = (uint64_t *) (second & (~RECORD_TAG_MASK));
+  if (first_ptr[0] != second_ptr[0]) {
+    // Diff number of fields
+    return false;
+  }
+  uint64_t num_fields = first_ptr[0];
+  for (uint64_t i = 0; i < num_fields; ++i) {
+    if (first_ptr[2 * i + 1] != second_ptr[2 * i + 1]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void printHelp(FILE *out, SNAKEVAL val, bool in_row);
+
+void printRecordFieldsAsRow(FILE *out, SNAKEVAL record_snakeval) {
+  uint64_t *record_ptr = (uint64_t *) (record_snakeval & (~RECORD_TAG_MASK));
+  int num_fields = record_ptr[0];
+  for (int i = 0; i < num_fields; ++i) {
+    // [field name 1]\t[field name 2]\t...\t[field name n]
+    uint64_t field_num = record_ptr[(i * 2) + 1]; // "+ 1" for size
+    fprintf(out, "%s", FIELDS[field_num]);
+    if (i < num_fields - 1) {
+      fprintf(out, "\t");
+    }
+  }
+}
+
+void printRecordValuesAsRow(FILE *out, SNAKEVAL record_snakeval) {
+  uint64_t *record_ptr = (uint64_t *) (record_snakeval & (~RECORD_TAG_MASK));
+  int num_fields = record_ptr[0];
+  for (int i = 0; i < num_fields; ++i) {
+    // [field 1]\t[field 2]\t...\t[field n]
+    uint64_t field_val = record_ptr[(i * 2) + 2]; // "+ 2" for size and fieldId
+    printHelp(out, field_val, true);
+    if (i < num_fields - 1) {
+      fprintf(out, "\t");
+    }
+  }
+}
+
 uint64_t tupleCounter = 0;
-void printHelp(FILE *out, SNAKEVAL val) {
+
+// in_row = whether or not we are printing within a row. If we are, should summarize some
+// SNAKEVALs (e.g., tables) to return simplified outputs like "(table)"
+void printHelp(FILE *out, SNAKEVAL val, bool in_row) {
+  // printf("(printed %p): ", (void *) val);
   if (val == NIL) {
     fprintf(out, "nil");
   }
@@ -162,7 +227,7 @@ void printHelp(FILE *out, SNAKEVAL val) {
     fprintf(out, "(");
     for (uint64_t i = 1; i <= len; i++) {
       if (i > 1) fprintf(out, ", ");
-      printHelp(out, addr[i]);
+      printHelp(out, addr[i], in_row);
     }
     if (len == 1) fprintf(out, ", ");
     fprintf(out, ")");
@@ -179,9 +244,36 @@ void printHelp(FILE *out, SNAKEVAL val) {
       if (i > 0) fprintf(out, ", ");
       uint64_t field_num = addr[(i * 2) + 1];
       fprintf(out, "%s = ", FIELDS[field_num]);
-      printHelp(out, addr[(i * 2) + 2]);
+      printHelp(out, addr[(i * 2) + 2], true);
     }
     fprintf(out, " }");
+  }
+  else if ((val & TABLE_TAG_MASK) == TABLE_TAG) {
+    // [ num recs | rec 1 | rec 2 | ... | rec n ]
+    // addr [0]      [1]     [2]    ...
+    uint64_t* addr = (uint64_t*)(val - TABLE_TAG);
+    uint64_t num_records = addr[0];
+    // example/template of table printing behavior:
+    // table:
+    // \t   f1 \t f2   \t f3
+    // 1 \t 17 \t 103  \t 86
+    // 2 \t 2  \t 1337 \t 0
+    if (num_records == 0) {
+      fprintf(out, "(empty table)");
+    } else if (in_row) {
+      fprintf(out, "(non-empty table)");
+    } else {
+      SNAKEVAL first_record_snakeval = addr[1];
+
+      fprintf(out, "table:\n\t");
+      printRecordFieldsAsRow(out, first_record_snakeval);
+
+      for (uint64_t i = 0; i < num_records; i++) {
+        fprintf(out, "\n%lu\t", i);
+        SNAKEVAL this_record_snakeval = addr[i + 1]; // + 1 because num_records
+        printRecordValuesAsRow(out, this_record_snakeval);
+      }
+    }
   }
   else {
     fprintf(out, "Unknown value: %#018lx", val);
@@ -191,12 +283,12 @@ void printHelp(FILE *out, SNAKEVAL val) {
 
 SNAKEVAL printStack(SNAKEVAL val, uint64_t* rsp, uint64_t* rbp, uint64_t args) {
   printf("RSP: %#018lx\t==>  ", (uint64_t)rsp); fflush(stdout);
-  printHelp(stdout, *rsp); fflush(stdout);
+  printHelp(stdout, *rsp, false); fflush(stdout);
   printf("\nRBP: %#018lx\t==>  ", (uint64_t)rbp); fflush(stdout);
-  printHelp(stdout, *rbp); fflush(stdout);
+  printHelp(stdout, *rbp, false); fflush(stdout);
   printf("\n(difference: %ld)\n", (uint64_t)(rsp - rbp)); fflush(stdout);
   printf("Requested return val: %#018lx\t==> ", (uint64_t)val); fflush(stdout);
-  printHelp(stdout, val); fflush(stdout);
+  printHelp(stdout, val, false); fflush(stdout);
   printf("\n"); fflush(stdout);
   printf("Num args: %ld\n", args);
 
@@ -220,7 +312,7 @@ SNAKEVAL printStack(SNAKEVAL val, uint64_t* rsp, uint64_t* rbp, uint64_t args) {
         printf("    %#018lx: %#018lx\t==>  heap\n", (uint64_t)cur, *cur); fflush(stdout);
       } else {
         printf("    %#018lx: %#018lx\t==>  ", (uint64_t)cur, *cur); fflush(stdout);
-        printHelp(stdout, *cur); fflush(stdout);
+        printHelp(stdout, *cur, false); fflush(stdout);
         printf("\n"); fflush(stdout);
       }
     }
@@ -235,7 +327,7 @@ SNAKEVAL input() {
 }
 
 SNAKEVAL print(SNAKEVAL val) {
-  printHelp(stdout, val);
+  printHelp(stdout, val, false);
   printf("\n");
   fflush(stdout);
   return val;
@@ -244,22 +336,22 @@ SNAKEVAL print(SNAKEVAL val) {
 void error(uint64_t code, SNAKEVAL val) {
   switch (code) {
   case ERR_COMP_NOT_NUM:
-    fprintf(stderr, "Error: comparison expected a number, got "); printHelp(stderr, val);
+    fprintf(stderr, "Error: comparison expected a number, got "); printHelp(stderr, val, false);
     break;
   case ERR_ARITH_NOT_NUM:
-    fprintf(stderr, "Error: arithmetic expected a number, got "); printHelp(stderr, val);
+    fprintf(stderr, "Error: arithmetic expected a number, got "); printHelp(stderr, val, false);
     break;
   case ERR_LOGIC_NOT_BOOL:
-    fprintf(stderr, "Error: logic expected a boolean, got "); printHelp(stderr, val);
+    fprintf(stderr, "Error: logic expected a boolean, got "); printHelp(stderr, val, false);
     break;
   case ERR_IF_NOT_BOOL:
-    fprintf(stderr, "Error: if expected a boolean, got "); printHelp(stderr, val);
+    fprintf(stderr, "Error: if expected a boolean, got "); printHelp(stderr, val, false);
     break;
   case ERR_OVERFLOW:
-    fprintf(stderr, "Error: Integer overflow, got "); printHelp(stderr, val);
+    fprintf(stderr, "Error: Integer overflow, got "); printHelp(stderr, val, false);
     break;
   case ERR_GET_NOT_TUPLE:
-    fprintf(stderr, "Error: get expected tuple, got "); printHelp(stderr, val);
+    fprintf(stderr, "Error: get expected tuple, got "); printHelp(stderr, val, false);
     break;
   case ERR_GET_LOW_INDEX:
     fprintf(stderr, "Error: index too small to get, got %ld\n", (uint64_t)val);
@@ -283,7 +375,7 @@ void error(uint64_t code, SNAKEVAL val) {
     fprintf(stderr, "Error: index too large to set\n");
     break;
   case ERR_CALL_NOT_CLOSURE:
-    fprintf(stderr, "Error: tried to call a non-closure value: "); printHelp(stderr, val);
+    fprintf(stderr, "Error: tried to call a non-closure value: "); printHelp(stderr, val, false);
     break;
   case ERR_CALL_ARITY_ERR:
     fprintf(stderr, "Error: arity mismatch in call\n");
@@ -298,19 +390,25 @@ void error(uint64_t code, SNAKEVAL val) {
     fprintf(stderr, "Error: bad input, input must be a number\n");
     break;
   case ERR_GET_FIELD_NOT_RECORD:
-    fprintf(stderr, "Error: record-get expected record, got "); printHelp(stderr, val);
+    fprintf(stderr, "Error: record-get expected record, got "); printHelp(stderr, val, false);
     break;
   case ERR_GET_FIELD_NOT_FOUND:
     fprintf(stderr, "Error: record-get failed to find field of name %s\n", FIELDS[(uint64_t) val]);
     break;
+  case ERR_TABLE_OF_NOT_RECORD:
+    fprintf(stderr, "Error: table-create expected record, got "); printHelp(stderr, val, false);
+    break;
+  case ERR_TABLE_OF_HET_RECORDS:
+    fprintf(stderr, "Error: table-create expected homogeneous records. Inconsistent record was "); printHelp(stderr, val, false);
+    break;
   default:
-    fprintf(stderr, "Error: Unknown error code: %ld, val: \n", code); printHelp(stderr, val);
+    fprintf(stderr, "Error: Unknown error code: %ld, val: \n", code); printHelp(stderr, val, false);
   }
-  fprintf(stderr, "\n%p ==> ", (uint64_t*)val);
-  printHelp(stderr, val);
+  // fprintf(stderr, "\n%p ==> ", (uint64_t*)val);
+  // printHelp(stderr, val, false);
   fprintf(stderr, "\n");
   fflush(stderr);
-  naive_print_heap(HEAP, HEAP_END);
+  // naive_print_heap(HEAP, HEAP_END);
   fflush(stdout);
   free(HEAP);
   exit(code);

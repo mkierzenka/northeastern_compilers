@@ -23,9 +23,31 @@ Need at least [v2.15](https://nasm.us/doc/nasmdocc.html#section-C.1.6) because w
 * Extended `naive_stack_allocation` to also return an env mapping field names to ids (integers),
     had to change code gen to take in this information
 * Changed `print` in runtime to support printing records, including the string field names
-* Can access a field of a record by field name with the "dot-fieldname" syntax: "let zz = {afield = 1, b = 2} in zz.afield"
+* Can access a field of a record by field name with the "dot-fieldname" syntax: `let zz = {afield = 1, b = 2} in zz.afield`
 * The field access operator is left-associative
-* Runtime error err_GET_FIELD_NOT_RECORD (19) if try to access field of a non-record SNAKEVAL
-* Runtime error err_GET_FIELD_NOT_FOUND (20) if try to get the value of a field which is not present in the record
-* Structural (ie. equal(), runtime) equality of 2 records means: same fields in same order with same values
-* isrecord() built-in, with the usual behavior/semantics
+* Runtime error `err_GET_FIELD_NOT_RECORD` (19) if try to access field of a non-record SNAKEVAL
+* Runtime error `err_GET_FIELD_NOT_FOUND` (20) if try to get the value of a field which is not present in the record
+* Structural equality of 2 records means: same fields in same order with same values (see `main.c`'s `equal` function)
+* `isrecord(...)` built-in, with the usual behavior/semantics
+
+### Tables
+* New SNAKEVAL, tag `0x0000000000000009`. This meant we had to expand to use 4-bit tags for booleans, closures, records, and tables.
+* Immutable
+* A comma-separated list of exprs (rows), each of which should be a record at runtime
+* Create one by wrapping the list in `(|` and `|)`
+* Note, there can technically be arbitrary whitespace between the parentheses and the pipes because we decided to
+  not spend so much time fighting with the parser
+* The first record/row defines the fields of the table, table creation includes validating that all records have same field names in same order as the first
+* Structural equality of 2 tables means: same records in same order
+* Table creation (and record equality) may later move to accepting records with the same fields but differently ordered
+* Empty tables are written as `(| |)` (whitespace between ends required)
+* Empty tables are printed as `(empty table)`
+* Nested non-empty tables (within tables or records) are printed as `(non-empty table)` for brevity/slightly better formatting
+* Tables are printed/returned in a simple tab character-based format with column names across the top, e.g.,
+```
+table:
+    field1  field2  field3
+0   17      103     false
+1   2       1337    true
+```
+* New runtime functions, hidden to the user but helpful to us: `checkFields` (are the same fields present in same order?), `printRecordFieldsAsRow`, `printRecordValuesAsRow`

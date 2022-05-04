@@ -23,6 +23,7 @@ let string_of_op1 op =
   | IsBool -> "isbool"
   | IsTuple -> "istuple"
   | IsRecord -> "isrecord"
+  | IsTable -> "istable"
 
 let name_of_op1 op =
   match op with
@@ -35,6 +36,7 @@ let name_of_op1 op =
   | IsBool -> "IsBool"
   | IsTuple -> "IsTuple"
   | IsRecord -> "IsRecord"
+  | IsTable -> "IsTable"
 
 let string_of_op2 op =
   match op with
@@ -130,6 +132,9 @@ and string_of_expr_with (depth : int) (print_a : 'a -> string) (e : 'a expr) : s
      let binds_str = List.fold_left (^) "" (intersperse binds_strs ", ") in
      sprintf "(record %s)%s" binds_str (print_a a)
   | EGetField(r, field, a) -> (sprintf "%s.%s%s" (string_of_expr r) field (print_a a))
+  | ETable(recs, a) ->
+    let recs_str = ExtString.String.join ", " (List.map string_of_expr recs) in
+    sprintf "(table %s)%s" recs_str (print_a a)
 
 let string_of_expr (e : 'a expr) : string =
   string_of_expr_with 1000 (fun _ -> "") e
@@ -207,6 +212,9 @@ and string_of_cexpr_with (depth : int) (print_a : 'a -> string) (c : 'a cexpr) :
       sprintf "%s = %s" old_name (string_of_immexpr_with print_a fresh_name_immexpr) in
     sprintf "{ %s }%s" (ExtString.String.join ", " (List.map string_of_binding bindings)) (print_a a)
   | CGetField(r, field, a) -> sprintf "%s.%s%s" (string_of_immexpr r) field (print_a a)
+  | CTable(recs, a) ->
+    let recs_str = ExtString.String.join ", " (List.map string_of_immexpr recs) in
+    sprintf "(table %s)%s" recs_str (print_a a)
 and string_of_immexpr_with (print_a : 'a -> string) (i : 'a immexpr) : string =
   match i with
   | ImmNil(a) -> "nil" ^ (print_a a)
@@ -386,6 +394,10 @@ let rec format_expr (fmt : Format.formatter) (print_a : 'a -> string) (e : 'a ex
   | EGetField(r, field, a) ->
      open_label fmt "EGetField" (print_a a);
      help r; print_comma_sep fmt; pp_print_string fmt field;
+     close_paren fmt
+  | ETable(recs, a) ->
+     open_label fmt "ETable" (print_a a);
+     print_list fmt (fun fmt -> format_expr fmt print_a) recs print_comma_sep;
      close_paren fmt
 ;;
 let format_decl (fmt : Format.formatter) (print_a : 'a -> string) (d : 'a decl) : unit =

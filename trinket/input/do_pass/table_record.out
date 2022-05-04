@@ -1,0 +1,5 @@
+{ inty = 1 }
+table:
+	inty
+0	1
+{ col = (non-empty table) }

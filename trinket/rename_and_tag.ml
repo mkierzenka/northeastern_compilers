@@ -82,4 +82,5 @@ let rename_and_tag (p : tag program) : tag program =
     | ERecord(bindings, tag) ->
         ERecord(List.map (fun (bnd, bexp, tag) -> (bnd, helpE env bexp, tag)) bindings, tag)
     | EGetField(r, field, tag) -> EGetField(helpE env r, field, tag)
+    | ETable(recs, tag) -> ETable(List.map (helpE env) recs, tag)
   in (rename [] p)

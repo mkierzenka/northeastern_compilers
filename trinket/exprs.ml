@@ -19,6 +19,7 @@ type prim1 =
   | IsNum
   | IsTuple
   | IsRecord
+  | IsTable
   | Not
   | PrintStack
 
@@ -63,10 +64,11 @@ and 'a expr =
   | ELetRec of 'a binding list * 'a expr * 'a
   | ERecord of 'a binding list * 'a
   | EGetField of 'a expr * string * 'a
+  | ETable of 'a expr list * 'a
 
 type 'a decl =
   | DFun of string * 'a bind list * 'a expr * 'a
-                                                            
+
 type 'a program =
   | Program of 'a decl list list * 'a expr * 'a
 
@@ -88,6 +90,7 @@ and 'a cexpr = (* compound expressions *)
   | CLambda of string list * 'a aexpr * 'a
   | CRecord of (string * 'a immexpr) list * 'a
   | CGetField of 'a immexpr * string * 'a
+  | CTable of 'a immexpr list * 'a
 and 'a aexpr = (* anf expressions *)
   | ASeq of 'a cexpr * 'a aexpr * 'a
   | ALet of string * 'a cexpr * 'a aexpr * 'a
@@ -126,6 +129,7 @@ let get_tag_E e = match e with
   | ELambda(_, _, t) -> t
   | ERecord(_, t) -> t
   | EGetField(_, _, t) -> t
+  | ETable(_, t) -> t
 ;;
 
 let get_tag_D d = match d with
@@ -152,6 +156,7 @@ and get_tag_C (c : 'a cexpr) : 'a =
   | CLambda(_, _, t) -> t
   | CRecord(_, t) -> t
   | CGetField(_, _, t) -> t
+  | CTable(_, t) -> t
 and get_tag_A (a : 'a aexpr) : 'a =
   match a with
   | ASeq(_, _, t) -> t
@@ -226,6 +231,7 @@ let rec map_tag_E (f : 'a -> 'b) (e : 'a expr) =
      let tag_binds = List.map tag_binding binds in
      ERecord(tag_binds, tag_record)
   | EGetField(r, field, a) -> EGetField(map_tag_E f r, field, f a)
+  | ETable(recs, a) -> ETable(List.map (map_tag_E f) recs, f a)
 and map_tag_B (f : 'a -> 'b) b =
   match b with
   | BBlank tag -> BBlank(f tag)
@@ -306,6 +312,7 @@ and untagE e =
   | ERecord(binds, _) ->
      ERecord(List.map (fun (b, e, _) -> (untagB b, untagE e, ())) binds, ())
   | EGetField(r, field, _) -> EGetField(untagE r, field, ())
+  | ETable(recs, _) -> ETable(List.map untagE recs, ())
 and untagB b =
   match b with
   | BBlank _ -> BBlank ()
@@ -370,6 +377,9 @@ let atag (p : 'a aprogram) : tag aprogram =
     | CGetField(r, field, _) ->
        let get_field_tag = tag() in
        CGetField(helpI r, field, get_field_tag)
+    | CTable(recs, _) ->
+       let table_tag = tag() in
+       CTable(List.map helpI recs, table_tag)
   and helpI (i : 'a immexpr) : tag immexpr =
     match i with
     | ImmNil(_) -> ImmNil(tag())

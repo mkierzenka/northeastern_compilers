@@ -1,0 +1,4 @@
+table:
+	whole_row
+0	{ test1 = true, test2 = false }
+1	3

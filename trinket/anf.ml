@@ -65,12 +65,12 @@ let anf (p : tag program) : unit aprogram =
        let args = List.map
                     (fun a ->
                       match a with
-                      | BBlank(tag) -> sprintf "blank$%d" tag
+                      | BBlank(tag) -> sprintf "?blank$%d" tag
                       | BName(name, _, _) -> name
                       | BTuple(_, _) -> raise (InternalCompilerError "desugaring failed: tuples cannot be ANFed in lambda args"))
                     binds
        in (CLambda(args, helpA body, ()), [])
-    | ELetRec(bindings, body, pos) ->
+    | ELetRec(bindings, body, _) ->
       let (body_ans, body_setup) = helpC body in
       let (new_bindings, bindings_setups) =
         List.fold_left
@@ -85,7 +85,7 @@ let anf (p : tag program) : unit aprogram =
            ([], [])
            bindings
       in (body_ans, bindings_setups @ [BLetRec(new_bindings)] @ body_setup)
-    | ERecord(bindings, tag) ->
+    | ERecord(bindings, _) ->
       let (field_names_and_val_anses, val_setups) = List.split (List.map (
          fun (field_bind, e, _) ->
             let (val_ans, val_setup) = helpI e in
@@ -94,9 +94,12 @@ let anf (p : tag program) : unit aprogram =
             | _ -> raise (InternalCompilerError "Non-name field binds should have been caught in well-formedness checking")
       ) bindings) in
       (CRecord(field_names_and_val_anses, ()), List.concat val_setups)
-    | EGetField(r, field, tag) ->
+    | EGetField(r, field, _) ->
       let (r_imm, r_setup) = helpI r in
       (CGetField(r_imm, field, ()), r_setup)
+    | ETable(recs, _) ->
+      let (recs_anses, recs_setups) = List.split (List.map helpI recs) in
+      (CTable(recs_anses, ()), List.concat recs_setups)
     | _ -> let (imm, setup) = helpI e in (CImmExpr imm, setup)
 
   and helpI (e : tag expr) : (unit immexpr * unit anf_bind list) =
@@ -110,58 +113,58 @@ let anf (p : tag program) : unit aprogram =
        let (e2_imm, e2_setup) = helpI e2 in
        (e2_imm, e1_setup @ e2_setup)
     | ETuple(args, tag) ->
-       let tmp = sprintf "tuple_%d" tag in
+       let tmp = sprintf "?tuple_%d" tag in
        let (args_imm, args_setup) = List.split (List.map helpI args) in
        (ImmId(tmp, ()), (List.concat args_setup) @ [BLet(tmp, CTuple(args_imm, ()))])
     | EGetItem(tup, idx, tag) ->
-       let tmp = sprintf "getitem_%d" tag in
+       let tmp = sprintf "?getitem_%d" tag in
        let (tup_imm, tup_setup) = helpI tup in
        let (idx_imm, idx_setup) = helpI idx in
        (ImmId(tmp, ()), tup_setup @ idx_setup @ [BLet(tmp, CGetItem(tup_imm, idx_imm, ()))])
     | ESetItem(tup, idx, newval, tag) ->
-       let tmp = sprintf "setitem_%d" tag in
+       let tmp = sprintf "?setitem_%d" tag in
        let (tup_imm, tup_setup) = helpI tup in
        let (idx_imm, idx_setup) = helpI idx in
        let (newval_imm, newval_setup) = helpI newval in
        (ImmId(tmp, ()), tup_setup @ idx_setup @ newval_setup @ [BLet(tmp, CSetItem(tup_imm, idx_imm, newval_imm, ()))])
     | EPrim1(op, arg, tag) ->
-       let tmp = sprintf "unary_%d" tag in
+       let tmp = sprintf "?unary_%d" tag in
        let (arg_imm, arg_setup) = helpI arg in
        (ImmId(tmp, ()), arg_setup @ [BLet(tmp, CPrim1(op, arg_imm, ()))])
     | EPrim2(op, left, right, tag) ->
-       let tmp = sprintf "binop_%d" tag in
+       let tmp = sprintf "?binop_%d" tag in
        let (left_imm, left_setup) = helpI left in
        let (right_imm, right_setup) = helpI right in
        (ImmId(tmp, ()), left_setup @ right_setup @ [BLet(tmp, CPrim2(op, left_imm, right_imm, ()))])
     | EIf(cond, _then, _else, tag) ->
-       let tmp = sprintf "if_%d" tag in
+       let tmp = sprintf "?if_%d" tag in
        let (cond_imm, cond_setup) = helpI cond in
        (ImmId(tmp, ()), cond_setup @ [BLet(tmp, CIf(cond_imm, helpA _then, helpA _else, ()))])
     | EScIf(cond, _then, _else, tag) ->
-       let tmp = sprintf "scif_%d" tag in
+       let tmp = sprintf "?scif_%d" tag in
        let (cond_imm, cond_setup) = helpI cond in
        (ImmId(tmp, ()), cond_setup @ [BLet(tmp, CScIf(cond_imm, helpA _then, helpA _else, ()))])
     | EApp(func, args, ct, tag) ->
-      let tmp = sprintf "app_%d" tag in
+      let tmp = sprintf "?app_%d" tag in
       let (func_imm, func_setup) = helpI func in
       let (args_imm, args_setup) = List.split (List.map helpI args) in
       (ImmId(tmp, ()), func_setup @ (List.concat args_setup) @ [BLet(tmp, CApp(func_imm, args_imm, ct, ()))])
     | ELet([], body, _) -> helpI body
-    | ELet((BBlank _, exp, _)::rest, body, pos) ->
+    | ELet((BBlank _, exp, _)::rest, body, tag) ->
        let (exp_imm, exp_setup) = helpI exp in (* MUST BE helpI, to avoid any missing final steps *)
-       let (body_imm, body_setup) = helpI (ELet(rest, body, pos)) in
+       let (body_imm, body_setup) = helpI (ELet(rest, body, tag)) in
        (body_imm, exp_setup @ body_setup)
     | ELambda(binds, body, tag) ->
-       let tmp = sprintf "lambda_%d" tag in
+       let tmp = sprintf "?lambda_%d" tag in
        let (ans, setup) = helpC e in
        (ImmId(tmp, ()), setup @ [BLet(tmp, ans)])
-    | ELet((BName(bind, _, _), exp, _)::rest, body, pos) ->
+    | ELet((BName(bind, _, _), exp, _)::rest, body, tag) ->
        let (exp_ans, exp_setup) = helpC exp in
-       let (body_ans, body_setup) = helpI (ELet(rest, body, pos)) in
+       let (body_ans, body_setup) = helpI (ELet(rest, body, tag)) in
        (body_ans, exp_setup @ [BLet(bind, exp_ans)] @ body_setup)
-    | ELet((BTuple(binds, _), exp, _)::rest, body, pos) ->
+    | ELet((BTuple(binds, _), exp, _)::rest, body, _) ->
        raise (InternalCompilerError("Tuple bindings should have been desugared away"))
-    | ELetRec(binds, body, tag) ->
+    | ELetRec(binds, body, _) ->
        let (body_ans, body_setup) = helpI body in
        let (new_bindings, bindings_setups) =
          List.fold_left
@@ -181,9 +184,13 @@ let anf (p : tag program) : unit aprogram =
        let (ans, setup) = helpC e in
        (ImmId(tmp, ()), setup @ [BLet(tmp, ans)])
     | EGetField(r, field, tag) ->
-       let tmp = sprintf "get_field_%s_%d" field tag in
+       let tmp = sprintf "?get_field_%s_%d" field tag in
        let (r_imm, r_setup) = helpI r in
        (ImmId(tmp, ()), r_setup @ [BLet(tmp, CGetField(r_imm, field, ()))])
+    | ETable(recs, tag) ->
+       let tmp = sprintf "?table_%d" tag in
+       let (recs_imm, recs_setup) = List.split (List.map helpI recs) in
+       (ImmId(tmp, ()), (List.concat recs_setup) @ [BLet(tmp, CTable(recs_imm, ()))])
   and helpA e : unit aexpr = 
     let (ans, ans_setup) = helpC e in
     List.fold_right

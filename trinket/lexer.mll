@@ -50,6 +50,7 @@ rule token = parse
   | "isbool" { ISBOOL }
   | "isnum" { ISNUM }
   | "isrecord" { ISRECORD }
+  | "istable" { ISTABLE }
   | "add1" { ADD1 }
   | "sub1" { SUB1 }
   | "lambda" { LAMBDA }
@@ -80,6 +81,7 @@ rule token = parse
   | "!" { NOT }
   | ";" { SEMI }
   | "." { DOT }
+  | "|" { PIPE }
   | "begin" { BEGIN }
   | "end" { END }
   | "rec" { REC }

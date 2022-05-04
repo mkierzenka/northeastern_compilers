@@ -1,0 +1,1 @@
+(lambda (b): print(b); isbool(b))((lambda (x): x + 1))
