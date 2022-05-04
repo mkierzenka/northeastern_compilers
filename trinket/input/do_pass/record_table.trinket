@@ -1,0 +1,4 @@
+(|
+    { whole_row = { test1 = true, test2 = false } },
+    { whole_row = 3 }
+|)

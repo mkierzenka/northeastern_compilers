@@ -1,0 +1,1 @@
+Error: table-create expected homogeneous records. Inconsistent record was { b = 2, a = false }

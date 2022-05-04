@@ -32,6 +32,8 @@ let err_set_not_num_lbl          = "?err_set_not_num"
 let err_bad_input_lbl            = "?err_bad_input"
 let err_get_field_not_record_lbl = "?err_get_field_not_record"
 let err_get_field_not_found_lbl  = "?err_get_field_not_found"
+let err_table_of_not_record_lbl  = "?err_table_of_not_record"
+let err_table_of_het_records_lbl = "?err_table_of_het_records"
 
 let const_true       = HexConst(0xFFFFFFFFFFFFFFFFL)
 let const_false      = HexConst(0x7FFFFFFFFFFFFFFFL)
@@ -47,6 +49,8 @@ let tuple_tag_mask   = 0x000000000000000FL
 let const_nil        = HexConst(tuple_tag)
 let record_tag       = 0x0000000000000003L
 let record_tag_mask  = 0x000000000000000FL
+let table_tag        = 0x0000000000000009L
+let table_tag_mask   = 0x000000000000000FL
 
 let err_COMP_NOT_NUM         = 1L
 let err_ARITH_NOT_NUM        = 2L
@@ -68,6 +72,8 @@ let err_SET_NOT_NUM          = 17L
 let err_BAD_INPUT            = 18L
 let err_GET_FIELD_NOT_RECORD = 19L
 let err_GET_FIELD_NOT_FOUND  = 20L
+let err_TABLE_OF_NOT_RECORD  = 21L
+let err_TABLE_OF_HET_RECORDS = 22L
 
 let first_six_args_registers = [RDI; RSI; RDX; RCX; R8; R9]
 let heap_reg = R15
@@ -890,6 +896,75 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
       (* If it does, split into add and mov *)
       IMov(Reg(RAX), RegOffsetReg(RAX, scratch_reg, word_size, (1 * word_size)));
     ]
+  | CTable(recs, tag) ->
+    let padding = 0xF0F0F0F0L in
+    match recs with
+    | first::rest ->
+      (*
+        [ num_recs | rec 1 ptr | rec 2 ptr | ... | rec n ptr ]
+        # ignoring word size in the pseudocode
+        check_type(first)
+        heap_ptr[0] = len(recs)
+        fields_rec = first
+        heap_ptr[1] = first
+        for rec, i in enumerate(rest):
+            check_type(rec)
+            check_fields(rec, fields_rec)
+            heap_ptr[i] = rec
+        rax = tagged(heap_ptr)
+        heap_ptr += heap_ptr[0]
+      *)
+      let num_recs = List.length recs in
+      let first_rec = compile_imm first sub_env in
+      let check_rec = check_rax_for_rec err_table_of_not_record_lbl in
+      let table_setup = 
+      [IMov(Reg(RAX), first_rec)] @
+      check_rec @ [
+        IMov(Reg(scratch_reg), Const(Int64.of_int num_recs));
+        IMov(RegOffset(0, heap_reg), Reg(scratch_reg));
+        IMov(Reg(scratch_reg), Reg(RAX)); (* scratch_reg = "fields_rec" *)
+        IMov(RegOffset(1 * word_size, heap_reg), Reg(scratch_reg));
+      ] in
+      let load_table = List.concat (List.mapi (
+        fun i r ->
+          let this_rec = compile_imm r sub_env in
+          let record_consistent_lbl = sprintf "record_%d_consistent_%d" i tag in [
+            IMov(Reg(RAX), this_rec);
+            IPush(Reg(scratch_reg)); (* Save fields_rec to stack *)
+          ] @
+          (check_rax_for_rec err_table_of_not_record_lbl) @ [
+            IPop(Reg(scratch_reg)); (* Get fields_rec back from stack *)
+            IPush(Reg(RAX)); (* Save RAX ahead of call to check_fields *)
+          ] @
+          (native_call (Label "?check_fields") [Reg(RAX); Reg(scratch_reg)]) @ [
+            ICmp(Reg(RAX), Const(Int64.of_int 0));
+            IJne(Label(record_consistent_lbl));
+            IPop(Reg(scratch_reg));
+            IJmp(Label(err_table_of_het_records_lbl));
+            ILabel(record_consistent_lbl);
+            IPop(Reg(RAX));
+            IMov(RegOffset((2 + i) * word_size, heap_reg), Reg(RAX));
+          ]
+      ) rest) in
+      let need_padding = num_recs mod 2 == 0 in
+      let pad_table = if need_padding then [
+        IMov(Reg(scratch_reg), HexConst(padding));
+        IMov(RegOffset((num_recs + 1) * word_size, heap_reg), Reg(scratch_reg));
+      ] else [] in
+      let finalize_table = [
+        IMov(Reg(RAX), Reg(heap_reg));
+        IAdd(Reg(RAX), HexConst(table_tag));
+        IAdd(Reg(heap_reg), Const(Int64.of_int ((num_recs + 1 + (if need_padding then 1 else 0)) * word_size)));
+      ] in
+      table_setup @ load_table @ pad_table @ finalize_table
+    | [] -> [
+        IMov(Sized(QWORD_PTR, RegOffset(0, heap_reg)), Const(0L));
+        IMov(Reg(scratch_reg), HexConst(padding));
+        IMov(RegOffset(1 * word_size, heap_reg), Reg(scratch_reg));
+        IMov(Reg(RAX), Reg(heap_reg));
+        IAdd(Reg(RAX), Const(table_tag));
+        IAdd(Reg(heap_reg), Const(Int64.of_int (2 * word_size)));
+      ]
 and compile_imm e (sub_env : arg name_envt) : arg =
   match e with
   | ImmNum(n, _) -> Const(Int64.shift_left n 1)
@@ -964,6 +1039,7 @@ extern ?print
 extern ?print_stack
 extern ?equal
 extern ?try_gc
+extern ?check_fields
 extern ?HEAP
 extern ?HEAP_END
 extern ?set_stack_bottom
@@ -1019,6 +1095,8 @@ global ?our_code_starts_here" in
 ?err_bad_input:%s
 ?err_get_field_not_record:%s
 ?err_get_field_not_found:%s
+?err_table_of_not_record:%s
+?err_table_of_het_records:%s
 "
                        (to_asm (native_call (Label "?error") [Const(err_COMP_NOT_NUM); Reg(scratch_reg)]))
                        (to_asm (native_call (Label "?error") [Const(err_ARITH_NOT_NUM); Reg(scratch_reg)]))
@@ -1040,6 +1118,8 @@ global ?our_code_starts_here" in
                        (to_asm (native_call (Label "?error") [Const(err_BAD_INPUT); Reg(scratch_reg)]))
                        (to_asm (native_call (Label "?error") [Const(err_GET_FIELD_NOT_RECORD); Reg(scratch_reg)]))
                        (to_asm (native_call (Label "?error") [Const(err_GET_FIELD_NOT_FOUND); Reg(scratch_reg)]))
+                       (to_asm (native_call (Label "?error") [Const(err_TABLE_OF_NOT_RECORD); Reg(scratch_reg)]))
+                       (to_asm (native_call (Label "?error") [Const(err_TABLE_OF_HET_RECORDS); Reg(scratch_reg)]))
   in
   match anfed with
   | AProgram(body, _) ->

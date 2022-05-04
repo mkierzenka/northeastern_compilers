@@ -31,7 +31,7 @@ Need at least [v2.15](https://nasm.us/doc/nasmdocc.html#section-C.1.6) because w
 * `isrecord(...)` built-in, with the usual behavior/semantics
 
 ### Tables
-* New SNAKEVAL, tag ???
+* New SNAKEVAL, tag `0x0000000000000009`. This meant we had to expand to use 4-bit tags for booleans, closures, records, and tables.
 * Immutable
 * A comma-separated list of exprs (rows), each of which should be a record at runtime
 * Create one by wrapping the list in `(|` and `|)`
@@ -40,3 +40,14 @@ Need at least [v2.15](https://nasm.us/doc/nasmdocc.html#section-C.1.6) because w
 * The first record/row defines the fields of the table, table creation includes validating that all records have same field names in same order as the first
 * Structural equality of 2 tables means: same records in same order
 * Table creation (and record equality) may later move to accepting records with the same fields but differently ordered
+* Empty tables are written as `(| |)` (whitespace between ends required)
+* Empty tables are printed as `(empty table)`
+* Nested non-empty tables (within tables or records) are printed as `(non-empty table)` for brevity/slightly better formatting
+* Tables are printed/returned in a simple tab character-based format with column names across the top, e.g.,
+```
+table:
+    field1  field2  field3
+0   17      103     false
+1   2       1337    true
+```
+* New runtime functions, hidden to the user but helpful to us: `checkFields` (are the same fields present in same order?), `printRecordFieldsAsRow`, `printRecordValuesAsRow`

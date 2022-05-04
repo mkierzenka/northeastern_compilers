@@ -1,1 +1,4 @@
-3
+table:
+	age	model	totaled
+0	17	103	false
+1	2	1337	true

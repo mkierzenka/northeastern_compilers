@@ -117,6 +117,8 @@ binop_operand :
   // Tables
   | LPARENNOSPACE PIPE exprs PIPE RPAREN { ETable($3, full_span()) }
   | LPARENSPACE PIPE exprs PIPE RPAREN { ETable($3, full_span()) }
+  | LPARENNOSPACE PIPE PIPE RPAREN { ETable([], full_span()) }
+  | LPARENSPACE PIPE PIPE RPAREN { ETable([], full_span()) }
   // Simple cases
   | const { $1 }
   | id { $1 }
