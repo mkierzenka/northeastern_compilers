@@ -268,8 +268,8 @@ let check_rax_for_tup_bigger (tup_address : arg) (err_lbl : string) : instructio
    (* Scratch reg is used as intermediate because Cmp don't work on imm64s *)
    ILineComment("check_rax_for_tup_bigger (" ^ err_lbl ^ ")");
    IMov(Reg(scratch_reg), tup_address);
-   ISub(Reg(scratch_reg), Const(1L)); (* convert from snake val address -> machine address *)
-   IMov(Reg(scratch_reg), RegOffset(0, scratch_reg)); (* load the tup length into RAX *)
+   ISub(Reg(scratch_reg), HexConst(tuple_tag)); (* convert from snake val address -> machine address *)
+   IMov(Reg(scratch_reg), RegOffset(0, scratch_reg)); (* load the tup length into scratch *)
    ICmp(Reg(RAX), Reg(scratch_reg));
    IJge(Label(err_lbl));
   ]
@@ -796,8 +796,8 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
           [IMov(Reg(scratch_reg), padding_val); IMov(RegOffset(offs*word_size, heap_reg), Reg(scratch_reg))] in
       let next_heap_loc = tup_size + 1 + ((1+tup_size) mod 2) in
 
-      (* store the tuple size on the heap *)
-      [IMov(Reg(scratch_reg), Const(Int64.of_int tup_size)); IMov(RegOffset(0, heap_reg), Reg(scratch_reg))]
+      (* store the tuple size on the heap. Multiply by 2 to encode as SNAKEVAL *)
+      [IMov(Reg(scratch_reg), Const(Int64.of_int (tup_size * 2))); IMov(RegOffset(0, heap_reg), Reg(scratch_reg))]
       (* store each tuple element on the heap *)
       @ List.flatten
           (List.mapi
@@ -821,13 +821,12 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
       @ (check_rax_for_nil err_nil_deref_lbl)
       @ [IMov(Reg(RAX), idx)] (* move the idx (snakeval) into RAX *)
       @ (check_rax_for_num err_get_not_num_lbl)
-      @ [ISar(Reg(RAX), Const(1L))] (* convert from snakeval -> int *)
       @ (check_rax_for_tup_smaller err_get_low_index_lbl)
       @ (check_rax_for_tup_bigger tup_address err_get_high_index_lbl)
 
       (* passed checks, now do actual 'get' *)
       @ [IMov(Reg(RAX), tup_address)] (* move tuple address back into RAX *)
-      @ [ISub(Reg(RAX), Const(1L))] (* convert from snake val address -> machine address *)
+      @ [ISub(Reg(RAX), HexConst(tuple_tag))] (* convert from snake val address -> machine address *)
       @ [IMov(Reg(scratch_reg), idx)] (* move the idx (snakeval) into scratch reg *)
       @ [ISar(Reg(scratch_reg), Const(1L))] (* convert from snake val -> int *)
       @ [IAdd(Reg(scratch_reg), Const(1L))] (* add 1 to the offset to bypass the tup size *)
@@ -843,19 +842,18 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
       @ (check_rax_for_nil err_nil_deref_lbl)
       @ [IMov(Reg(RAX), idx)] (* move the idx (snakeval) into RAX *)
       @ (check_rax_for_num err_set_not_num_lbl)
-      @ [ISar(Reg(RAX), Const(1L))] (* convert from snakeval -> int *)
       @ (check_rax_for_tup_smaller err_get_low_index_lbl)
       @ (check_rax_for_tup_bigger tup_address err_get_high_index_lbl)
 
       (* passed checks, now do actual 'set' *)
       @ [IMov(Reg(RAX), tup_address)] (* move tuple address (snakeval) into RAX *)
-      @ [ISub(Reg(RAX), Const(1L))] (* convert from snake val -> address *)
+      @ [ISub(Reg(RAX), HexConst(tuple_tag))] (* convert from snake val -> address *)
       @ [IMov(Reg(scratch_reg), idx)] (* move the idx (* snakeval *) into scratch reg *)
       @ [ISar(Reg(scratch_reg), Const(1L))] (* convert from snake val -> int *)
       @ [IAdd(Reg(scratch_reg), Const(1L))] (* add 1 to the offset to bypass the tup size *)
       @ [IMov(Reg(scratch_reg_2), rhs)]
       @ [IMov(RegOffsetReg(RAX,scratch_reg,word_size,0), Reg(scratch_reg_2))]
-      @ [IAdd(Reg(RAX), Const(1L))] (* convert the tuple address back to a snakeval *)
+      @ [IAdd(Reg(RAX), HexConst(tuple_tag))] (* convert the tuple address back to a snakeval *)
   | CRecord(binds, _) ->
       (* [ num fields | field 1 num | field 1 data | field 2 num | field 2 data | ... | field n num | field n data ] *)
       let rec_size = List.length binds in

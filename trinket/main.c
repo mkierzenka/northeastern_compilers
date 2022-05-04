@@ -220,9 +220,9 @@ void printHelp(FILE *out, SNAKEVAL val, bool in_row) {
     if (len & 0x1) { // actually, it's a forwarding pointer
       fprintf(out, "forwarding to %p", (uint64_t*)(len - 1));
       return;
-    } /* else {
+    } else {
       len /= 2; // length is encoded, also see below/end of this func
-    } */
+    }
     /* fprintf(out, "Heap is:\n"); */
     /* naive_print_heap(HEAP, HEAP_END); */
     /* fprintf(out, "%p-->(len=%d)", (int*)(val - 1), len / 2); */
@@ -233,10 +233,10 @@ void printHelp(FILE *out, SNAKEVAL val, bool in_row) {
       if (i > 1) fprintf(out, ", ");
       printHelp(out, addr[i], in_row);
     }
-    if (len == 1) fprintf(out, ", ");
+    if (len == 1) fprintf(out, ",");
     fprintf(out, ")");
-    // Unmark this tuple: restore its length
-    *(addr) = len;
+    // Unmark this tuple: restore its length to the SNAKEVAL
+    *(addr) = len * 2;
   }
   else if ((val & RECORD_TAG_MASK) == RECORD_TAG) {
     // [ num fields | field 1 num | field 1 data | field 2 num | field 2 data | ... | field n num | field n data | padding ]
@@ -329,9 +329,21 @@ SNAKEVAL printStack(SNAKEVAL val, uint64_t* rsp, uint64_t* rbp, uint64_t args) {
 }
 
 SNAKEVAL input() {
-  uint64_t ans;
-  scanf("%ld", &ans);
-  return ans << 1;
+  int64_t int_input;
+  char str_input[6] = { '\0' };
+  if (scanf("%ld", &int_input) == 1) {
+    return int_input << 1;
+  }
+  if (scanf("%5s", str_input) == 1) {
+    if (strcmp(str_input, "true") == 0) {
+      return BOOL_TRUE;
+    } else if (strcmp(str_input, "false") == 0) {
+      return BOOL_FALSE;
+    } else {
+      error(ERR_BAD_INPUT);
+    }
+  }
+  error(ERR_BAD_INPUT);
 }
 
 SNAKEVAL print(SNAKEVAL val) {
@@ -395,7 +407,7 @@ void error(uint64_t code, SNAKEVAL val) {
     fprintf(stderr, "Error: tuple-set index not numeric\n");
     break;
   case ERR_BAD_INPUT:
-    fprintf(stderr, "Error: bad input, input must be a number\n");
+    fprintf(stderr, "Error: bad input, input must be a number or a bool\n");
     break;
   case ERR_GET_FIELD_NOT_RECORD:
     fprintf(stderr, "Error: record-get expected record, got "); printHelp(stderr, val, false);
