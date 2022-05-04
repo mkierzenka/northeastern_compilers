@@ -543,11 +543,34 @@ and compile_cexpr (e : tag cexpr) (curr_env_name : string) (env : arg name_envt 
            IMov(Reg(scratch_reg), HexConst(record_tag));
            ICmp(Reg(RAX), Reg(scratch_reg));
            IJz(Label(true_lbl));
-           (* case not tup *)
+           (* case not record *)
            ILabel(false_lbl);
            IMov(Reg(RAX), const_false);
            IJmp(Label(done_lbl));
-           (* case is a tup *)
+           (* case is a record *)
+           ILabel(true_lbl);
+           IMov(Reg(RAX), const_true);
+           (* done *)
+           ILabel(done_lbl);
+          ]
+        | IsTable ->
+          let true_lbl = sprintf "is_table_true_%d" tag in
+          let false_lbl = sprintf "is_table_false_%d" tag in
+          let done_lbl = sprintf "is_table_done_%d" tag in
+          [
+           IMov(Reg(RAX), body_imm);
+           (* Don't need to save RAX on the stack because we overwrite the
+            * value with true/false later. Scratch reg used because And, Cmp don't support imm64 *)
+           IMov(Reg(scratch_reg), HexConst(table_tag_mask));
+           IAnd(Reg(RAX), Reg(scratch_reg));
+           IMov(Reg(scratch_reg), HexConst(table_tag));
+           ICmp(Reg(RAX), Reg(scratch_reg));
+           IJz(Label(true_lbl));
+           (* case not table *)
+           ILabel(false_lbl);
+           IMov(Reg(RAX), const_false);
+           IJmp(Label(done_lbl));
+           (* case is a table *)
            ILabel(true_lbl);
            IMov(Reg(RAX), const_true);
            (* done *)

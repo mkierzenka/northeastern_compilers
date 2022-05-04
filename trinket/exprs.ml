@@ -19,6 +19,7 @@ type prim1 =
   | IsNum
   | IsTuple
   | IsRecord
+  | IsTable
   | Not
   | PrintStack
 
