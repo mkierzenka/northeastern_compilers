@@ -7,6 +7,7 @@ let test_records_wf = [
 ]
 
 let test_records_valid = [
+  t "empty" "let mt = {} in (if isrecord(mt): mt else: -99)" "" "{}";
   t "basic" "{a=1234, b=(if input() < 990: 990 * 2 else: -100 ), c=(false && 7)}" "8" "{ a = 1234, b = 1980, c = false }";
   t "nested" "{outerfield = -12, nest={innerfield=9000, if2=false}}" "" "{ outerfield = -12, nest = { innerfield = 9000, if2 = false } }";
   t "dup_names_mixcase" "let a = {fieldA = 736, fieldB = true, fielda = 736} in 8" "" "8";
@@ -18,9 +19,18 @@ let test_records_valid = [
                      a_almost = {f1=a.f1, f2=a.f2, f3=a.f3, f4=a.f4 + 1}
                  in (a == a) && (a == a_alias) && !(a == a_copy) && !(a == a_almost) && !({blah = 44} == 44)"
                 "" "true";
+  t "full_equality" "let a = {f1=-100, f2=-99, f3=-98, f4=-97},
+                     a_alias = a, a_copy = {f1=a.f1, f2=a.f2, f3=a.f3, f4=a.f4},
+                     a_almost = {f1=a.f1, f2=a.f2, f3=a.f3, f4=a.f4 + 1}
+                 in equal(a, a) && equal(a, a_alias) && equal(a, a_copy) && !(equal(a, a_almost)) && !(equal({blah = 44}, 44)) &&
+                    !(equal({f1=-100, f2=-99}, a)) && !(equal(a, {f1=-100, f2=-99}))"
+                "" "true";
+  t "equality_and_empty" "let mt = {} in equal(mt, mt) && equal({}, mt) && !(equal(mt, {a=1, b=2})) && !(equal(mt, ())) && !(equal(0, {}))" "" "true";
+  t "physical_equality_empty" "{} == {}" "" "false";
+  t "physical_equality_nonempty" "{ a = true } == { a = true }" "" "false";
   t "is_record" "let r1 = {field = 14, red = if true: true else: false} in
-                  print(isrecord(r1)); print(isrecord(add1(6))); print(isrecord(true)) ; print(isrecord((lambda(x): add1(x))))"
-                "" "true\nfalse\nfalse\nfalse\nfalse";
+                  print(isrecord(r1)); print(isrecord(add1(6))); print(isrecord(true)) ; print(isrecord((lambda(x): add1(x)))) ; print(isrecord({})) ; isrecord(())"
+                "" "true\nfalse\nfalse\nfalse\ntrue\nfalse";
 ]
 
 let test_records_anf = [

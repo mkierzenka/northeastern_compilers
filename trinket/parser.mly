@@ -114,6 +114,7 @@ binop_operand :
   | LPARENSPACE LAMBDA COLON expr RPAREN { ELambda([], $4, full_span()) }
   // Records
   | LCURLY namebindings RCURLY { ERecord($2, full_span()) }
+  | LCURLY RCURLY { ERecord([], full_span()) }
   | binop_operand DOT ID { EGetField($1, $3, full_span()) }
   // Tables
   | LPARENNOSPACE PIPE exprs PIPE RPAREN { ETable($3, full_span()) }

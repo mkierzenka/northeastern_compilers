@@ -137,6 +137,10 @@ void printHelp(FILE *out, SNAKEVAL val, bool in_row);
 void printRecordFieldsAsRow(FILE *out, SNAKEVAL record_snakeval) {
   uint64_t *record_ptr = (uint64_t *) (record_snakeval & (~RECORD_TAG_MASK));
   int num_fields = record_ptr[0];
+  if (num_fields == 0) {
+    fprintf(out, "(no fields)");
+    return;
+  }
   for (int i = 0; i < num_fields; ++i) {
     // [field name 1]\t[field name 2]\t...\t[field name n]
     uint64_t field_num = record_ptr[(i * 2) + 1]; // "+ 1" for size
@@ -239,6 +243,10 @@ void printHelp(FILE *out, SNAKEVAL val, bool in_row) {
     // addr [0]            [1]           [2]            [3]           [4]       ...
     uint64_t* addr = (uint64_t*)(val - RECORD_TAG);
     uint64_t len = addr[0];
+    if (len == 0) {
+      fprintf(out, "{}");
+      return;
+    }
     fprintf(out, "{ ");
     for (uint64_t i = 0; i < len; i++) {
       if (i > 0) fprintf(out, ", ");
